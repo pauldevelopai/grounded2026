@@ -199,11 +199,12 @@ export default function NewsletterDigest() {
               ) : (
                 <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
                   dangerouslySetInnerHTML={{ __html: digest
-                    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" style="color: var(--accent)">$1</a>')
-                    .replace(/(https?:\/\/[^\s<)"]+)/g, (match) => {
-                      if (match.includes('</a>') || match.includes('"')) return match;
-                      return `<a href="${match}" target="_blank" rel="noreferrer" style="color: var(--accent); font-size: 12px">${match}</a>`;
-                    })
+                    // First strip any raw HTML anchor tags Claude might output
+                    .replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)')
+                    // Now convert clean markdown links to HTML
+                    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" style="color: #6366F1; text-decoration: underline">$1</a>')
+                    // Convert any remaining bare URLs (not already in an anchor)
+                    .replace(/(?<!href="|">)(https?:\/\/[^\s<)"]+)/g, '<a href="$1" target="_blank" rel="noreferrer" style="color: #6366F1; font-size: 12px; word-break: break-all">Link</a>')
                   }} />
               )}
             </div>

@@ -515,15 +515,16 @@ export async function generateDailyDigest(items) {
 CRITICAL RULES:
 - ONLY include facts that appear in the input items below. Do NOT add information, names, companies, or claims not present in the source data. If it's not in the items, don't write it.
 - After each fact or claim, cite the source newsletter and date in parentheses, e.g. (The Batch, 25 Mar 2026)
-- Where a source URL is available, include it as a markdown link after the citation: [Source Name](URL)
+- Where a source URL is available, add it as a PLAIN markdown link on its own line after the paragraph, formatted exactly as: [Source Name](https://example.com)
+- NEVER use HTML tags like <a href=...>. ONLY use plain markdown link format: [text](url)
 - Start with the single most important item
 - Group by theme, not by source
 - Flag curriculum-impacting items with [CURRICULUM] tag
 - End the briefing cleanly — do not cut off mid-sentence
 - No markdown headers — use ALL CAPS for section labels
-- Write like a sharp executive briefing`,
+- Write like a sharp executive briefing — concise paragraphs, no filler`,
     userContent: `Today's newsletter items:\n\n${itemsList}`,
-    maxTokens: 1500,
+    maxTokens: 3000,
     temperature: 0.2,
     context: { searchTerms: 'AI training curriculum news digest' },
   });
