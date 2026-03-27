@@ -8,9 +8,12 @@ import SectorBadge from '../../components/SectorBadge.jsx';
 import AiBadge from '../../components/AiBadge.jsx';
 import AgentChatPanel from '../../components/AgentChatPanel.jsx';
 
-const PIPELINE_STAGES = ['prospect', 'contacted', 'meeting', 'proposal', 'client'];
+const PIPELINE_STAGES = ['pending_review', 'prospect', 'contacted', 'meeting', 'proposal', 'client'];
 const STAGE_COLORS = {
-  prospect: '#94A3B8', contacted: '#6366F1', meeting: '#F59E0B', proposal: '#10B981', client: '#059669',
+  pending_review: '#F59E0B', prospect: '#94A3B8', contacted: '#6366F1', meeting: '#F59E0B', proposal: '#10B981', client: '#059669',
+};
+const STAGE_LABELS = {
+  pending_review: 'Review', prospect: 'Prospect', contacted: 'Contacted', meeting: 'Meeting', proposal: 'Proposal', client: 'Client',
 };
 
 export default function LeadsPage() {
@@ -26,8 +29,7 @@ export default function LeadsPage() {
 
   function load() {
     apiFetch(buildUrl('/contacts', selectedSectorId)).then(data => {
-      // Only show leads (prospect through proposal, or source=email_mining)
-      setContacts(data.filter(c => ['prospect', 'contacted', 'meeting', 'proposal'].includes(c.pipeline_stage) || c.source === 'email_mining'));
+      setContacts(data.filter(c => ['pending_review', 'prospect', 'contacted', 'meeting', 'proposal'].includes(c.pipeline_stage) || c.source === 'email_mining'));
     }).catch(() => setContacts([]));
   }
 
@@ -108,7 +110,7 @@ export default function LeadsPage() {
     { key: 'pipeline_stage', label: 'Stage', render: row => (
       <select value={row.pipeline_stage} onChange={e => { e.stopPropagation(); updateStage(row.id, e.target.value); }}
         style={{ fontSize: 12, padding: '2px 6px', border: '1px solid var(--border-color)', borderRadius: 4, background: STAGE_COLORS[row.pipeline_stage] + '22', color: STAGE_COLORS[row.pipeline_stage] }}>
-        {PIPELINE_STAGES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+        {PIPELINE_STAGES.map(s => <option key={s} value={s}>{STAGE_LABELS[s] || s}</option>)}
       </select>
     )},
     { key: 'source', label: 'Source', render: row => (
@@ -199,7 +201,7 @@ export default function LeadsPage() {
               color: stageFilter === stage ? 'white' : STAGE_COLORS[stage],
               fontWeight: 600, fontSize: 12, transition: 'all 0.15s',
             }}>
-            {stage.charAt(0).toUpperCase() + stage.slice(1)} ({stageCounts[stage]})
+            {STAGE_LABELS[stage] || stage} ({stageCounts[stage]})
           </button>
         ))}
       </div>

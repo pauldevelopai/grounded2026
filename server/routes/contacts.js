@@ -107,4 +107,37 @@ router.delete('/:id', requireRole('admin'), async (req, res) => {
   }
 });
 
+// Get email history for a contact from Gmail
+router.get('/:id/emails', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT email FROM contacts WHERE id = $1', [req.params.id]);
+    if (rows.length === 0 || !rows[0].email) return res.json([]);
+
+    const { searchEmails, readEmail, getConnectionStatus } = await import('../services/gmail.js');
+    const connected = await getConnectionStatus();
+    if (!connected.connected) return res.json([]);
+
+    const messages = await searchEmails(`from:${rows[0].email} OR to:${rows[0].email}`, 30);
+    const emails = [];
+    for (const msg of messages.slice(0, 20)) {
+      try {
+        const email = await readEmail(msg.id);
+        if (email) {
+          emails.push({
+            id: email.id,
+            from: email.from,
+            subject: email.subject,
+            date: email.date,
+            snippet: email.body?.slice(0, 300) || '',
+          });
+        }
+      } catch (e) { /* skip */ }
+    }
+    res.json(emails);
+  } catch (err) {
+    console.error('Email history error:', err);
+    res.status(500).json({ message: 'Failed to load email history' });
+  }
+});
+
 export default router;

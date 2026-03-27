@@ -927,7 +927,7 @@ Only include contacts where is_lead is true. If none qualify, return [].`,
 
         await pool.query(
           `INSERT INTO contacts (sector_id, first_name, last_name, email, pipeline_stage, source, tags, notes)
-           VALUES ($1, $2, $3, $4, 'prospect', 'email_mining', $5, $6)`,
+           VALUES ($1, $2, $3, $4, 'pending_review', 'email_mining', $5, $6)`,
           [
             sectorId, firstName, lastName, lead.email,
             `{${(lead.warmth || 'cold')},auto-discovered}`,
@@ -1119,7 +1119,7 @@ Only include contacts where is_lead is true and score >= 40.`,
 
         await pool.query(
           `INSERT INTO contacts (sector_id, first_name, last_name, email, pipeline_stage, source, tags, notes)
-           VALUES ($1, $2, $3, $4, 'prospect', 'email_mining', $5, $6)`,
+           VALUES ($1, $2, $3, $4, 'pending_review', 'email_mining', $5, $6)`,
           [
             sectorId, firstName, lastName, lead.email,
             `{${tags.join(',')}}`,
