@@ -405,6 +405,23 @@ router.post('/smart-input-file', upload.single('file'), async (req, res) => {
   }
 });
 
+router.get('/:id/download', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM uploaded_documents WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    const doc = rows[0];
+    if (!doc.file_path || !fs.existsSync(doc.file_path)) {
+      return res.status(404).json({ message: 'File not found on disk' });
+    }
+    res.setHeader('Content-Disposition', `attachment; filename="${doc.original_name}"`);
+    res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+    fs.createReadStream(doc.file_path).pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Download failed' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const { rowCount } = await pool.query('DELETE FROM uploaded_documents WHERE id = $1', [req.params.id]);
