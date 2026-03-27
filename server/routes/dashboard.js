@@ -27,26 +27,52 @@ router.get('/', async (req, res) => {
       pipelineValue: pipeline.rows[0].total,
     };
 
-    // Next actions
+    // Next actions — smart prioritised list with detail explaining WHY
     const nextActions = [];
 
-    // Unanalysed assessments
+    // 1. Today's briefing — always worth checking first
+    const { rows: todayDigest } = await pool.query(
+      "SELECT id FROM newsletter_digests WHERE date = CURRENT_DATE LIMIT 1"
+    ).catch(() => ({ rows: [] }));
+    if (todayDigest.length === 0) {
+      nextActions.push({ title: 'Generate today\'s briefing', link: '/newsletter', priority: 'high', detail: 'No briefing for today yet. Review the latest AI news and flag curriculum items.' });
+    }
+
+    // 2. Pending lead reviews
+    const { rows: pendingLeads } = await pool.query(
+      "SELECT count(*)::int as c FROM contacts WHERE pipeline_stage = 'pending_review'"
+    );
+    if (pendingLeads[0].c > 0) {
+      nextActions.push({ title: `Vet ${pendingLeads[0].c} auto-discovered lead${pendingLeads[0].c > 1 ? 's' : ''}`, link: '/leads', priority: 'high', detail: 'The Lead Miner and Web Prospector found new contacts. Review and approve or reject them.' });
+    }
+
+    // 3. Unanalysed assessments
     const { rows: unanalysed } = await pool.query(
       "SELECT count(*)::int as c FROM needs_assessments WHERE status = 'completed' AND ai_analysis IS NULL AND ($1::uuid IS NULL OR sector_id = $1)", [sid]
     );
     if (unanalysed[0].c > 0) {
-      nextActions.push({ type: 'assessment', title: `${unanalysed[0].c} assessment${unanalysed[0].c > 1 ? 's' : ''} awaiting AI analysis`, link: '/assessments', priority: 'high' });
+      nextActions.push({ title: `Analyse ${unanalysed[0].c} pending assessment${unanalysed[0].c > 1 ? 's' : ''}`, link: '/assessments', priority: 'high', detail: 'Run AI analysis to get service recommendations and uncover upsell opportunities.' });
     }
 
-    // Funding deadlines within 14 days
+    // 4. Funding deadlines within 14 days
     const { rows: deadlines } = await pool.query(
-      "SELECT title, id FROM funding_opportunities WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '14 days' AND pipeline_stage NOT IN ('won','lost','expired') AND ($1::uuid IS NULL OR sector_id = $1) ORDER BY deadline LIMIT 3", [sid]
+      "SELECT title, id, deadline FROM funding_opportunities WHERE deadline BETWEEN NOW() AND NOW() + INTERVAL '14 days' AND pipeline_stage NOT IN ('won','lost','expired') AND ($1::uuid IS NULL OR sector_id = $1) ORDER BY deadline LIMIT 3", [sid]
     );
     for (const d of deadlines) {
-      nextActions.push({ type: 'funding', title: `Funding deadline soon: ${d.title}`, link: `/fundraising/opportunities/${d.id}`, priority: 'urgent' });
+      const daysLeft = Math.ceil((new Date(d.deadline) - new Date()) / 86400000);
+      nextActions.push({ title: `${d.title} — ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left`, link: `/fundraising/opportunities/${d.id}`, priority: 'urgent', detail: 'Funding deadline approaching. Review application status and submit if ready.' });
     }
 
-    // Low-rated curriculum modules
+    // 5. Stalled mentoring contacts (no activity in 7+ days)
+    const { rows: stalled } = await pool.query(
+      `SELECT count(*)::int as c FROM learning_journeys WHERE status = 'active'
+       AND updated_at < NOW() - INTERVAL '7 days'`
+    ).catch(() => ({ rows: [{ c: 0 }] }));
+    if (stalled[0].c > 0) {
+      nextActions.push({ title: `${stalled[0].c} learner${stalled[0].c > 1 ? 's' : ''} stalled — send nudge`, link: '/mentoring', priority: 'medium', detail: 'Active learners with no activity in 7+ days. Use the Implementation Coach to send follow-ups.' });
+    }
+
+    // 6. Low-rated curriculum modules
     const { rows: lowModules } = await pool.query(
       `SELECT cm.title AS module_title, c.title AS course_title, c.id AS course_id
        FROM course_modules cm JOIN courses c ON cm.course_id = c.id
@@ -54,15 +80,40 @@ router.get('/', async (req, res) => {
        AND ($1::uuid IS NULL OR c.sector_id = $1) LIMIT 3`, [sid]
     );
     if (lowModules.length > 0) {
-      nextActions.push({ type: 'curriculum', title: `${lowModules.length} module${lowModules.length > 1 ? 's' : ''} rated low — needs review`, link: `/curriculum/${lowModules[0].course_id}`, priority: 'medium' });
+      nextActions.push({ title: `${lowModules.length} module${lowModules.length > 1 ? 's' : ''} rated low — needs update`, link: `/curriculum/${lowModules[0].course_id}`, priority: 'medium', detail: `${lowModules[0].module_title} in ${lowModules[0].course_title} scored poorly. Use AI Assist to get improvement suggestions.` });
     }
 
-    // Draft outreach messages
+    // 7. Draft outreach messages
     const { rows: drafts } = await pool.query(
       "SELECT count(*)::int as c FROM outreach_messages WHERE status = 'draft'", []
     );
     if (drafts[0].c > 0) {
-      nextActions.push({ type: 'outreach', title: `${drafts[0].c} outreach draft${drafts[0].c > 1 ? 's' : ''} ready to send`, link: '/marketing/campaigns', priority: 'low' });
+      nextActions.push({ title: `${drafts[0].c} outreach draft${drafts[0].c > 1 ? 's' : ''} ready to send`, link: '/marketing/campaigns', priority: 'low', detail: 'Review and send drafted emails to contacts.' });
+    }
+
+    // 8. Social posts to publish
+    const { rows: draftPosts } = await pool.query(
+      "SELECT count(*)::int as c FROM social_posts WHERE status = 'draft'"
+    );
+    if (draftPosts[0].c > 0) {
+      nextActions.push({ title: `${draftPosts[0].c} social post${draftPosts[0].c > 1 ? 's' : ''} ready to publish`, link: '/marketing/social', priority: 'low', detail: 'AI-generated posts waiting for your review and manual publishing.' });
+    }
+
+    // 9. Feedback items to address
+    const { rows: openFeedback } = await pool.query(
+      "SELECT count(*)::int as c FROM feedback WHERE status != 'done'"
+    ).catch(() => ({ rows: [{ c: 0 }] }));
+    if (openFeedback[0].c > 0) {
+      nextActions.push({ title: `${openFeedback[0].c} feedback item${openFeedback[0].c > 1 ? 's' : ''} to address`, link: '/feedback', priority: 'low', detail: 'Technical changes and feature requests you\'ve submitted.' });
+    }
+
+    // Fallback if nothing is pending
+    if (nextActions.length === 0) {
+      nextActions.push(
+        { title: 'Review your briefing', link: '/newsletter', priority: 'medium', detail: 'Check the latest AI news and flag anything relevant to your courses.' },
+        { title: 'Build course content', link: '/course-builder', priority: 'medium', detail: 'Use the AI Curriculum Builder to develop or improve training modules.' },
+        { title: 'Find new leads', link: '/leads', priority: 'medium', detail: 'Run the Lead Miner or browse auto-discovered prospects.' },
+      );
     }
 
     // Recent AI activity (last 10 across tables)

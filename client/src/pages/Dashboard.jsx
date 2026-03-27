@@ -288,6 +288,33 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Next 3 Things — what to do when you sit down */}
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>What to Do Next</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          {(nextActions.length > 0 ? nextActions.slice(0, 3) : [
+            { title: 'Check your briefing', link: '/newsletter', priority: 'high', detail: 'Review today\'s AI briefing and flag curriculum items' },
+            { title: 'Review pending leads', link: '/leads', priority: 'medium', detail: 'Vet auto-discovered leads from Gmail and web scraping' },
+            { title: 'Build course content', link: '/course-builder', priority: 'medium', detail: 'Use the AI Curriculum Builder to develop training modules' },
+          ]).map((a, i) => {
+            const ps = PRIORITY_STYLES[a.priority] || PRIORITY_STYLES.medium;
+            const icons = ['1️⃣', '2️⃣', '3️⃣'];
+            return (
+              <Link key={i} to={a.link} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div className="dashboard-card" style={{ borderLeft: `4px solid ${ps.border}`, padding: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 18 }}>{icons[i]}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', color: ps.color }}>{a.priority}</span>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{a.title}</div>
+                  {a.detail && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{a.detail}</div>}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Stats Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 20 }}>
         {statItems.map((s, i) => (
@@ -299,26 +326,6 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
-
-      {/* Priority Actions */}
-      {nextActions.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Priority Actions</h2>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {nextActions.map((a, i) => {
-              const ps = PRIORITY_STYLES[a.priority] || PRIORITY_STYLES.low;
-              return (
-                <Link key={i} to={a.link} style={{ textDecoration: 'none', color: 'inherit', flex: '1 1 200px', maxWidth: 300 }}>
-                  <div className="dashboard-card" style={{ borderLeft: `4px solid ${ps.border}`, padding: 12 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', color: ps.color }}>{a.priority}</div>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginTop: 4 }}>{a.title}</div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Workflow Grid */}
       <div className="dashboard-grid">
@@ -443,7 +450,7 @@ export default function Dashboard() {
         </SectionCard>
 
         {/* PILLAR 2: Mentorship */}
-        <SectionCard title="Mentorship" linkTo="/services">
+        <SectionCard title="Mentorship" linkTo="/mentoring">
           {engagements.filter(e => e.type === 'mentorship').length > 0 ? (
             engagements.filter(e => e.type === 'mentorship').map(e => (
               <Link key={e.id} to={`/services/${e.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', padding: '5px 0', borderBottom: '1px solid var(--border-color)' }}>
@@ -528,20 +535,6 @@ export default function Dashboard() {
 
         {/* Quick Upload */}
         <QuickUpload />
-      </div>
-
-      {/* AI Tools */}
-      <div style={{ marginTop: 20, marginBottom: 20 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>AI Tools <AiBadge variant="powered" /></h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
-          {AI_ACTIONS.map((a, i) => (
-            <Link key={i} to={a.link} className="ai-action-card" style={{ padding: 12 }}>
-              <AiBadge />
-              <h4 style={{ fontSize: 13 }}>{a.title}</h4>
-              <p style={{ fontSize: 11 }}>{a.desc}</p>
-            </Link>
-          ))}
-        </div>
       </div>
 
       {/* Recent Activity */}
