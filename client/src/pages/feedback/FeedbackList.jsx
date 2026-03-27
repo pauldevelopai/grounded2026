@@ -11,6 +11,8 @@ export default function FeedbackList() {
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
   const [generating, setGenerating] = useState(null);
+  const [masterPrompt, setMasterPrompt] = useState('');
+  const [generatingMaster, setGeneratingMaster] = useState(false);
 
   function load() {
     const url = filter === 'all' ? '/feedback' : `/feedback?status=${filter}`;
@@ -41,16 +43,51 @@ export default function FeedbackList() {
     load();
   }
 
+  async function generateMasterPrompt() {
+    setGeneratingMaster(true);
+    try {
+      const result = await apiFetch('/feedback/generate-master-prompt', { method: 'POST', timeout: 300000 });
+      setMasterPrompt(result.prompt);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setGeneratingMaster(false);
+    }
+  }
+
   function copyPrompt(text) {
     navigator.clipboard.writeText(text);
   }
 
+  const pendingCount = items.filter(i => i.status === 'pending' || i.status === 'in_progress').length;
+
   return (
     <div>
-      <PageHeader title="Feedback" />
+      <PageHeader title="Feedback">
+        {pendingCount > 0 && (
+          <button className="btn btn-primary" onClick={generateMasterPrompt} disabled={generatingMaster}>
+            {generatingMaster ? 'Generating...' : `Generate Master Prompt (${pendingCount} items)`}
+          </button>
+        )}
+      </PageHeader>
       <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-        All feedback submitted via the feedback bubble. Generate Claude Code prompts from any item.
+        All feedback submitted via the feedback bubble. Generate Claude Code prompts from any item, or combine all unaddressed items into one master prompt.
       </p>
+
+      {masterPrompt && (
+        <div className="card" style={{ marginBottom: 20, padding: 16, borderLeft: '4px solid var(--accent)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)' }}>Master Claude Code Prompt ({pendingCount} items)</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => copyPrompt(masterPrompt)} className="btn btn-primary btn-small">Copy to Clipboard</button>
+              <button onClick={() => setMasterPrompt('')} className="btn btn-secondary btn-small">Dismiss</button>
+            </div>
+          </div>
+          <pre style={{ fontSize: 13, whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'monospace', lineHeight: 1.6, background: '#F8FAFC', padding: 16, borderRadius: 6, maxHeight: 400, overflowY: 'auto' }}>
+            {masterPrompt}
+          </pre>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {['all', 'pending', 'in_progress', 'done', 'dismissed'].map(s => (

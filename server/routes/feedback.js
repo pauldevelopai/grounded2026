@@ -56,12 +56,21 @@ router.post('/:id/generate-prompt', async (req, res) => {
     const fb = rows[0];
 
     const prompt = await callClaude({
-      system: `You are a technical product manager converting user feedback into precise, actionable Claude Code prompts. The codebase is a Node.js/Express + React app called Holly. Convert the feedback into a prompt that a developer (or Claude Code) could execute directly.
+      system: `You are helping a non-technical founder talk to Claude Code about changes to their app called Holly (Node.js/Express + React, PostgreSQL). Convert their feedback into a natural, conversational prompt they can paste into Claude Code.
 
-Output ONLY the prompt — no explanation, no preamble. Start with what needs to change, reference specific files/components if obvious from the feedback, and be specific about the expected behaviour.`,
-      userContent: `Feedback from page "${fb.page || 'unknown'}":\nCategory: ${fb.category}\n\n"${fb.content}"`,
+Rules:
+- Write as if the user is talking directly to Claude Code: "In Holly, on the X page, I need you to..."
+- Be specific about what needs to change and where, but keep it conversational
+- Reference the page or feature clearly so Claude Code knows where to look
+- Describe the desired behaviour in plain language
+- If the feedback mentions a bug, describe what should happen instead
+- Don't use technical jargon unless the feedback uses it
+- Start with context ("In the Holly app...") so it works even if pasted into a fresh Claude Code session
+- Make sure you reference that this is an existing codebase and should not conflict with existing code
+- Output ONLY the prompt — no explanation around it`,
+      userContent: `Feedback from page "${fb.page || 'unknown'}":\nCategory: ${fb.category}\nPriority: ${fb.priority}\n\n"${fb.content}"`,
       maxTokens: 1000,
-      temperature: 0.2,
+      temperature: 0.3,
     });
 
     await pool.query('UPDATE feedback SET claude_prompt = $1, updated_at = NOW() WHERE id = $2', [prompt, fb.id]);
@@ -69,6 +78,45 @@ Output ONLY the prompt — no explanation, no preamble. Start with what needs to
   } catch (err) {
     console.error('Prompt generation error:', err);
     res.status(500).json({ message: err.message || 'Prompt generation failed' });
+  }
+});
+
+// Generate master prompt from all unaddressed feedback
+router.post('/generate-master-prompt', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT content, page, category, priority FROM feedback WHERE status IN ('pending', 'in_progress') ORDER BY
+        CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
+        created_at DESC`
+    );
+    if (rows.length === 0) return res.json({ prompt: 'No unaddressed feedback items.' });
+
+    const feedbackList = rows.map((fb, i) =>
+      `${i + 1}. [${fb.category}] [${fb.priority}] ${fb.page ? `(${fb.page}) ` : ''}${fb.content}`
+    ).join('\n');
+
+    const prompt = await callClaude({
+      system: `You are helping a non-technical founder create a single comprehensive prompt for Claude Code that addresses multiple feedback items for their app called Holly (Node.js/Express + React, PostgreSQL).
+
+Rules:
+- Combine all the feedback into one coherent, conversational prompt
+- Group related items together (e.g. all UI fixes, all feature requests, all bugs)
+- Write as if talking directly to Claude Code: "I need you to make these changes to Holly..."
+- Start with context about the Holly codebase so it works in a fresh session
+- Be specific about what needs to change but keep it natural language
+- Reference pages and features clearly
+- Mention that this is an existing codebase and changes should not break existing functionality
+- Prioritise: address high priority items first
+- Output ONLY the prompt`,
+      userContent: `Here are ${rows.length} unaddressed feedback items:\n\n${feedbackList}`,
+      maxTokens: 3000,
+      temperature: 0.3,
+    });
+
+    res.json({ prompt, itemCount: rows.length });
+  } catch (err) {
+    console.error('Master prompt error:', err);
+    res.status(500).json({ message: err.message || 'Master prompt generation failed' });
   }
 });
 
