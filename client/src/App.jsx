@@ -48,6 +48,7 @@ import FeedbackList from './pages/feedback/FeedbackList.jsx';
 import TrainingMaterials from './pages/curriculum/TrainingMaterials.jsx';
 import LeadsPage from './pages/leads/LeadsPage.jsx';
 import MentoringPage from './pages/mentoring/MentoringPage.jsx';
+import OrganisationMap from './pages/map/OrganisationMap.jsx';
 
 export default function App() {
   return (
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/contacts/:id" element={<ContactDetail />} />
               <Route path="/organisations" element={<OrganisationsList />} />
               <Route path="/organisations/:id" element={<OrganisationDetail />} />
+              <Route path="/map" element={<OrganisationMap />} />
               <Route path="/programmes" element={<CohortsList />} />
               <Route path="/programmes/:id" element={<CohortDetail />} />
               <Route path="/assessments" element={<AssessmentsList />} />

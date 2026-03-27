@@ -13,6 +13,7 @@ const navItems = [
   { to: '/programmes', label: 'Cohorts', icon: '~', group: 'CRM' },
   { to: '/assessments', label: 'Assessments', icon: '~', group: 'CRM' },
   { to: '/leads', label: 'Leads', icon: '~', group: 'CRM' },
+  { to: '/map', label: 'Map', icon: '~', group: 'CRM' },
   { to: '/training-materials', label: 'Training Materials', icon: '~', group: 'Curriculum' },
   { to: '/course-builder', label: 'Course Builder', icon: '~', group: 'Curriculum' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Compliance' },

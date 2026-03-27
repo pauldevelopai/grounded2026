@@ -4,6 +4,31 @@ import { requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
+// Map data — enriched with AI implementation strength indicators
+router.get('/map', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT o.id, o.name, o.type, o.country, o.city, o.latitude, o.longitude,
+        o.relationship_stage, o.programme_name, o.funder_organisation_id,
+        s.name AS sector_name,
+        (SELECT COUNT(*) FROM contacts c WHERE c.organisation_id = o.id)::int AS contact_count,
+        EXISTS(SELECT 1 FROM generated_documents gd JOIN document_templates dt ON gd.template_id = dt.id WHERE gd.organisation_id = o.id AND dt.type = 'ethical_ai_policy') AS has_policy,
+        EXISTS(SELECT 1 FROM generated_documents gd JOIN document_templates dt ON gd.template_id = dt.id WHERE gd.organisation_id = o.id AND dt.type = 'ai_legal_framework') AS has_framework,
+        EXISTS(SELECT 1 FROM generated_documents gd JOIN document_templates dt ON gd.template_id = dt.id WHERE gd.organisation_id = o.id AND dt.type = 'ai_security_framework') AS has_security,
+        EXISTS(SELECT 1 FROM service_engagements se WHERE se.organisation_id = o.id AND se.type = 'mentorship' AND se.status IN ('active', 'completed')) AS has_mentorship,
+        COALESCE((SELECT AVG(lj.overall_progress) FROM learning_journeys lj WHERE lj.organisation_id = o.id), 0)::int AS learning_progress
+      FROM organisations o
+      LEFT JOIN sectors s ON o.sector_id = s.id
+      WHERE ($1::uuid IS NULL OR o.sector_id = $1)
+      ORDER BY o.name
+    `, [req.sectorId]);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const { search, relationship_stage } = req.query;

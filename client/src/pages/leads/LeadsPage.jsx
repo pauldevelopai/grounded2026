@@ -35,12 +35,11 @@ export default function LeadsPage() {
     setMining(true);
     setMineResult('');
     try {
-      const result = await apiFetch('/background-jobs/lead_miner/run', {
-        method: 'POST',
-        timeout: 300000,
-      });
-      setMineResult(`Found ${result.itemsProcessed || 0} new leads`);
-      load();
+      await apiFetch('/background-jobs/lead_miner/run', { method: 'POST' });
+      setMineResult('Lead Miner started — scanning your Gmail now. This runs in the background and may take a few minutes. Refresh the page to see new leads.');
+      // Poll for results after a delay
+      setTimeout(() => { load(); }, 30000);
+      setTimeout(() => { load(); }, 60000);
     } catch (err) {
       setMineResult('Mining failed: ' + err.message);
     } finally {
