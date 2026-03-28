@@ -269,6 +269,21 @@ router.post('/fetch-web', async (req, res) => {
   }
 });
 
+// Generate a briefing from all curriculum-relevant items
+router.post('/curriculum-digest', async (req, res) => {
+  try {
+    const { rows: items } = await pool.query(
+      `SELECT * FROM newsletter_items WHERE is_curriculum_relevant = true ORDER BY received_at DESC LIMIT 50`
+    );
+    if (items.length === 0) return res.status(400).json({ message: 'No curriculum items found' });
+    const digest = await generateDailyDigest(items);
+    res.json({ digest, itemCount: items.length });
+  } catch (err) {
+    console.error('Curriculum digest error:', err);
+    res.status(500).json({ message: err.message || 'Generation failed' });
+  }
+});
+
 // List all past digests (archive)
 router.get('/archive', async (req, res) => {
   try {

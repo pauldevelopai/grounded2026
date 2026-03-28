@@ -65,8 +65,10 @@ function itemMatchesFilter(item, filter) {
 
 export default function NewsletterDigest() {
   const [activeTab, setActiveTab] = useState('digest');
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState([]);                   // date-specific digest items
+  const [curriculumItems, setCurriculumItems] = useState([]); // all curriculum items
   const [digest, setDigest] = useState(null);
+  const [curriculumDigest, setCurriculumDigest] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [settings, setSettings] = useState({});
   const [archive, setArchive] = useState([]);
@@ -79,7 +81,7 @@ export default function NewsletterDigest() {
   }
 
   function loadCurriculum() {
-    apiFetch('/newsletter/curriculum').then(setItems).catch(() => setItems([]));
+    return apiFetch('/newsletter/curriculum').then(setCurriculumItems).catch(() => setCurriculumItems([]));
   }
 
   function loadSettings() {
@@ -92,7 +94,7 @@ export default function NewsletterDigest() {
 
   useEffect(() => {
     loadSettings();
-    // Load archive and auto-select the most recent date with data
+    loadCurriculum(); // load curriculum on mount for tab count
     apiFetch('/newsletter/archive').then(a => {
       setArchive(a);
       if (a.length > 0 && a[0].digest_date) {
@@ -100,6 +102,7 @@ export default function NewsletterDigest() {
       }
     }).catch(() => setArchive([]));
   }, []);
+
   useEffect(() => {
     if (activeTab === 'digest') loadDigest();
     else if (activeTab === 'curriculum') loadCurriculum();
@@ -143,6 +146,23 @@ export default function NewsletterDigest() {
       );
     }
     return list;
+  }
+
+  const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
+
+  async function generateCurriculumBriefing() {
+    setGeneratingCurriculum(true);
+    try {
+      const result = await apiFetch('/newsletter/curriculum-digest', {
+        method: 'POST',
+        timeout: 300000,
+      });
+      setCurriculumDigest(result.digest);
+    } catch (err) {
+      alert('Generation failed: ' + err.message);
+    } finally {
+      setGeneratingCurriculum(false);
+    }
   }
 
   const [regenerating, setRegenerating] = useState(false);
@@ -217,13 +237,8 @@ export default function NewsletterDigest() {
     }
   }
 
-  // Apply all filters, then enforce stories-per-day cap (curriculum items take priority)
-  const filteredCurriculum = applyFilters(items.filter(i => i.is_curriculum_relevant));
-  const filteredOther = applyFilters(items.filter(i => !i.is_curriculum_relevant));
-  const totalFiltered = [...filteredCurriculum, ...filteredOther];
-  const cappedTotal = totalFiltered.slice(0, storiesPerDay);
-  const curriculumInDigest = cappedTotal.filter(i => i.is_curriculum_relevant);
-  const digestItems = cappedTotal.filter(i => !i.is_curriculum_relevant);
+  // Digest tab: only non-curriculum items, filtered and capped
+  const digestItems = applyFilters(items.filter(i => !i.is_curriculum_relevant)).slice(0, storiesPerDay);
 
   return (
     <div>
@@ -237,7 +252,7 @@ export default function NewsletterDigest() {
           Daily Briefing
         </button>
         <button className={`tab ${activeTab === 'curriculum' ? 'active' : ''}`} onClick={() => setActiveTab('curriculum')}>
-          Curriculum Items ({activeTab === 'curriculum' ? items.length : curriculumInDigest.length})
+          Curriculum Items ({curriculumItems.length})
         </button>
         <button className={`tab ${activeTab === 'archive' ? 'active' : ''}`} onClick={() => setActiveTab('archive')}>
           Past Briefings ({archive.length})
@@ -351,21 +366,11 @@ export default function NewsletterDigest() {
             </div>
           )}
 
-          {/* Curriculum-relevant items first */}
-          {curriculumInDigest.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--accent)' }}>
-                Curriculum-Relevant ({curriculumInDigest.length})
-              </h3>
-              {curriculumInDigest.map(item => <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} />)}
-            </div>
-          )}
-
-          {/* Other items */}
+          {/* Non-curriculum items */}
           {digestItems.length > 0 && (
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
-                Other Items ({digestItems.length})
+                Items ({digestItems.length})
               </h3>
               {digestItems.map(item => <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} />)}
             </div>
@@ -379,7 +384,7 @@ export default function NewsletterDigest() {
               </p>
             </div>
           )}
-          {items.length > 0 && activeFilters.length > 0 && digestItems.length === 0 && curriculumInDigest.length === 0 && (
+          {items.length > 0 && activeFilters.length > 0 && digestItems.length === 0 && (
             <div className="empty-state">
               <h3>No items match the selected filters.</h3>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Try selecting different filters or clear them to see all items.</p>
@@ -390,10 +395,48 @@ export default function NewsletterDigest() {
 
       {activeTab === 'curriculum' && (
         <div>
-          {items.length === 0 ? (
+          {/* Generate curriculum briefing */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <button className="btn btn-primary btn-small" onClick={generateCurriculumBriefing} disabled={generatingCurriculum}>
+              {generatingCurriculum ? 'Generating…' : 'Generate Curriculum Briefing'}
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              Generates a briefing from all {curriculumItems.length} curriculum items
+            </span>
+          </div>
+
+          {/* Curriculum digest output */}
+          {curriculumDigest && (
+            <div className="card" style={{ marginBottom: 20, padding: 20, borderLeft: '4px solid var(--accent)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AiBadge />
+                  <span style={{ fontWeight: 600, fontSize: 15 }}>Curriculum Briefing</span>
+                </div>
+                <button className="btn btn-secondary btn-small" onClick={() => setCurriculumDigest(null)} style={{ fontSize: 11 }}>
+                  Dismiss
+                </button>
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
+                dangerouslySetInnerHTML={{ __html: (() => {
+                  let text = curriculumDigest;
+                  text = text.replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)');
+                  text = text.replace(/<[^>]+>/g, '');
+                  text = text.replace(/(https?:\/\/[^\s"]+)"[^)]*\)/g, '$1');
+                  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+                    '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline">$1</a>');
+                  text = text.replace(/(?<!href=")(https?:\/\/[^\s<)"]+)/g,
+                    '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline; word-break: break-all">$1</a>');
+                  return text;
+                })() }} />
+            </div>
+          )}
+
+          {/* All curriculum items */}
+          {curriculumItems.length === 0 ? (
             <div className="empty-state"><h3>No curriculum-relevant items found yet.</h3></div>
           ) : (
-            items.map(item => <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} showDate />)
+            curriculumItems.map(item => <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} showDate />)
           )}
         </div>
       )}
