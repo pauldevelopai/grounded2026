@@ -111,17 +111,17 @@ const SECTOR_SOURCES = {
   // AI lawsuit & legal news sources — used by runLawsuitTracker
   ai_lawsuits: [
     { url: 'https://chatgptiseatingtheworld.com/', name: 'ChatGPT Is Eating The World', selector: 'article a, h2 a, .entry-title a' },
-    { url: 'https://www.theverge.com/ai-artificial-intelligence', name: 'The Verge AI Legal', selector: 'article a, h2 a' },
+    { url: 'https://www.theverge.com/ai-artificial-intelligence', name: 'The Verge AI', selector: 'article a, h2 a' },
     { url: 'https://techcrunch.com/category/artificial-intelligence/', name: 'TechCrunch AI', selector: 'article a, h3 a' },
-    { url: 'https://www.reuters.com/legal/litigation/', name: 'Reuters Legal', selector: 'article a, [data-testid="Heading"] a' },
-    { url: 'https://www.courthousenews.com/technology/', name: 'Courthouse News Tech', selector: 'article a, h3 a, .cn-article a' },
     { url: 'https://arstechnica.com/tech-policy/', name: 'Ars Technica Policy', selector: 'article a, h2 a' },
-    { url: 'https://torrentfreak.com/category/copyright/', name: 'TorrentFreak Copyright', selector: 'article a, h2 a, .post-title a' },
-    { url: 'https://www.law360.com/technology', name: 'Law360 Tech', selector: 'article a, h3 a' },
-    { url: 'https://ipwatchdog.com/', name: 'IP Watchdog', selector: 'article a, .entry-title a, h2 a' },
-    { url: 'https://www.artificialintelligencelaw.com/', name: 'AI Law Review', selector: 'article a, h2 a' },
-    { url: 'https://hollywoodreporter.com/business/business-news/artificial-intelligence/', name: 'Hollywood Reporter AI', selector: 'article a, h3 a' },
-    { url: 'https://variety.com/vip/artificial-intelligence/', name: 'Variety AI', selector: 'article a, h2 a' },
+    { url: 'https://torrentfreak.com/tag/artificial-intelligence/', name: 'TorrentFreak AI', selector: 'article a, h2 a, .post-title a' },
+    { url: 'https://ipwatchdog.com/category/artificial-intelligence/', name: 'IP Watchdog AI', selector: 'article a, .entry-title a, h2 a' },
+    { url: 'https://www.techdirt.com/tag/copyright/', name: 'Techdirt Copyright', selector: 'article a, h3 a, .story-title a' },
+    { url: 'https://www.techdirt.com/tag/artificial-intelligence/', name: 'Techdirt AI', selector: 'article a, h3 a, .story-title a' },
+    { url: 'https://news.bloomberglaw.com/ip-law', name: 'Bloomberg IP Law', selector: 'article a, h3 a, .story-title a' },
+    { url: 'https://www.jdsupra.com/topics/artificial-intelligence/', name: 'JD Supra AI', selector: 'article a, h3 a, .jds-item__title a' },
+    { url: 'https://www.wired.com/tag/artificial-intelligence/', name: 'WIRED AI', selector: 'article a, h3 a' },
+    { url: 'https://futurism.com/the-byte', name: 'Futurism AI', selector: 'article a, h2 a, .headline a' },
   ],
   general_ai: [
     // Major AI news
@@ -618,14 +618,14 @@ export async function scrapeCourtListener(keywords = ['artificial intelligence',
   const results = [];
   for (const keyword of keywords) {
     try {
-      const { data } = await axios.get('https://www.courtlistener.com/api/rest/v3/search/', {
+      const { data } = await axios.get('https://www.courtlistener.com/api/rest/v4/search/', {
         timeout: 15000,
         headers: { 'User-Agent': USER_AGENT },
         params: {
-          q: `"${keyword}" copyright`,
-          type: 'r',         // docket entries
+          q: `${keyword} copyright`,
+          type: 'o',         // opinions/cases
           order_by: 'score desc',
-          filed_after: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          filed_after: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         },
       });
       if (data?.results?.length) {

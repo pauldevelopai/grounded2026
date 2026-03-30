@@ -62,6 +62,7 @@ export default function LawsuitTracker() {
   const [filterDefendant, setFilterDefendant] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [search, setSearch] = useState('');
+  const [refreshMsg, setRefreshMsg] = useState(null);
 
   function loadAll() {
     const params = new URLSearchParams();
@@ -83,14 +84,16 @@ export default function LawsuitTracker() {
 
   async function refresh() {
     setRefreshing(true);
+    setRefreshMsg(null);
     try {
       const r = await apiFetch('/lawsuits/refresh', { method: 'POST', timeout: 300000 });
-      alert(r.result || 'Refresh complete');
+      setRefreshMsg({ type: 'success', text: r.result || 'Refresh complete' });
       await loadAll();
     } catch (err) {
-      alert('Refresh failed: ' + err.message);
+      setRefreshMsg({ type: 'error', text: 'Refresh failed: ' + err.message });
     } finally {
       setRefreshing(false);
+      setTimeout(() => setRefreshMsg(null), 12000);
     }
   }
 
@@ -104,6 +107,20 @@ export default function LawsuitTracker() {
           {refreshing ? 'Scanning sources…' : '↻ Refresh Cases'}
         </button>
       </PageHeader>
+
+      {/* Refresh status banner */}
+      {refreshMsg && (
+        <div style={{
+          marginBottom: 16, padding: '10px 14px', borderRadius: 6, fontSize: 13,
+          background: refreshMsg.type === 'success' ? '#D1FAE5' : '#FEE2E2',
+          color: refreshMsg.type === 'success' ? '#065F46' : '#991B1B',
+          border: `1px solid ${refreshMsg.type === 'success' ? '#6EE7B7' : '#FECACA'}`,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span>{refreshMsg.type === 'success' ? '✓ ' : '⚠ '}{refreshMsg.text}</span>
+          <button onClick={() => setRefreshMsg(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.5 }}>×</button>
+        </div>
+      )}
 
       {/* Stats bar */}
       {stats && (
