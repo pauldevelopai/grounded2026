@@ -23,6 +23,15 @@ export function AuthProvider({ children }) {
     return data.user;
   }
 
+  async function register(name, email, password) {
+    const data = await apiFetch('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password }),
+    });
+    setUser(data.user);
+    return data.user;
+  }
+
   async function logout() {
     await apiFetch('/auth/logout', { method: 'POST' });
     setUser(null);
@@ -33,7 +42,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
