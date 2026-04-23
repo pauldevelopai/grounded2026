@@ -125,7 +125,10 @@ log "Installing server deps…"
 ( cd "$APP_DIR/server" && npm ci --omit=dev 2>/dev/null || npm install --omit=dev )
 
 log "Installing client deps + building Vite SPA…"
-( cd "$APP_DIR/client" && npm ci 2>/dev/null || npm install )
+# --legacy-peer-deps: react-leaflet@5 peer-asks for React 19, but we're on
+# React 18. client/.npmrc sets this too, but pass it explicitly here so older
+# npm versions that ignore .npmrc during `ci` still succeed.
+( cd "$APP_DIR/client" && npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps )
 ( cd "$APP_DIR/client" && npm run build )
 
 # ── 5. Run DB migrations ─────────────────────────────────────────────────────
