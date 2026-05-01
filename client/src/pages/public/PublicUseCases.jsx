@@ -39,6 +39,7 @@ export default function PublicUseCases({ mode = 'list' }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(idFromRoute || null);
+  const [recentlyUpdated, setRecentlyUpdated] = useState([]);
 
   const [search, setSearch] = useState('');
   const [filterFirmType, setFilterFirmType] = useState('all');
@@ -64,6 +65,15 @@ export default function PublicUseCases({ mode = 'list' }) {
   }, [search, filterFirmType, filterJurisdiction, filterCategory, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Globally most-recent use cases for the freshness strip — independent of
+  // filters/page so it stays accurate everywhere.
+  useEffect(() => {
+    if (mode !== 'list') return;
+    publicFetch('/public/usecases/recent?limit=5')
+      .then(res => setRecentlyUpdated(res.items || []))
+      .catch(() => setRecentlyUpdated([]));
+  }, [mode]);
 
   const jurisdictions = useMemo(() => {
     const set = new Set(items.map(c => c.jurisdiction).filter(Boolean));
@@ -98,6 +108,40 @@ export default function PublicUseCases({ mode = 'list' }) {
               Every entry links to a primary source — press release, public announcement, or reputable press coverage.
             </p>
           </div>
+
+          {recentlyUpdated.length > 0 && (
+            <div className="card" style={{ marginBottom: 16, padding: '12px 16px', borderLeft: '3px solid #6366F1' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#6366F1', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Recently updated
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {recentlyUpdated.map(c => {
+                  const isOpen = selected === c.id;
+                  const when = timeAgo(c.updated_at || c.published_at);
+                  const meta = FIRM_TYPE_META[c.firm_type] || FIRM_TYPE_META.other;
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => selectAndScroll(c.id)}
+                      style={{
+                        cursor: 'pointer', fontSize: 12, padding: '7px 12px', borderRadius: 6,
+                        border: `1.5px solid ${isOpen ? '#6366F1' : 'var(--border-color)'}`,
+                        background: isOpen ? '#EEF2FF' : 'var(--card-bg)',
+                        transition: 'all 0.15s', maxWidth: 260,
+                      }}>
+                      <div style={{ fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {c.firm_name.length > 38 ? c.firm_name.slice(0, 38) + '…' : c.firm_name}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 8, background: meta.color + '20', color: meta.color, textTransform: 'uppercase' }}>{meta.label}</span>
+                        {when && <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{when}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             <input type="text" placeholder="Search firm, use case, tools…" value={search}

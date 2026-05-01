@@ -33,6 +33,7 @@ export default function PublicRegulationsList({ mode = 'list', regId: regIdProp 
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [recentlyUpdated, setRecentlyUpdated] = useState([]);
 
   const [selected, setSelected] = useState(idFromRoute || null);
   const [events, setEvents] = useState({});
@@ -72,6 +73,15 @@ export default function PublicRegulationsList({ mode = 'list', regId: regIdProp 
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Globally most-recent regulations — independent of filters/page so the
+  // freshness strip is honest on every page.
+  useEffect(() => {
+    if (mode !== 'list') return;
+    publicFetch('/public/regulations/recent?limit=5')
+      .then(res => setRecentlyUpdated(res.items || []))
+      .catch(() => setRecentlyUpdated([]));
+  }, [mode]);
+
   useEffect(() => {
     if (!selected || events[selected]) return;
     publicFetch(`/public/regulations/${selected}`)
@@ -99,13 +109,6 @@ export default function PublicRegulationsList({ mode = 'list', regId: regIdProp 
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([k, v]) => ({ key: k, label: k, count: v }));
-  }, [regs]);
-
-  // Recently updated — by updated_at DESC
-  const recentlyUpdated = useMemo(() => {
-    return [...regs]
-      .sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
-      .slice(0, 5);
   }, [regs]);
 
   const jurisdictions = useMemo(() => {
@@ -157,7 +160,7 @@ export default function PublicRegulationsList({ mode = 'list', regId: regIdProp 
                 {recentlyUpdated.map(r => {
                   const isOpen = selected === r.id;
                   const label = r.short_name || r.regulation_name;
-                  const when = timeAgo(r.updated_at);
+                  const when = timeAgo(r.latest_event_date || r.updated_at);
                   return (
                     <div
                       key={r.id}
@@ -313,6 +316,9 @@ function RegCard({ reg: r, selected, events, onSelect, cardRef, hideExpandHint }
           {r.effective_date && <div>Effective {formatDate(r.effective_date)}</div>}
           {r.enforcement_date && <div style={{ marginTop: 2 }}>Enforcement {formatDate(r.enforcement_date)}</div>}
           {r.next_milestone && <div style={{ marginTop: 2, color: '#1D4ED8', fontWeight: 600 }}>Next {formatDate(r.next_milestone)}</div>}
+          {(r.latest_event_date || r.updated_at) && (
+            <div style={{ marginTop: 2 }}>Updated {timeAgo(r.latest_event_date || r.updated_at)}</div>
+          )}
           {!hideExpandHint && (
             <div style={{ marginTop: 4, fontSize: 10, color: '#6366F1' }}>{selected ? '▲ collapse' : '▼ expand'}</div>
           )}

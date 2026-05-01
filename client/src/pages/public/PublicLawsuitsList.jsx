@@ -28,6 +28,7 @@ export default function PublicLawsuitsList({ mode = 'list', caseId: caseIdProp }
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [recentlyUpdated, setRecentlyUpdated] = useState([]);
 
   // In-place expansion — one card open at a time
   const [selected, setSelected] = useState(caseIdFromRoute || null);
@@ -79,6 +80,16 @@ export default function PublicLawsuitsList({ mode = 'list', caseId: caseIdProp }
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Fetch the globally most-recent cases once. Independent of filters/page so
+  // the freshness strip stays accurate everywhere — and reflects all cases,
+  // not just the 20 visible on this page.
+  useEffect(() => {
+    if (mode !== 'list') return;
+    publicFetch('/public/lawsuits/recent?limit=5')
+      .then(res => setRecentlyUpdated(res.items || []))
+      .catch(() => setRecentlyUpdated([]));
+  }, [mode]);
+
   // Lazy-load events when a case is expanded (either by click or by URL)
   useEffect(() => {
     if (!selected || events[selected]) return;
@@ -112,17 +123,6 @@ export default function PublicLawsuitsList({ mode = 'list', caseId: caseIdProp }
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
       .map(([k, v]) => ({ key: k, label: k, count: v }));
-  }, [cases]);
-
-  // Recently updated (top 5 by last_update DESC, fallback updated_at)
-  const recentlyUpdated = useMemo(() => {
-    return [...cases]
-      .sort((a, b) => {
-        const ad = new Date(a.last_update || a.updated_at || 0).getTime();
-        const bd = new Date(b.last_update || b.updated_at || 0).getTime();
-        return bd - ad;
-      })
-      .slice(0, 5);
   }, [cases]);
 
   const jurisdictions = useMemo(() => {
@@ -177,7 +177,7 @@ export default function PublicLawsuitsList({ mode = 'list', caseId: caseIdProp }
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {recentlyUpdated.map(c => {
                   const isOpen = selected === c.id;
-                  const when = timeAgo(c.last_update || c.updated_at);
+                  const when = timeAgo(c.latest_event_date || c.last_update || c.updated_at);
                   return (
                     <div
                       key={c.id}

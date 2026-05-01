@@ -144,7 +144,8 @@ router.get('/regulations', async (req, res) => {
        ORDER BY GREATEST(
                   CASE WHEN le.event_date  > CURRENT_DATE THEN NULL ELSE le.event_date  END,
                   CASE WHEN effective_date > CURRENT_DATE THEN NULL ELSE effective_date END,
-                  CASE WHEN enacted_date   > CURRENT_DATE THEN NULL ELSE enacted_date   END
+                  CASE WHEN enacted_date   > CURRENT_DATE THEN NULL ELSE enacted_date   END,
+                  updated_at
                 ) DESC NULLS LAST,
                 COALESCE(effective_date, enacted_date, proposed_date) DESC NULLS LAST,
                 updated_at DESC
@@ -155,6 +156,43 @@ router.get('/regulations', async (req, res) => {
     res.json({ items: rows, total, statusCounts, page, pageSize, totalPages: Math.ceil(total / pageSize) });
   } catch (err) {
     console.error('[public/regulations]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Globally most-recently-updated regulations, regardless of filters or page.
+// Powers the "Recently updated" pinned strip on the regulations list so its
+// freshness signal stays accurate on every page (not just the current 20).
+router.get('/regulations/recent', async (req, res) => {
+  try {
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 5));
+    const { rows } = await pool.query(
+      `SELECT ${PUBLIC_REG_COLS},
+              le.event_date AS latest_event_date,
+              le.event_type AS latest_event_type,
+              le.title      AS latest_event_title
+         FROM ai_regulations
+    LEFT JOIN LATERAL (
+           SELECT event_date, event_type, title
+             FROM ai_regulation_events
+            WHERE regulation_id = ai_regulations.id
+            ORDER BY event_date DESC NULLS LAST, created_at DESC
+            LIMIT 1
+         ) le ON true
+        WHERE status = ANY($1::text[])
+        ORDER BY GREATEST(
+                  CASE WHEN le.event_date  > CURRENT_DATE THEN NULL ELSE le.event_date  END,
+                  CASE WHEN effective_date > CURRENT_DATE THEN NULL ELSE effective_date END,
+                  CASE WHEN enacted_date   > CURRENT_DATE THEN NULL ELSE enacted_date   END,
+                  updated_at
+                ) DESC NULLS LAST,
+                updated_at DESC
+        LIMIT $2`,
+      [PUBLIC_REG_STATUSES, limit]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[public/regulations/recent]', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -291,6 +329,39 @@ router.get('/lawsuits', async (req, res) => {
     res.json({ items: rows, total, statusCounts, page, pageSize, totalPages: Math.ceil(total / pageSize) });
   } catch (err) {
     console.error('[public/lawsuits]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Globally most-recently-updated lawsuits, regardless of filters or page.
+// Same recency criteria as the list query.
+router.get('/lawsuits/recent', async (req, res) => {
+  try {
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 5));
+    const { rows } = await pool.query(
+      `SELECT ${PUBLIC_LAWSUIT_COLS},
+              le.event_date AS latest_event_date,
+              le.event_type AS latest_event_type,
+              le.title      AS latest_event_title
+         FROM ai_lawsuits
+    LEFT JOIN LATERAL (
+           SELECT event_date, event_type, title
+             FROM ai_lawsuit_events
+            WHERE lawsuit_id = ai_lawsuits.id
+            ORDER BY event_date DESC NULLS LAST, created_at DESC
+            LIMIT 1
+         ) le ON true
+        ORDER BY GREATEST(
+                  CASE WHEN le.event_date > CURRENT_DATE THEN NULL ELSE le.event_date END,
+                  CASE WHEN last_update   > CURRENT_DATE THEN NULL ELSE last_update   END
+                ) DESC NULLS LAST,
+                updated_at DESC
+        LIMIT $1`,
+      [limit]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[public/lawsuits/recent]', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 });
@@ -664,12 +735,33 @@ router.get('/usecases', async (req, res) => {
               tools_used, categories, outcome, quantified_impact,
               source_url, source_urls, source_name, author, published_at, tags, updated_at
          FROM ai_legal_usecases ${whereSql}
-        ORDER BY COALESCE(published_at, updated_at) DESC NULLS LAST
+        ORDER BY GREATEST(published_at, updated_at) DESC NULLS LAST
         LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
     res.json({ items: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
   } catch (err) { console.error('[public/usecases]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Globally most-recently-updated use cases for the freshness strip.
+router.get('/usecases/recent', async (req, res) => {
+  try {
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit, 10) || 5));
+    const { rows } = await pool.query(
+      `SELECT id, firm_name, firm_type, jurisdiction, use_case_title, summary,
+              tools_used, categories, outcome, quantified_impact,
+              source_url, source_urls, source_name, author, published_at, tags, updated_at
+         FROM ai_legal_usecases
+        WHERE is_published = true
+        ORDER BY GREATEST(published_at, updated_at) DESC NULLS LAST
+        LIMIT $1`,
+      [limit]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error('[public/usecases/recent]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 router.get('/usecases/:id', async (req, res) => {
