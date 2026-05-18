@@ -58,7 +58,7 @@ Snapshot taken **2026-04-23**. Counts update as work lands. Tick items as they c
 | 3.4 | `certbot --nginx -d ailegal.co.za -d www.ailegal.co.za` | 🛑 needs 3.1+3.2 first |
 | 3.5 | Favicon + OG default image | ✅ `favicon.svg` + `og-default.svg` shipped |
 | 3.6 | Lightsail Puppeteer libs (`apt-get`) | 🛑 on server |
-| 3.7 | Deploy holly to Lightsail | 🛑 ready — see deploy runbook below |
+| 3.7 | Deploy tracker to Lightsail | 🛑 ready — see deploy runbook below |
 | 3.8 | PM2 production config | ✅ `deploy/ecosystem.production.cjs` |
 | 3.9 | `robots.txt` + dynamic `/sitemap.xml` | ✅ both live, 88 URLs indexed |
 | 3.10 | OG/Twitter meta injection on detail pages | ✅ verified end-to-end |

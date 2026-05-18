@@ -33,7 +33,7 @@ export default function AiAssistantPanel() {
     <>
       {/* Floating toggle button */}
       {!isOpen && (
-        <button className="ai-toggle-btn" onClick={togglePanel} title="Ask Holly">
+        <button className="ai-toggle-btn" onClick={togglePanel} title="Ask Tracker">
           AI
         </button>
       )}
@@ -42,7 +42,7 @@ export default function AiAssistantPanel() {
       <div className={`ai-panel ${isOpen ? 'open' : ''}`}>
         <div className="ai-panel-header">
           <h3>
-            <span style={{ color: 'var(--ai-purple)' }}>Holly</span>
+            <span style={{ color: 'var(--ai-purple)' }}>Tracker</span>
             <AiBadge variant="powered" />
           </h3>
           <button className="ai-panel-close" onClick={togglePanel}>×</button>
@@ -51,7 +51,7 @@ export default function AiAssistantPanel() {
         <div className="ai-panel-messages">
           {messages.length === 0 && (
             <div style={{ textAlign: 'center', paddingTop: 40 }}>
-              <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--ai-purple)', marginBottom: 8 }}>Ask Holly</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--ai-purple)', marginBottom: 8 }}>Ask Tracker</div>
               <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                 I can help with your business across CRM, programmes, curriculum, marketing, fundraising, and more. Try asking:
               </div>
@@ -101,7 +101,7 @@ export default function AiAssistantPanel() {
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Ask Holly anything..."
+            placeholder="Ask Tracker anything..."
             disabled={sending}
           />
           <button type="submit" disabled={sending || !input.trim()}>Send</button>

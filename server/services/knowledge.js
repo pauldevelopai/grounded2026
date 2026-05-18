@@ -178,8 +178,8 @@ export async function buildEnrichedSystemPrompt(functionName, basePrompt, contex
 
   const enrichedPrompt = `${basePrompt}
 
-## Holly's Accumulated Knowledge
-The following insights are drawn from Holly's knowledge base — past assessments, programme outcomes, research, and verified findings. Reference these where relevant:
+## Tracker's Accumulated Knowledge
+The following insights are drawn from Tracker's knowledge base — past assessments, programme outcomes, research, and verified findings. Reference these where relevant:
 
 ${knowledgeSection}`;
 

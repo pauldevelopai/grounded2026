@@ -188,7 +188,7 @@ export default function SmartInput({ entityType, entityId, sectorId, onUpdated, 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 6, borderTop: '1px solid #BBF7D0' }}>
             <span style={{ fontSize: 11, color: '#6366F1' }}>🧠</span>
             <span style={{ fontSize: 12, color: '#6366F1' }}>
-              Also saved to <strong>Knowledge Base</strong> — Holly will use this in future AI responses
+              Also saved to <strong>Knowledge Base</strong> — Tracker will use this in future AI responses
             </span>
           </div>
         </div>

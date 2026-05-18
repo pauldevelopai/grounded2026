@@ -1,6 +1,6 @@
 // RSS 2.0 / Atom scraper.
 //
-// Uses cheerio in XML mode (already a Holly dep) so we don't add a new package.
+// Uses cheerio in XML mode (already a Tracker dep) so we don't add a new package.
 // Returns an array of raw items in the shape expected by the dispatcher:
 //   { external_id, url, title, content, author, published_at }
 //

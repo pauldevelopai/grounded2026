@@ -58,7 +58,7 @@ export default function DocumentsList() {
         <button className="btn btn-primary" onClick={() => navigate('/documents/new')}>+ Generate Document</button>
       </PageHeader>
       <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-        AI-generated compliance documents for your client organisations. Holly creates tailored policies, legal frameworks, and security protocols using Claude, informed by each organisation's needs assessment.
+        AI-generated compliance documents for your client organisations. Tracker creates tailored policies, legal frameworks, and security protocols using Claude, informed by each organisation's needs assessment.
       </p>
 
       {/* Three type cards */}

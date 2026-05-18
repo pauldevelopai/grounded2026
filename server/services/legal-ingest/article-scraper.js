@@ -1,6 +1,6 @@
 // HTML article scraper — pulls title / author / publish_date / body snippet /
 // og:image from any URL and caches per (entity, url) pair. Pure cheerio, no
-// external deps beyond what Holly already has.
+// external deps beyond what Tracker already has.
 //
 // Extraction priority (most reliable first):
 //   1. schema.org JSON-LD (NewsArticle / Article / Legislation)

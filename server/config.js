@@ -7,7 +7,7 @@ dotenv.config({ path: join(__dirname, '..', '.env'), override: true });
 
 export default {
   port: parseInt(process.env.SERVER_PORT || process.env.PORT || '3001', 10),
-  databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/holly',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost:5432/tracker',
   jwtSecret: process.env.JWT_SECRET || 'change-me-to-a-random-string',
   adminEmail: process.env.ADMIN_EMAIL || 'paul@developai.co.za',
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123',

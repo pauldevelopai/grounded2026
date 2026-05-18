@@ -1,10 +1,10 @@
 # AI Legal — Tonight's Build (Two Specs)
 
-**Working directory:** `/Users/paulmcnally/Developai Dropbox/Paul McNally/DROPBOX/ONMAC/PYTHON 2025/holly`
+**Working directory:** `/Users/paulmcnally/Developai Dropbox/Paul McNally/DROPBOX/ONMAC/PYTHON 2025/tracker`
 
 **Product:** AI Legal — public-facing global tracker for AI lawsuits and AI regulations
 **Domain:** ailegal.co.za (DNS not yet pointing — handled separately)
-**Built inside:** Holly (no new repo, same Postgres, reuses existing public-login surface)
+**Built inside:** Tracker (no new repo, same Postgres, reuses existing public-login surface)
 
 **Order tonight:**
 1. Execute **Spec A** end-to-end. Verify it works.
@@ -93,7 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_regulation_events_date ON ai_regulation_events(ev
 ### A1.3 Run the migrations
 
 ```
-cd "/Users/paulmcnally/Developai Dropbox/Paul McNally/DROPBOX/ONMAC/PYTHON 2025/holly"
+cd "/Users/paulmcnally/Developai Dropbox/Paul McNally/DROPBOX/ONMAC/PYTHON 2025/tracker"
 npm run migrate
 ```
 
@@ -158,7 +158,7 @@ Aim for 12-18 cases total. **Quality and verifiability over quantity.**
 
 Run script:
 ```
-cd "/Users/paulmcnally/Developai Dropbox/Paul McNally/DROPBOX/ONMAC/PYTHON 2025/holly"
+cd "/Users/paulmcnally/Developai Dropbox/Paul McNally/DROPBOX/ONMAC/PYTHON 2025/tracker"
 node server/db/scripts/seed_global_lawsuits.js
 ```
 
@@ -214,7 +214,7 @@ Routing:
 
 - Public header "AI Legal"
 - Footer `ailegal.co.za`
-- No "Holly" on public pages
+- No "Tracker" on public pages
 - Update `client/index.html` title
 
 ---
@@ -232,6 +232,6 @@ Routing:
 - [ ] Public regulation detail page renders at `/regulations/:id`
 - [ ] Public lawsuit pages still work
 - [ ] Public home page shows combined feed
-- [ ] All public pages say "AI Legal", not "Holly"
+- [ ] All public pages say "AI Legal", not "Tracker"
 - [ ] Admin routes still work and are still auth-protected
 - [ ] Existing internal LawsuitTracker page still works

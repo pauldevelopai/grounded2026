@@ -58,7 +58,7 @@ export default function KnowledgeBase() {
         <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Knowledge</button>
       </PageHeader>
       <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, marginTop: -8 }}>
-        Verified facts and insights that Holly uses as context in every AI response. Promoted from Intelligence, uploaded documents, or added manually. This is Holly's long-term memory.
+        Verified facts and insights that Tracker uses as context in every AI response. Promoted from Intelligence, uploaded documents, or added manually. This is Tracker's long-term memory.
       </p>
 
       {/* Stats */}

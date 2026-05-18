@@ -1115,7 +1115,7 @@ export async function runLawsuitTracker() {
                   [analysis, newCase.id]
                 );
 
-                // Auto-sync curriculum-relevant cases to Holly's knowledge base
+                // Auto-sync curriculum-relevant cases to Tracker's knowledge base
                 if (newCase.is_curriculum_relevant) {
                   const caseWithAnalysis = { ...newCase, detailed_analysis: analysis };
                   const content = formatCaseAsKnowledge(caseWithAnalysis);

@@ -130,7 +130,7 @@ router.post('/:id/analyse', async (req, res) => {
   }
 });
 
-// Add a case to Holly's knowledge base (or update existing entry)
+// Add a case to Tracker's knowledge base (or update existing entry)
 router.post('/:id/add-to-knowledge', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM ai_lawsuits WHERE id = $1', [req.params.id]);

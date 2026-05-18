@@ -1,6 +1,8 @@
-// Production PM2 config. Run the server only — nginx serves the static Vite build.
+// Production PM2 config. nginx/caddy serves the static Vite build; PM2
+// runs the tracker Node API on :3001.
+//
 // On the Lightsail box:
-//   cd /home/ubuntu/holly
+//   cd /home/ubuntu/tracker
 //   cd client && npm run build && cd ..
 //   pm2 start deploy/ecosystem.production.cjs
 //   pm2 save && pm2 startup   # persist across reboots
@@ -8,7 +10,7 @@
 module.exports = {
   apps: [
     {
-      name: 'holly-server',
+      name: 'tracker-server',
       cwd: './server',
       script: 'index.js',
       interpreter: 'node',

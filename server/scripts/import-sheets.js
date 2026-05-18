@@ -1,7 +1,7 @@
 import pool from '../db/pool.js';
 import xlsx from 'xlsx';
 
-const XLSX_PATH = '/tmp/holly_sheet.xlsx';
+const XLSX_PATH = '/tmp/tracker_sheet.xlsx';
 
 function parseEmailsFromString(str) {
   if (!str) return [];

@@ -1,4 +1,4 @@
-// Auto-sync promoted AI Legal entities into Holly's shared knowledge base.
+// Auto-sync promoted AI Legal entities into Tracker's shared knowledge base.
 //
 // Called by the triage agent when it promotes a raw item into an event on a
 // lawsuit or regulation. We either:
@@ -8,7 +8,7 @@
 //
 // Importantly: we do NOT generate a fresh Claude analysis here. That's a
 // separate, expensive, manual action (admin "Generate Analysis" button). This
-// helper is the lightweight sync that keeps Holly's AI assistant / RAG aware
+// helper is the lightweight sync that keeps Tracker's AI assistant / RAG aware
 // of every promoted entity without running up the Claude bill on every event.
 
 import pool from '../../db/pool.js';

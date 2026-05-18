@@ -119,7 +119,7 @@ router.post('/:id/analyse', async (req, res) => {
   }
 });
 
-// Add a regulation to Holly's knowledge base (or update existing entry)
+// Add a regulation to Tracker's knowledge base (or update existing entry)
 router.post('/:id/add-to-knowledge', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM ai_regulations WHERE id = $1', [req.params.id]);

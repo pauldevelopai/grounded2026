@@ -36,7 +36,7 @@ const SOURCES = [
   { name: 'The Verge — Policy',               kind: 'rss', url: 'https://www.theverge.com/rss/policy/index.xml',                              jurisdiction: 'International', tags: ['news', 'policy'],                   frequency: 12 },
   { name: 'MIT Technology Review',            kind: 'rss', url: 'https://www.technologyreview.com/feed/',                                     jurisdiction: 'International', tags: ['news', 'ai'],                       frequency: 24 },
 
-  // ── Specialist AI lawsuit tracker (original Holly seed source) ──────────
+  // ── Specialist AI lawsuit tracker (original Tracker seed source) ──────────
   { name: 'ChatGPT Is Eating The World',      kind: 'rss', url: 'https://chatgptiseatingtheworld.com/feed/',                                  jurisdiction: 'International', tags: ['tracker', 'lawsuits', 'ai-copyright'], frequency: 24 },
 
   // ── EU / EC news channels ───────────────────────────────────────────────

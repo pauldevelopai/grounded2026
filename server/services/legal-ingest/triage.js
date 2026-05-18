@@ -304,7 +304,7 @@ async function applyTriageResult(item, result) {
         `UPDATE ai_legal_sources SET items_promoted = items_promoted + 1 WHERE id = $1`,
         [item.source_id]
       );
-      // Sync the lawsuit to Holly's knowledge base so the AI assistant + RAG
+      // Sync the lawsuit to Tracker's knowledge base so the AI assistant + RAG
       // pick up new events automatically. Non-fatal if sync fails.
       try { await syncLawsuitToKnowledge(result.match_id); }
       catch (err) { console.warn('[triage] knowledge sync failed:', err.message); }

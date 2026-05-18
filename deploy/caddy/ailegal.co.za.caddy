@@ -13,7 +13,7 @@
 
 ailegal.co.za, www.ailegal.co.za {
     encode gzip zstd
-    root * /home/ubuntu/holly/client/dist
+    root * /home/ubuntu/tracker/client/dist
 
     # ── Public API + versioned API → Node ────────────────────────────────
     handle /api/public/* {

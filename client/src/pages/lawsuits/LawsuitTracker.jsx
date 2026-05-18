@@ -570,7 +570,7 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, onCaseUpdate 
     try {
       const r = await apiFetch(`/lawsuits/${c.id}/add-to-knowledge`, { method: 'POST' });
       onCaseUpdate?.({ id: c.id, knowledge_entry_id: r.knowledge_entry_id });
-      setActionMsg({ type: 'success', text: r.created ? 'Added to Holly\'s knowledge base' : 'Knowledge entry updated' });
+      setActionMsg({ type: 'success', text: r.created ? 'Added to Tracker\'s knowledge base' : 'Knowledge entry updated' });
     } catch (err) {
       setActionMsg({ type: 'error', text: 'Failed: ' + err.message });
     } finally {

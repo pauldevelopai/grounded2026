@@ -47,7 +47,7 @@ export default function TrainingMaterials() {
         <AiBadge />
       </PageHeader>
       <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-        Upload past course materials, slides, documents, and recordings. Holly's AI learns from these to generate better courses and recommendations.
+        Upload past course materials, slides, documents, and recordings. Tracker's AI learns from these to generate better courses and recommendations.
       </p>
 
       {/* Knowledge stats */}
@@ -78,7 +78,7 @@ export default function TrainingMaterials() {
           <div>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Train AI on Course Materials</div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Processes all uploaded documents, course modules, and trainer feedback into the knowledge base so Holly's AI can reference them when building new courses.
+              Processes all uploaded documents, course modules, and trainer feedback into the knowledge base so Tracker's AI can reference them when building new courses.
             </div>
           </div>
           <button className="btn btn-primary" onClick={trainOnAllMaterials} disabled={training}>

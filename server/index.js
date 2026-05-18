@@ -190,6 +190,6 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(config.port, () => {
-  console.log(`Holly server running on port ${config.port}`);
+  console.log(`Tracker server running on port ${config.port}`);
   startScheduler();
 });

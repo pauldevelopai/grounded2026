@@ -50,7 +50,7 @@ export default function ParticipantPortal() {
   if (!token) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#F8FAFC' }}>
       <div style={{ textAlign: 'center', padding: 40 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Holly Learning Portal</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Tracker Learning Portal</h1>
         <p style={{ color: '#64748B' }}>Access token required. Please use the link provided by your trainer.</p>
       </div>
     </div>
@@ -73,7 +73,7 @@ export default function ParticipantPortal() {
       {/* Header */}
       <div style={{ background: '#1E1E2E', color: 'white', padding: '20px 32px' }}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
-          <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Holly Learning Portal · Develop AI</div>
+          <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Tracker Learning Portal · Develop AI</div>
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>Welcome, {profile?.name || 'Participant'}</h1>
           <div style={{ fontSize: 13, color: '#94A3B8' }}>{profile?.organisation || ''} · {profile?.job_title || ''}</div>
         </div>

@@ -35,7 +35,7 @@ async function seed() {
     if (existingAdmin.length === 0) {
       const hash = await bcrypt.hash(config.adminPassword, 10);
       await client.query(
-        `INSERT INTO team_members (name, email, password_hash, role, is_active, holly_access)
+        `INSERT INTO team_members (name, email, password_hash, role, is_active, tracker_access)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         ['Admin', config.adminEmail, hash, 'admin', true, true]
       );
@@ -148,7 +148,7 @@ async function seed() {
       console.log('  skip background jobs (already seeded)');
     }
 
-    // Seed knowledge entries (Holly's foundational knowledge)
+    // Seed knowledge entries (Tracker's foundational knowledge)
     const { rows: existingKnowledge } = await client.query('SELECT COUNT(*) AS count FROM knowledge_entries');
     if (parseInt(existingKnowledge[0].count) === 0) {
       const knowledgeEntries = [
@@ -159,7 +159,7 @@ async function seed() {
         { category: 'content_effectiveness', title: '3x2hr online format works better than 2-day intensive for policy work', content: 'Online cohorts delivered as 3 sessions of 2 hours each show better engagement and policy completion rates than 2-day in-person intensives. The gap between sessions allows participants to draft and iterate on their policies with colleagues.', confidence: 0.75 },
         { category: 'assessment_insight', title: 'Most organisations overestimate their AI readiness', content: 'Needs assessment data consistently shows that organisations rate themselves as more AI-ready than their actual tool usage and policy infrastructure suggests. The gap between self-assessed and actual readiness is typically 2-3 levels.', confidence: 0.8 },
         { category: 'industry_trend', title: 'Generative AI for content creation is the most requested training topic', content: 'Across both Media and Legal sectors, the most common request in needs assessments is training on generative AI tools (ChatGPT, Claude, etc.) for content creation — articles, briefs, summaries, research. Second most requested is AI-assisted research and fact-checking.', confidence: 0.85 },
-        { category: 'tool_technique', title: 'Claude API is the primary AI tool for Develop AI internal and client work', content: 'Develop AI uses the Anthropic Claude API (currently claude-sonnet-4-6) for all AI-powered features in Holly and recommends Claude-based workflows to clients. Key advantages: strong safety controls, large context window, reliable structured output.', confidence: 0.95, tags: ['claude', 'anthropic', 'tooling'] },
+        { category: 'tool_technique', title: 'Claude API is the primary AI tool for Develop AI internal and client work', content: 'Develop AI uses the Anthropic Claude API (currently claude-sonnet-4-6) for all AI-powered features in Tracker and recommends Claude-based workflows to clients. Key advantages: strong safety controls, large context window, reliable structured output.', confidence: 0.95, tags: ['claude', 'anthropic', 'tooling'] },
         { category: 'regulatory', title: 'South African POPIA applies to all AI processing of personal data', content: 'The Protection of Personal Information Act (POPIA) requires organisations using AI in South Africa to ensure lawful processing of personal data, including data minimisation, purpose limitation, and individual rights. Relevant to all SA-based clients.', confidence: 0.9, tags: ['popia', 'south-africa', 'data-protection'] },
         { category: 'proposal_outcome', title: 'Proposals emphasising practical outcomes over theory have higher conversion', content: 'Service proposals that focus on deliverables (completed ethical AI policy, trained staff with certification, implemented AI workflow) convert at approximately 3x the rate of proposals emphasising theoretical knowledge transfer.', confidence: 0.75 },
         { category: 'feedback_pattern', title: 'Participants want more follow-up support after training', content: 'The most common feedback across all cohorts is a request for ongoing mentorship or follow-up sessions after the initial training programme ends. This validates the mentorship service offering as a natural upsell from training.', confidence: 0.8 },

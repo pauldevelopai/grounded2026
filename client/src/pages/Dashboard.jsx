@@ -215,7 +215,7 @@ export default function Dashboard() {
   const [summaryLoading, setSummaryLoading] = useState(false);
 
   function refreshSummary() {
-    const cacheKey = `holly_ai_summary_${selectedSectorId || 'all'}`;
+    const cacheKey = `tracker_ai_summary_${selectedSectorId || 'all'}`;
     sessionStorage.removeItem(cacheKey);
     setSummaryLoading(true);
     setAiSummary('');
@@ -231,7 +231,7 @@ export default function Dashboard() {
     // Load legacy data for next actions
     apiFetch(buildUrl('/dashboard', selectedSectorId)).then(setLegacy).catch(() => setLegacy(null));
     // AI summary (cached per session)
-    const cacheKey = `holly_ai_summary_${selectedSectorId || 'all'}`;
+    const cacheKey = `tracker_ai_summary_${selectedSectorId || 'all'}`;
     const cached = sessionStorage.getItem(cacheKey);
     if (cached) {
       setAiSummary(cached);
@@ -274,9 +274,9 @@ export default function Dashboard() {
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{getGreeting()}, {user?.name || 'there'}</h1>
         <div style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 700, lineHeight: 1.6 }}>
-          {summaryLoading ? <span style={{ color: 'var(--ai-purple)' }}>Holly is thinking...</span>
+          {summaryLoading ? <span style={{ color: 'var(--ai-purple)' }}>Tracker is thinking...</span>
             : aiSummary ? <span>{aiSummary}</span>
-            : <span>Welcome to Holly — your AI-powered business operating system.</span>}
+            : <span>Welcome to Tracker — your AI-powered business operating system.</span>}
         </div>
         {aiSummary && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>

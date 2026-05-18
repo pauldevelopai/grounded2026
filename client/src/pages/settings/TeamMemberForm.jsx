@@ -17,12 +17,12 @@ export default function TeamMemberForm({ member, onClose, onSaved }) {
     sector_ids: member?.sector_ids || [],
     bio: member?.bio || '',
     is_active: member?.is_active !== false,
-    holly_access: member?.holly_access || false,
+    tracker_access: member?.tracker_access || false,
   });
 
   function set(field) {
     return e => {
-      const val = (field === 'is_active' || field === 'holly_access') ? e.target.checked : e.target.value;
+      const val = (field === 'is_active' || field === 'tracker_access') ? e.target.checked : e.target.value;
       setForm(prev => ({ ...prev, [field]: val }));
     };
   }
@@ -115,8 +115,8 @@ export default function TeamMemberForm({ member, onClose, onSaved }) {
             Active
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
-            <input type="checkbox" checked={form.holly_access} onChange={set('holly_access')} />
-            Holly Access
+            <input type="checkbox" checked={form.tracker_access} onChange={set('tracker_access')} />
+            Tracker Access
           </label>
         </div>
         <div className="form-actions">

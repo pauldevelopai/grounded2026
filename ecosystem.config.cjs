@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'holly-server',
+      name: 'tracker-server',
       cwd: './server',
       script: 'index.js',
       interpreter: 'node',
@@ -19,7 +19,7 @@ module.exports = {
       merge_logs: true,
     },
     {
-      name: 'holly-client',
+      name: 'tracker-client',
       cwd: './client',
       script: 'node_modules/.bin/vite',
       args: '--host 0.0.0.0',

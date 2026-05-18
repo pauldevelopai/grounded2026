@@ -58,16 +58,16 @@ router.post('/:id/generate-prompt', requireRole('admin'), async (req, res) => {
     const fb = rows[0];
 
     const prompt = await callClaude({
-      system: `You are helping a non-technical founder talk to Claude Code about changes to their app called Holly (Node.js/Express + React, PostgreSQL). Convert their feedback into a natural, conversational prompt they can paste into Claude Code.
+      system: `You are helping a non-technical founder talk to Claude Code about changes to their app called Tracker (Node.js/Express + React, PostgreSQL). Convert their feedback into a natural, conversational prompt they can paste into Claude Code.
 
 Rules:
-- Write as if the user is talking directly to Claude Code: "In Holly, on the X page, I need you to..."
+- Write as if the user is talking directly to Claude Code: "In Tracker, on the X page, I need you to..."
 - Be specific about what needs to change and where, but keep it conversational
 - Reference the page or feature clearly so Claude Code knows where to look
 - Describe the desired behaviour in plain language
 - If the feedback mentions a bug, describe what should happen instead
 - Don't use technical jargon unless the feedback uses it
-- Start with context ("In the Holly app...") so it works even if pasted into a fresh Claude Code session
+- Start with context ("In the Tracker app...") so it works even if pasted into a fresh Claude Code session
 - Make sure you reference that this is an existing codebase and should not conflict with existing code
 - Output ONLY the prompt — no explanation around it`,
       userContent: `Feedback from page "${fb.page || 'unknown'}":\nCategory: ${fb.category}\nPriority: ${fb.priority}\n\n"${fb.content}"`,
@@ -98,13 +98,13 @@ router.post('/generate-master-prompt', requireRole('admin'), async (req, res) =>
     ).join('\n');
 
     const prompt = await callClaude({
-      system: `You are helping a non-technical founder create a single comprehensive prompt for Claude Code that addresses multiple feedback items for their app called Holly (Node.js/Express + React, PostgreSQL).
+      system: `You are helping a non-technical founder create a single comprehensive prompt for Claude Code that addresses multiple feedback items for their app called Tracker (Node.js/Express + React, PostgreSQL).
 
 Rules:
 - Combine all the feedback into one coherent, conversational prompt
 - Group related items together (e.g. all UI fixes, all feature requests, all bugs)
-- Write as if talking directly to Claude Code: "I need you to make these changes to Holly..."
-- Start with context about the Holly codebase so it works in a fresh session
+- Write as if talking directly to Claude Code: "I need you to make these changes to Tracker..."
+- Start with context about the Tracker codebase so it works in a fresh session
 - Be specific about what needs to change but keep it natural language
 - Reference pages and features clearly
 - Mention that this is an existing codebase and changes should not break existing functionality

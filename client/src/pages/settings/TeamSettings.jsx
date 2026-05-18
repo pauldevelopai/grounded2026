@@ -25,7 +25,7 @@ export default function TeamSettings() {
             <th>Name</th>
             <th>Email</th>
             <th>Role</th>
-            <th>Holly Access</th>
+            <th>Tracker Access</th>
             <th>Active</th>
             <th></th>
           </tr>
@@ -36,7 +36,7 @@ export default function TeamSettings() {
               <td style={{ fontWeight: 500 }}>{m.name}</td>
               <td>{m.email}</td>
               <td><span className="stage-badge stage-active">{m.role}</span></td>
-              <td>{m.holly_access ? 'Yes' : 'No'}</td>
+              <td>{m.tracker_access ? 'Yes' : 'No'}</td>
               <td>{m.is_active ? 'Yes' : 'No'}</td>
               <td><button className="btn btn-secondary btn-small" onClick={() => setEditing(m)}>Edit</button></td>
             </tr>

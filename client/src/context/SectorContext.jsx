@@ -8,7 +8,7 @@ export function SectorProvider({ children }) {
   const { user } = useAuth();
   const [sectors, setSectors] = useState([]);
   const [selectedSectorId, setSelectedSectorId] = useState(
-    () => localStorage.getItem('holly_sector_id') || null
+    () => localStorage.getItem('tracker_sector_id') || null
   );
 
   useEffect(() => {
@@ -21,9 +21,9 @@ export function SectorProvider({ children }) {
   function selectSector(id) {
     setSelectedSectorId(id);
     if (id) {
-      localStorage.setItem('holly_sector_id', id);
+      localStorage.setItem('tracker_sector_id', id);
     } else {
-      localStorage.removeItem('holly_sector_id');
+      localStorage.removeItem('tracker_sector_id');
     }
   }
 

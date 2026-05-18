@@ -84,7 +84,7 @@ export default function Sidebar() {
       }}>
         {/* Logo */}
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em' }}>Holly</div>
+          <div style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em' }}>Tracker</div>
           <div style={{ fontSize: '11px', color: 'var(--sidebar-text-muted)', marginTop: '2px' }}>Develop AI</div>
         </div>
 
@@ -122,7 +122,7 @@ export default function Sidebar() {
     }}>
       {/* Logo */}
       <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em' }}>Holly</div>
+        <div style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.02em' }}>Tracker</div>
         <div style={{ fontSize: '11px', color: 'var(--sidebar-text-muted)', marginTop: '2px' }}>Develop AI</div>
       </div>
 

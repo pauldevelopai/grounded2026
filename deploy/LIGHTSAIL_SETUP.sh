@@ -4,7 +4,7 @@
 # Target host: 52.56.143.231 (eu-west-2a, Ubuntu)
 # Usage on the server:
 #   ssh ubuntu@52.56.143.231
-#   wget -q https://raw.githubusercontent.com/pauldevelopai/holly/main/deploy/LIGHTSAIL_SETUP.sh
+#   wget -q https://raw.githubusercontent.com/pauldevelopai/tracker/main/deploy/LIGHTSAIL_SETUP.sh
 #   chmod +x LIGHTSAIL_SETUP.sh
 #   bash LIGHTSAIL_SETUP.sh
 #
@@ -18,9 +18,9 @@
 #
 # What this script does:
 #   1. Apt-install Node 20, nginx, certbot, Puppeteer system libs, pm2
-#   2. Clone / pull the holly repo to /home/ubuntu/holly
+#   2. Clone / pull the tracker repo to /home/ubuntu/tracker
 #   3. npm install (server + client) and build the Vite SPA
-#   4. Prompt once for /home/ubuntu/holly/.env (NOT created automatically —
+#   4. Prompt once for /home/ubuntu/tracker/.env (NOT created automatically —
 #      you paste in DATABASE_URL, ANTHROPIC_API_KEY, etc.)
 #   5. Run DB migrations
 #   6. pm2 start the Node server
@@ -30,8 +30,8 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/pauldevelopai/holly.git"
-APP_DIR="/home/ubuntu/holly"
+REPO_URL="https://github.com/pauldevelopai/tracker.git"
+APP_DIR="/home/ubuntu/tracker"
 DOMAIN="ailegal.co.za"
 WWW_DOMAIN="www.ailegal.co.za"
 EXPECTED_IP="52.56.143.231"
@@ -70,6 +70,17 @@ sudo apt-get install -y \
   libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
   libgbm1 libasound2
 
+# ── 1.5 One-time holly → tracker rename (May 2026 rebrand cut-over) ──────────
+# Previous installs lived at /home/ubuntu/holly with a pm2 process named
+# holly-server. Detect that layout and move it into place under the new name
+# so the rest of this script can carry on as a normal redeploy.
+if [[ -d /home/ubuntu/holly && ! -d "$APP_DIR" ]]; then
+  log "Migrating /home/ubuntu/holly → $APP_DIR (one-time)…"
+  pm2 stop holly-server  2>/dev/null || true
+  pm2 delete holly-server 2>/dev/null || true
+  mv /home/ubuntu/holly "$APP_DIR"
+fi
+
 # ── 2. Clone / pull the repo ─────────────────────────────────────────────────
 if [[ -d "$APP_DIR/.git" ]]; then
   log "Repo exists — pulling latest…"
@@ -87,7 +98,7 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
   warn "No .env found at $APP_DIR/.env — creating a template."
   cat > "$APP_DIR/.env" <<'ENV'
 # Edit these values then re-run this script.
-DATABASE_URL=postgresql://holly:CHANGEME@localhost:5432/holly
+DATABASE_URL=postgresql://tracker:CHANGEME@localhost:5432/tracker
 JWT_SECRET=CHANGE_ME_TO_A_LONG_RANDOM_STRING
 SERVER_PORT=3001
 ADMIN_EMAIL=paul@developai.co.za
@@ -141,18 +152,18 @@ log "Starting / reloading Node server via pm2…"
 # file as a plain script and names the app after the filename).
 pm2 delete ecosystem.production 2>/dev/null || true
 
-if pm2 list | grep -q holly-server; then
-  pm2 reload holly-server --update-env
+if pm2 list | grep -q tracker-server; then
+  pm2 reload tracker-server --update-env
 else
   # Start the server directly by script + name, sidestepping the ecosystem file.
   ( cd "$APP_DIR/server" && \
     NODE_ENV=production PORT=3001 \
     pm2 start index.js \
-      --name holly-server \
+      --name tracker-server \
       --max-memory-restart 512M \
       --log-date-format "YYYY-MM-DD HH:mm:ss" \
-      --error /home/ubuntu/holly/logs/server-error.log \
-      --output /home/ubuntu/holly/logs/server-out.log \
+      --error /home/ubuntu/tracker/logs/server-error.log \
+      --output /home/ubuntu/tracker/logs/server-out.log \
       --merge-logs )
   pm2 save
   # Install the pm2 startup hook (only the first time)
@@ -161,7 +172,7 @@ fi
 
 sleep 2
 if ! curl -sSf http://127.0.0.1:3001/api/public/lawsuits >/dev/null 2>&1; then
-  warn "API on 127.0.0.1:3001 isn't responding yet. Check: pm2 logs holly-server"
+  warn "API on 127.0.0.1:3001 isn't responding yet. Check: pm2 logs tracker-server"
 fi
 
 # ── 6.5 Make /home/ubuntu traversable by Caddy ───────────────────────────────

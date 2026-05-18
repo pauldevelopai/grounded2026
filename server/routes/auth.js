@@ -15,7 +15,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, name, email, password_hash, role, sector_ids FROM team_members WHERE email = $1 AND holly_access = true AND is_active = true',
+      'SELECT id, name, email, password_hash, role, sector_ids FROM team_members WHERE email = $1 AND tracker_access = true AND is_active = true',
       [email]
     );
 
@@ -35,7 +35,7 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.cookie('holly_token', token, {
+    res.cookie('tracker_token', token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
@@ -70,7 +70,7 @@ router.post('/register', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10);
 
     const { rows } = await pool.query(
-      `INSERT INTO team_members (name, email, password_hash, role, holly_access, is_active)
+      `INSERT INTO team_members (name, email, password_hash, role, tracker_access, is_active)
        VALUES ($1, $2, $3, 'member', true, true)
        RETURNING id, name, email, role, sector_ids`,
       [name, email, password_hash]
@@ -85,7 +85,7 @@ router.post('/register', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.cookie('holly_token', token, {
+    res.cookie('tracker_token', token, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
@@ -101,7 +101,7 @@ router.post('/register', async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie('holly_token', { path: '/' });
+  res.clearCookie('tracker_token', { path: '/' });
   res.json({ ok: true });
 });
 

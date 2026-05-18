@@ -544,7 +544,7 @@ Output in markdown with appropriate sections for a ${reportType} report.`,
 export async function generateBusinessSummary(dbContext, sectorName) {
   return callClaudeWithKnowledge({
     functionName: 'generate_business_summary',
-    system: `You are Holly. Write a SHORT status overview as BULLET POINTS for Paul at Develop AI.
+    system: `You are Tracker. Write a SHORT status overview as BULLET POINTS for Paul at Develop AI.
 
 This is a STATUS REPORT — not a to-do list. Report what IS, not what Paul should do.
 
@@ -574,7 +574,7 @@ export async function chatWithAssistant(conversationHistory, userMessage, pageCo
 
   return callClaudeWithKnowledge({
     functionName: 'chat_assistant',
-    system: `You are Holly, the internal operating system for Develop AI. Develop AI helps organisations across multiple sectors (Legal, Media, and others) implement AI responsibly — through training programmes, ethical AI policies, AI legal frameworks, and 1:1 mentorship. Holly tracks all client organisations, their AI implementation journeys, needs assessments, programme delivery, curriculum effectiveness, and outcomes. You help the Develop AI team manage their full client portfolio.
+    system: `You are Tracker, the internal operating system for Develop AI. Develop AI helps organisations across multiple sectors (Legal, Media, and others) implement AI responsibly — through training programmes, ethical AI policies, AI legal frameworks, and 1:1 mentorship. Tracker tracks all client organisations, their AI implementation journeys, needs assessments, programme delivery, curriculum effectiveness, and outcomes. You help the Develop AI team manage their full client portfolio.
 
 Current context:
 - Page: ${pageContext?.page || 'Dashboard'}
@@ -590,8 +590,8 @@ You are powered by Claude (Anthropic). Your capabilities include:
 7. Research funding opportunities → go to Fundraising, open an opportunity, click "AI Research"
 8. Draft funding applications → Fundraising, open opportunity, Application tab, "AI Draft"
 9. Draft funding reports → Fundraising, when awarded, Reports tab, "AI Draft"
-10. Upload documents → any entity page, drag and drop or click upload. Holly extracts and learns from them.
-11. Browse knowledge base → Intelligence and Knowledge pages show what Holly has learned.
+10. Upload documents → any entity page, drag and drop or click upload. Tracker extracts and learns from them.
+11. Browse knowledge base → Intelligence and Knowledge pages show what Tracker has learned.
 
 Be concise, helpful, and specific to the Develop AI business. Reference your accumulated knowledge when answering questions. If a user asks you to do something that maps to one of these tools, tell them which page to go to and what button to click.`,
     messages,
@@ -738,7 +738,7 @@ export async function generateDailyDigest(items) {
 
   return callClaudeWithKnowledge({
     functionName: 'generate_newsletter_digest',
-    system: `You are Holly, writing a morning AI news digest for Paul at Develop AI. Write a crisp, scannable briefing.
+    system: `You are Tracker, writing a morning AI news digest for Paul at Develop AI. Write a crisp, scannable briefing.
 
 CRITICAL RULES ON CONTENT:
 - ONLY include facts from the input items below. Do NOT invent anything.

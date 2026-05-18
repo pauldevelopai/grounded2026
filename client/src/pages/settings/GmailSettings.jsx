@@ -63,7 +63,7 @@ export default function GmailSettings() {
               <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Not Connected</span>
             </div>
             <p style={{ fontSize: 14, marginBottom: 16 }}>
-              Connect your Gmail account to send outreach emails directly from Holly.
+              Connect your Gmail account to send outreach emails directly from Tracker.
             </p>
             <button className="btn btn-primary" onClick={handleConnect}>Connect Gmail</button>
           </div>
