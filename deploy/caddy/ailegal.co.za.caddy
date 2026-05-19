@@ -11,7 +11,7 @@
 # /api/public/* + /sitemap.xml etc. to /index.html before any reverse_proxy
 # fired. Each handle is mutually exclusive — first-match wins.
 
-ailegal.co.za, www.ailegal.co.za {
+ailegal.co.za, www.ailegal.co.za, grounded.developai.co.za {
     encode gzip zstd
     root * /home/ubuntu/tracker/client/dist
 
