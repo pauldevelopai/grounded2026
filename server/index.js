@@ -74,6 +74,11 @@ app.use(publicHtmlRoutes);
 // get the same treatment.
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
+// Paths that tracker (NOT AIKit) serves. The proxy must NOT prepend /aikit
+// to these — otherwise the Grounded header nav links in AIKit pages get
+// rewritten to /aikit/legal/... and 404 against the FastAPI app.
+const TRACKER_PATH_RE = /^\/(legal|api|assets|login|register|portal|lawsuits|regulations|legal-sources|use-cases-admin|contacts|organisations|programmes|assessments|training-materials|course-builder|curriculum|documents|mentoring|services|marketing|leads|fundraising|settings|intelligence|knowledge|newsletter|database|learning|agents|feedback|map|favicon|robots|sitemap)(\/|$|\?)/;
+
 function rewriteAikitHtml(html) {
   return html.replace(
     /\b(href|action|src|hx-(?:get|post|put|delete))="(\/(?!\/)[^"]*)"/g,
@@ -83,15 +88,21 @@ function rewriteAikitHtml(html) {
       // get cleared together.
       if (path === '/auth/logout') return `${attr}="/api/auth/logout"`;
       // AIKit's own login/register links go to tracker's unified /login
-      // form with a ?next= back to /aikit/ so the SSO bridge in
-      // routes/auth.js mirrors the new tracker session into AIKit.
+      // form with a ?next= back to /aikit/ so the SSO bridge mirrors the
+      // new tracker session into AIKit.
       if (path === '/login' || path.startsWith('/login?')) {
         return `${attr}="/login?next=/aikit/"`;
       }
       if (path === '/register' || path.startsWith('/register?')) {
         return `${attr}="/login?next=/aikit/"`;
       }
+      // Already an AIKit-scoped path — leave alone.
       if (path.startsWith('/aikit')) return match;
+      // Tracker-owned path (Grounded header nav, /api/*, static assets,
+      // admin routes) — also leave alone so the browser hits tracker.
+      if (TRACKER_PATH_RE.test(path)) return match;
+      // Everything else is AIKit-served — prefix /aikit so the browser
+      // routes back through this proxy.
       return `${attr}="/aikit${path}"`;
     }
   );
@@ -105,14 +116,14 @@ app.use('/aikit', createProxyMiddleware({
   selfHandleResponse: true,
   on: {
     proxyRes(proxyRes, req, res) {
-      // Rewrite redirect Location headers. Same special cases as
-      // rewriteAikitHtml so the user lands at tracker's unified /login.
+      // Rewrite redirect Location headers. Same skip rules as
+      // rewriteAikitHtml so we don't double-prefix tracker-owned paths.
       const loc = proxyRes.headers['location'];
       if (loc && loc.startsWith('/') && !loc.startsWith('//')) {
         if (loc === '/login' || loc.startsWith('/login?') ||
             loc === '/register' || loc.startsWith('/register?')) {
           proxyRes.headers['location'] = '/login?next=/aikit/';
-        } else if (!loc.startsWith('/aikit')) {
+        } else if (!loc.startsWith('/aikit') && !TRACKER_PATH_RE.test(loc)) {
           proxyRes.headers['location'] = '/aikit' + loc;
         }
       }
