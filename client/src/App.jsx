@@ -60,6 +60,7 @@ import LawsuitTracker from './pages/lawsuits/LawsuitTracker.jsx';
 import RegulationTracker from './pages/regulations/RegulationTracker.jsx';
 import LegalSourcesPage from './pages/legal-sources/LegalSourcesPage.jsx';
 import IngestionPage from './pages/ingestion/IngestionPage.jsx';
+import NewsroomProfile from './pages/settings/NewsroomProfile.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
 import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
@@ -215,6 +216,7 @@ export default function App() {
                 <Route path="/feedback" element={<FeedbackList />} />
                 <Route path="/node-admin" element={<NodesAdmin />} />
                 <Route path="/ingestion" element={<IngestionPage />} />
+                <Route path="/settings/newsroom-profile" element={<NewsroomProfile />} />
               </Route>
 
             </Route>

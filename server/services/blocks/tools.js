@@ -7,18 +7,7 @@
 // profile, funder library, personas, live ops tables, jurisdiction packs) is a
 // follow-up — exposed here as optional context inputs.
 import { register } from './registry.js';
-import { callClaude } from '../claude.js';
-
-function parseJson(raw) {
-  const s = String(raw == null ? '' : raw);
-  const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a < 0 || b < 0) return { text: s.trim() };
-  try { return JSON.parse(s.slice(a, b + 1)); } catch { return { text: s.trim() }; }
-}
-async function aiRun(system, userContent, maxTokens = 2000) {
-  const raw = await callClaude({ system, userContent, maxTokens, temperature: 0.3 });
-  return parseJson(raw);
-}
+import { aiRun } from './ai.js'; // profile-aware Claude call + JSON parse
 
 // ── Fundraiser ───────────────────────────────────────────────────────────────
 register({

@@ -7,10 +7,12 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import blocks from '../services/blocks/registry.js';
-import '../services/blocks/tools.js'; // side-effect: registers the tool blocks
+import '../services/blocks/tools.js';  // side-effect: registers the tool blocks
+import '../services/blocks/agents.js'; // side-effect: registers the agent blocks
 
 const router = Router();
 const COOKIE = process.env.AUTH_COOKIE || 'tracker_token';
+const DIRECT = new Set(['tool', 'agent']); // categories usable directly here
 
 function ctxFrom(req) {
   return {
@@ -21,19 +23,19 @@ function ctxFrom(req) {
 }
 
 router.get('/', (req, res) => {
-  res.json({ tools: blocks.listByCategory('tool') });
+  res.json({ tools: blocks.listByCategory('tool'), agents: blocks.listByCategory('agent') });
 });
 
 router.get('/:slug', (req, res) => {
   const b = blocks.get(req.params.slug);
-  if (!b || b.category !== 'tool') return res.status(404).json({ message: 'not found' });
+  if (!b || !DIRECT.has(b.category)) return res.status(404).json({ message: 'not found' });
   const { run, ...meta } = b;
   res.json(meta);
 });
 
 router.post('/:slug/run', async (req, res) => {
   const b = blocks.get(req.params.slug);
-  if (!b || b.category !== 'tool') return res.status(404).json({ message: 'unknown tool' });
+  if (!b || !DIRECT.has(b.category)) return res.status(404).json({ message: 'unknown block' });
   if (b.comingSoon) return res.status(503).json({ message: `${b.name} is coming soon.` });
   const input = req.body?.input || {};
   // required-input check

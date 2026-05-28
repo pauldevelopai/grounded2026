@@ -26,7 +26,7 @@ const BUILDER_ITEMS = [
   { label: 'Tools', to: '/tools/', external: true },
   { label: 'Workflow builder', to: '/builder', external: false },
   { label: 'Run a workflow', to: '/run', external: false },
-  { label: 'Operations tools', to: '/tools-hub', external: false },
+  { label: 'Tools & Agents', to: '/tools-hub', external: false },
 ];
 const TRACKER_ITEMS = [
   { label: 'Lawsuits', to: '/legal/lawsuits' },

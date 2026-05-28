@@ -52,7 +52,9 @@ export default function ToolWorkspace() {
                 : <input value={values[name] || ''} onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))} style={inp} />}
             </label>
           ))}
-          <button className="btn btn-primary" disabled={busy} onClick={run}>{busy ? 'Running…' : 'Run'}</button>
+          {meta.comingSoon
+            ? <div style={{ fontSize: 13, background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 12px' }}>This one is <b>coming soon</b> — it needs local AI models that aren’t enabled on this deployment yet.</div>
+            : <button className="btn btn-primary" disabled={busy} onClick={run}>{busy ? 'Running…' : 'Run'}</button>}
           {err && <div style={{ color: '#991B1B', fontSize: 13, marginTop: 10 }}>{err}</div>}
         </div>
 

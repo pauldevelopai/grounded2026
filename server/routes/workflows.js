@@ -13,6 +13,7 @@ import pool from '../db/pool.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/nodes.js'; // side-effect: registers the Node blocks
 import '../services/blocks/tools.js'; // side-effect: registers the operations-tool blocks
+import '../services/blocks/agents.js'; // side-effect: registers the journalism-agent blocks
 import { runWorkflow } from '../services/workflows/runner.js';
 import { generateFromDescription } from '../services/workflows/generate.js';
 
