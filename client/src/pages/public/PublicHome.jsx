@@ -5,7 +5,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
-import WatchButton from './WatchButton.jsx';
 
 const SECTIONS = [
   {
@@ -96,15 +95,6 @@ export default function PublicHome() {
             </div>
           </div>
         ))}
-      </section>
-
-      {/* ── Weekly digest (compact) ── */}
-      <section style={{ padding: 16, border: '1px solid var(--border-color)', borderRadius: 10, background: 'var(--card-bg)', maxWidth: 540 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: 'var(--text-primary)' }}>Weekly digest</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8 }}>
-          A Monday email summarising the week's AI legal movements. No spam, unsubscribe any time.
-        </div>
-        <WatchButton entityKind="all" label="Subscribe to weekly digest" />
       </section>
     </div>
   );
