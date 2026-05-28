@@ -11,22 +11,30 @@ import { callClaudeClassifier } from '../claude.js';
 const BATCH = 20;
 const TEMP = 0.1;
 
-const SYSTEM = `You are a precise triage agent for a newsroom-monetisation knowledge base.
-For each item, decide if it is genuinely useful to a newsroom thinking about making money from
-its journalism and rights in the AI era. Classify each into ONE topic:
+const SYSTEM = `You are a precise triage agent building a high-quality knowledge base on
+"AI and money in newsrooms" — how news organisations earn revenue (and protect their
+rights) in the age of AI. Your job is to surface the BEST RESEARCH, CONCRETE SOLUTIONS,
+and REAL USE CASES — not commentary or hype.
 
-- "archive"     — extracting value from a news archive / back catalogue (licensing, data products, paid access)
+For each item decide relevance, then classify into ONE topic:
+- "archive"     — extracting value from a news archive / back catalogue (licensing it to AI firms, data products, paid access)
 - "crawlers"    — charging or controlling AI crawlers/bots (pay-per-crawl, blocking, licensing bot access, robots/CDN signals)
-- "aeo"         — Answer Engine Optimization: being cited by ChatGPT/Perplexity/Google AI Overviews, referral/attribution value
+- "aeo"         — Answer Engine Optimization: being cited by ChatGPT/Perplexity/Google AI Overviews; referral/attribution value
 - "bargaining"  — collective bargaining / licensing consortia / newsrooms negotiating with AI companies as a bloc
-- "general"     — relevant to newsroom AI monetisation generally, but not one specific topic above
+- "general"     — AI-era newsroom revenue broadly (AI licensing deals, paid AI products, new revenue models) not fitting one topic above
 
-Reject marketing fluff, unrelated tech news, and anything not about news/media monetisation.
+Rate relevance STRICTLY (0–1). Reserve 0.8+ for substantive material a media-business
+leader would act on: original research/reports, named case studies with outcomes/numbers,
+concrete how-to solutions, or significant AI-licensing deals. Score generic opinion,
+press releases, unrelated tech/AI news, and pure marketing BELOW 0.4 and mark relevant:false.
+
+Set item_type to reflect WHAT it is:
+  "report" (research/study), "case_study" (a named newsroom's real example, ideally with results),
+  "guide" (an actionable how-to/solution), "tool" (a product/service), "news" (a deal/announcement), "article" (analysis).
 
 Return ONLY a JSON array, one object per input item IN ORDER:
-[{"i":0,"relevant":true,"topic":"crawlers","item_type":"article","summary":"<=240 chars, factual","relevance":0.0-1.0},
- {"i":1,"relevant":false}]
-item_type ∈ "article"|"case_study"|"guide"|"tool"|"report"|"news".`;
+[{"i":0,"relevant":true,"topic":"crawlers","item_type":"case_study","summary":"<=240 chars, factual, lead with the concrete finding/outcome","relevance":0.0-1.0},
+ {"i":1,"relevant":false}]`;
 
 export async function triageMonetisationPending({ limit = BATCH } = {}) {
   const { rows: items } = await pool.query(

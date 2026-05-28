@@ -24,6 +24,7 @@ const inactiveStyle = navStyle({ isActive: false });
 const BUILDER_ITEMS = [
   { label: 'Nodes', to: '/nodes/', external: true },
   { label: 'Tools', to: '/tools/', external: true },
+  { label: 'Open source', to: '/open-source', external: false },
 ];
 const TRACKER_ITEMS = [
   { label: 'Lawsuits', to: '/legal/lawsuits' },

@@ -5,9 +5,26 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { dispatchDueContentSources, dispatchContentSource } from '../services/content-ingest/dispatcher.js';
 import { triageMonetisationPending } from '../services/content-ingest/triage-monetisation.js';
+import { triageToolsPending } from '../services/content-ingest/triage-tools.js';
 
 const router = Router();
-const TRIAGERS = { monetisation: triageMonetisationPending };
+const TRIAGERS = { monetisation: triageMonetisationPending, tools: triageToolsPending };
+
+// Per-domain compiled-table config (table names are a fixed allowlist — never user input).
+const COMPILED = {
+  monetisation: {
+    table: 'monetisation_items',
+    ragCategory: 'monetisation',
+    ragSub: (it) => it.topic,
+    ragContent: (it) => (it.summary || it.title) + (it.url ? `\n\nSource: ${it.url}` : ''),
+  },
+  tools: {
+    table: 'oss_tools',
+    ragCategory: 'open-source-tools',
+    ragSub: (it) => it.category,
+    ragContent: (it) => [it.description, it.newsroom_use && `Newsroom use: ${it.newsroom_use}`, it.url && `Repo: ${it.url}`].filter(Boolean).join('\n\n'),
+  },
+};
 
 async function count(sql, params = []) {
   try { const { rows } = await pool.query(sql, params); return Number(rows[0]?.n || 0); }
@@ -41,10 +58,11 @@ router.get('/overview', async (req, res) => {
         comingIn: await count(`SELECT count(*)::int n FROM content_raw_items WHERE domain=$1 AND triage_status IN ('pending','classified')`, [domain]),
         toUsers: 0, toRag: 0, inReview: 0,
       };
-      if (domain === 'monetisation') {
-        row.inReview = await count(`SELECT count(*)::int n FROM monetisation_items WHERE status='review'`);
-        row.toUsers = await count(`SELECT count(*)::int n FROM monetisation_items WHERE status='published'`);
-        row.toRag = await count(`SELECT count(*)::int n FROM monetisation_items WHERE rag_synced`);
+      const cfg = COMPILED[domain];
+      if (cfg) {
+        row.inReview = await count(`SELECT count(*)::int n FROM ${cfg.table} WHERE status='review'`);
+        row.toUsers = await count(`SELECT count(*)::int n FROM ${cfg.table} WHERE status='published'`);
+        row.toRag = await count(`SELECT count(*)::int n FROM ${cfg.table} WHERE rag_synced`);
       }
       domains.push(row);
     }
@@ -125,42 +143,46 @@ router.get('/raw-items', async (req, res) => {
   res.json({ items: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
 });
 
-// ── Compiled Monetisation items ─────────────────────────────────────────────
+// ── Compiled items (monetisation_items / oss_tools), domain-aware ───────────
 router.get('/items', async (req, res) => {
-  const { domain = 'monetisation', status, topic } = req.query;
-  if (domain !== 'monetisation') return res.json({ items: [] });
+  const { domain = 'monetisation', status, topic, category } = req.query;
+  const cfg = COMPILED[domain];
+  if (!cfg) return res.json({ items: [] });
   const params = []; const conds = [];
   if (status) { params.push(status); conds.push(`status = $${params.length}`); }
-  if (topic) { params.push(topic); conds.push(`topic = $${params.length}`); }
+  if (topic && domain === 'monetisation') { params.push(topic); conds.push(`topic = $${params.length}`); }
+  if (category && domain === 'tools') { params.push(category); conds.push(`category = $${params.length}`); }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-  const { rows } = await pool.query(`SELECT * FROM monetisation_items ${where} ORDER BY created_at DESC LIMIT 200`, params);
+  const { rows } = await pool.query(`SELECT * FROM ${cfg.table} ${where} ORDER BY created_at DESC LIMIT 200`, params);
   res.json({ items: rows });
 });
 
-router.post('/items/:id/publish', async (req, res) => {
-  const { rows } = await pool.query(`UPDATE monetisation_items SET status='published', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id]);
+router.post('/items/:domain/:id/publish', async (req, res) => {
+  const cfg = COMPILED[req.params.domain]; if (!cfg) return res.status(400).json({ message: 'bad domain' });
+  const { rows } = await pool.query(`UPDATE ${cfg.table} SET status='published', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id]);
   res.json(rows[0] || {});
 });
 
-router.post('/items/:id/reject', async (req, res) => {
-  const { rows } = await pool.query(`UPDATE monetisation_items SET status='rejected', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id]);
+router.post('/items/:domain/:id/reject', async (req, res) => {
+  const cfg = COMPILED[req.params.domain]; if (!cfg) return res.status(400).json({ message: 'bad domain' });
+  const { rows } = await pool.query(`UPDATE ${cfg.table} SET status='rejected', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id]);
   res.json(rows[0] || {});
 });
 
-// Sync a compiled item into the RAG knowledge base. The existing embedding job
-// picks up the new knowledge_entries row and vectorises it.
-router.post('/items/:id/rag-sync', async (req, res) => {
+// Sync a compiled item into the RAG knowledge base; the embedding job vectorises it.
+router.post('/items/:domain/:id/rag-sync', async (req, res) => {
+  const cfg = COMPILED[req.params.domain]; if (!cfg) return res.status(400).json({ message: 'bad domain' });
   try {
-    const { rows: irows } = await pool.query('SELECT * FROM monetisation_items WHERE id = $1', [req.params.id]);
+    const { rows: irows } = await pool.query(`SELECT * FROM ${cfg.table} WHERE id = $1`, [req.params.id]);
     const item = irows[0];
     if (!item) return res.status(404).json({ message: 'not found' });
+    const title = (item.title || item.name || 'Untitled').slice(0, 500);
     const { rows: krows } = await pool.query(
       `INSERT INTO knowledge_entries (category, subcategory, title, content, source_type, source_id, source_description, confidence, is_verified, is_active)
-       VALUES ('monetisation', $1, $2, $3, 'monetisation_item', $4, $5, $6, true, true) RETURNING id`,
-      [item.topic, item.title.slice(0, 500), (item.summary || item.title) + (item.url ? `\n\nSource: ${item.url}` : ''),
-       item.id, (item.url || '').slice(0, 500), item.relevance || 0.5]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, true) RETURNING id`,
+      [cfg.ragCategory, cfg.ragSub(item), title, cfg.ragContent(item), `${req.params.domain}_item`, item.id, (item.url || '').slice(0, 500), item.relevance || 0.5]
     );
-    await pool.query(`UPDATE monetisation_items SET rag_synced=true, rag_synced_at=NOW(), knowledge_entry_id=$1, updated_at=NOW() WHERE id=$2`, [krows[0].id, item.id]);
+    await pool.query(`UPDATE ${cfg.table} SET rag_synced=true, rag_synced_at=NOW(), knowledge_entry_id=$1, updated_at=NOW() WHERE id=$2`, [krows[0].id, item.id]);
     res.json({ ok: true, knowledge_entry_id: krows[0].id });
   } catch (err) { console.error(err); res.status(500).json({ message: err.message }); }
 });

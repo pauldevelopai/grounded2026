@@ -1159,4 +1159,22 @@ router.get('/monetisation', async (req, res) => {
   }
 });
 
+// Published open-source tools directory (compiled by the tools pipeline).
+router.get('/oss-tools', async (req, res) => {
+  try {
+    const { category } = req.query;
+    const params = [];
+    let where = `WHERE status = 'published'`;
+    if (category) { params.push(category); where += ` AND category = $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT id, name, category, description, newsroom_use, url, language, license
+         FROM oss_tools ${where} ORDER BY relevance DESC NULLS LAST, created_at DESC LIMIT 300`,
+      params
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    res.json({ items: [] });
+  }
+});
+
 export default router;

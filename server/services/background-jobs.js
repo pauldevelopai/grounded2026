@@ -906,6 +906,12 @@ async function runMonetisationTriage() {
   return { result: `Monetisation triage: ${s.triaged} seen, ${s.promoted} compiled, ${s.rejected} rejected.`, itemsProcessed: s.triaged || 0 };
 }
 
+async function runToolsTriage() {
+  const { triageToolsPending } = await import('./content-ingest/triage-tools.js');
+  const s = await triageToolsPending({ limit: 30 });
+  return { result: `Tools triage: ${s.triaged} seen, ${s.promoted} compiled, ${s.rejected} rejected.`, itemsProcessed: s.triaged || 0 };
+}
+
 export const JOB_REGISTRY = {
   follow_up_monitor: runFollowUpMonitor,
   content_generator: runContentGenerator,
@@ -928,6 +934,7 @@ export const JOB_REGISTRY = {
   legal_dead_link_check:      runLegalDeadLinkCheck,
   content_sources_ingest:     runContentSourcesIngest,
   monetisation_triage:        runMonetisationTriage,
+  tools_triage:               runToolsTriage,
 };
 
 // ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──

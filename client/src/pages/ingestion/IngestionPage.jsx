@@ -103,8 +103,9 @@ function ReviewTab({ domain, onChange }) {
   const load = () => apiFetch(`/content-sources/items?domain=${domain}&status=${status}`).then(r => setItems(r.items || [])).catch(() => setItems([]));
   useEffect(() => { load(); }, [status, domain]);
 
-  async function item(id, path) { await apiFetch(`/content-sources/items/${id}/${path}`, { method: 'POST' }); load(); onChange(); }
+  async function item(id, path) { await apiFetch(`/content-sources/items/${domain}/${id}/${path}`, { method: 'POST' }); load(); onChange(); }
 
+  const isTools = domain === 'tools';
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
@@ -113,23 +114,27 @@ function ReviewTab({ domain, onChange }) {
         ))}
       </div>
       {items.length === 0 && <Empty>No {status} items. Run the scrapers then AI triage to populate this.</Empty>}
-      {items.map(it => (
-        <div key={it.id} className="card" style={{ padding: 14, marginBottom: 8 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-            <span style={tag('#EEF2FF', '#4F46E5')}>{it.topic}</span>
-            <span style={tag('#F3F4F6', '#374151')}>{it.item_type}</span>
-            {it.rag_synced && <span style={tag('#F5F3FF', '#7C3AED')}>in RAG</span>}
-            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{it.source_name}</span>
+      {items.map(it => {
+        const title = it.title || it.name;
+        const tags = isTools ? [it.category, it.language, it.license] : [it.topic, it.item_type];
+        const body = isTools ? [it.description, it.newsroom_use && `Newsroom use: ${it.newsroom_use}`].filter(Boolean).join(' · ') : it.summary;
+        return (
+          <div key={it.id} className="card" style={{ padding: 14, marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+              {tags.filter(Boolean).map((t, i) => <span key={i} style={tag(i === 0 ? '#EEF2FF' : '#F3F4F6', i === 0 ? '#4F46E5' : '#374151')}>{t}</span>)}
+              {it.rag_synced && <span style={tag('#F5F3FF', '#7C3AED')}>in RAG</span>}
+              {it.source_name && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{it.source_name}</span>}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{it.url ? <a href={it.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{title}</a> : title}</div>
+            {body && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{body}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              {it.status !== 'published' && <button className="btn btn-primary" style={btnSm} onClick={() => item(it.id, 'publish')}>Publish to users</button>}
+              {it.status !== 'rejected' && <button className="btn" style={btnSm} onClick={() => item(it.id, 'reject')}>Reject</button>}
+              {!it.rag_synced && <button className="btn" style={btnSm} onClick={() => item(it.id, 'rag-sync')}>Sync to RAG</button>}
+            </div>
           </div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{it.url ? <a href={it.url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{it.title}</a> : it.title}</div>
-          {it.summary && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{it.summary}</div>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            {it.status !== 'published' && <button className="btn btn-primary" style={btnSm} onClick={() => item(it.id, 'publish')}>Publish to users</button>}
-            {it.status !== 'rejected' && <button className="btn" style={btnSm} onClick={() => item(it.id, 'reject')}>Reject</button>}
-            {!it.rag_synced && <button className="btn" style={btnSm} onClick={() => item(it.id, 'rag-sync')}>Sync to RAG</button>}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

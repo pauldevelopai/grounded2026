@@ -75,6 +75,7 @@ import PublicRegulationDetail from './pages/public/PublicRegulationDetail.jsx';
 const PublicExplore  = lazy(() => import('./pages/public/PublicExplore.jsx'));
 const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
 const PublicMonetisation = lazy(() => import('./pages/public/PublicMonetisation.jsx'));
+const PublicToolsDirectory = lazy(() => import('./pages/public/PublicToolsDirectory.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
 const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
 
@@ -124,6 +125,11 @@ export default function App() {
           {/* ── Monetisation — third top-level public section ── */}
           <Route path="/monetisation" element={<PublicLayout />}>
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicMonetisation /></Suspense>} />
+          </Route>
+
+          {/* ── Open-source tools directory (Builder) ── */}
+          <Route path="/open-source" element={<PublicLayout />}>
+            <Route index element={<Suspense fallback={<LazyFallback />}><PublicToolsDirectory /></Suspense>} />
           </Route>
 
           <Route element={<ProtectedRoute />}>
