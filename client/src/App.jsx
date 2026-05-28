@@ -59,6 +59,7 @@ import MentoringPage from './pages/mentoring/MentoringPage.jsx';
 import LawsuitTracker from './pages/lawsuits/LawsuitTracker.jsx';
 import RegulationTracker from './pages/regulations/RegulationTracker.jsx';
 import LegalSourcesPage from './pages/legal-sources/LegalSourcesPage.jsx';
+import IngestionPage from './pages/ingestion/IngestionPage.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
 import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
@@ -180,6 +181,7 @@ export default function App() {
                 <Route path="/agents/coach" element={<ImplementationCoachAgent />} />
                 <Route path="/feedback" element={<FeedbackList />} />
                 <Route path="/node-admin" element={<NodesAdmin />} />
+                <Route path="/ingestion" element={<IngestionPage />} />
               </Route>
 
             </Route>

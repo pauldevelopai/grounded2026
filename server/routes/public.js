@@ -1139,4 +1139,24 @@ router.get('/toolkit/:slug', async (req, res) => {
   }
 });
 
+// Published Monetisation resources (compiled by the content pipeline, admin-published).
+router.get('/monetisation', async (req, res) => {
+  try {
+    const { topic } = req.query;
+    const params = [];
+    let where = `WHERE status = 'published'`;
+    if (topic) { params.push(topic); where += ` AND topic = $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT id, topic, item_type, title, summary, url, source_name, published_at
+         FROM monetisation_items ${where}
+         ORDER BY COALESCE(published_at, created_at) DESC LIMIT 200`,
+      params
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    // Table may not exist yet on a fresh DB — degrade gracefully.
+    res.json({ items: [] });
+  }
+});
+
 export default router;

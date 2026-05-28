@@ -2,7 +2,8 @@
 // newsroom can turn its journalism (and its rights) into revenue in the AI era.
 // Linked from the master menu's "Monetisation" dropdown; each topic has an
 // anchor id so the dropdown can jump straight to it.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { publicFetch } from '../../hooks/usePublicApi.js';
 
 const TOPICS = [
   {
@@ -44,6 +45,19 @@ const TOPICS = [
 ];
 
 export default function PublicMonetisation() {
+  // Published resources compiled by the monetisation scraper + AI pipeline,
+  // grouped by topic.
+  const [byTopic, setByTopic] = useState({});
+  useEffect(() => {
+    publicFetch('/public/monetisation')
+      .then(r => {
+        const g = {};
+        (r.items || []).forEach(it => { (g[it.topic] = g[it.topic] || []).push(it); });
+        setByTopic(g);
+      })
+      .catch(() => setByTopic({}));
+  }, []);
+
   // Jump to the anchored topic if the URL has a hash (the menu links use them).
   useEffect(() => {
     if (window.location.hash) {
@@ -87,6 +101,22 @@ export default function PublicMonetisation() {
             {t.body.map((p, j) => (
               <p key={j} style={{ fontSize: 14.5, color: 'var(--text-secondary)', lineHeight: 1.65, margin: '0 0 10px 0' }}>{p}</p>
             ))}
+            {(byTopic[t.id] && byTopic[t.id].length > 0) && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  Latest reading
+                </div>
+                {byTopic[t.id].map(r => (
+                  <div key={r.id} style={{ marginBottom: 8 }}>
+                    <a href={r.url || '#'} target="_blank" rel="noreferrer" style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
+                      {r.title}
+                    </a>
+                    {r.source_name && <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}> · {r.source_name}</span>}
+                    {r.summary && <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{r.summary}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
           </article>
         ))}
       </section>

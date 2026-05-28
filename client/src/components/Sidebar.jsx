@@ -19,6 +19,7 @@ const groundedItems = [
   { to: '/regulation-tracker', label: 'Regulation Tracker', icon: '~', group: 'AI Legal' },
   { to: '/use-cases-admin', label: 'Use Cases', icon: '~', group: 'AI Legal' },
   // Grounded
+  { to: '/ingestion', label: 'Ingestion & Scrapers', icon: '~', group: 'Grounded' },
   { to: '/node-admin', label: 'Nodes', icon: '~', group: 'Grounded' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Grounded' },
   { to: '/feedback', label: 'Feedback', icon: '~', group: 'Grounded' },
