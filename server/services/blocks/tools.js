@@ -7,7 +7,7 @@
 // profile, funder library, personas, live ops tables, jurisdiction packs) is a
 // follow-up — exposed here as optional context inputs.
 import { register } from './registry.js';
-import { aiRun } from './ai.js'; // profile-aware Claude call + JSON parse
+import { aiRunForTool } from './ai.js'; // profile- + reference-library-aware Claude call + JSON parse
 
 // ── Fundraiser ───────────────────────────────────────────────────────────────
 register({
@@ -23,7 +23,7 @@ register({
     durationMonths: { type: 'string', required: false, description: 'Optional grant length in months.' },
   },
   outputs: { output: { type: 'json', description: 'Structured draft (sections, budget scaffold, outstanding questions).' } },
-  run: (input) => aiRun(
+  run: (input) => aiRunForTool('tool-fundraiser',
     `You are a grant-writer for an African newsroom. Produce a structured FIRST DRAFT grant ${input.kind || 'application'}.` +
     (input.targetAmount ? ` The budget should total ${input.targetAmount}.` : '') +
     (input.durationMonths ? ` Plan over ${input.durationMonths} months.` : '') +
@@ -44,7 +44,7 @@ register({
     context: { type: 'longtext', required: false, description: 'Optional draft body, target audience, or analytics notes.' },
   },
   outputs: { output: { type: 'json', description: 'Assessment + recommendations (+ alternatives for headline tests).' } },
-  run: (input) => aiRun(
+  run: (input) => aiRunForTool('tool-audience',
     `You are an audience analytics advisor for a newsroom. The requested check is "${input.kind || 'analytics_query'}". ` +
     `For headline_test: score the headline out of 10 and give 3 stronger alternatives. For angle_check: strengths, risks, audience fit. ` +
     `For analytics_query: answer the question directly. Return ONLY JSON: {"assessment":"...","recommendations":["..."],"alternatives":["..."]}.`,
@@ -63,7 +63,7 @@ register({
     kind: { type: 'string', required: false, description: 'calendar | deadlines | freelancers | finance | adhoc' },
   },
   outputs: { output: { type: 'json', description: 'Summary + action items + risks.' } },
-  run: (input) => aiRun(
+  run: (input) => aiRunForTool('tool-operations',
     `You are a newsroom operations manager. Focus area: "${input.kind || 'adhoc'}". Turn the input into an actionable brief. ` +
     `Return ONLY JSON: {"summary":"...","action_items":[{"task":"...","owner":"...","due":"..."}],"risks":["..."]}.`,
     `Operational input:\n${input.briefInput || ''}`),
@@ -81,7 +81,7 @@ register({
     jurisdiction: { type: 'string', required: false, description: 'e.g. South Africa, Zimbabwe, Zambia, Kenya.' },
   },
   outputs: { output: { type: 'json', description: 'Overall risk band + per-tool risk/fix + priorities.' } },
-  run: (input) => aiRun(
+  run: (input) => aiRunForTool('tool-security-audit',
     `You are a digital-security auditor for a newsroom in "${input.jurisdiction || 'Africa'}". Risk-score each tool the newsroom uses and draft ` +
     `concrete fixes, mindful of source protection and local legal context. Return ONLY JSON: ` +
     `{"overall_risk_band":"low|medium|high|critical","tools":[{"name":"...","risk_band":"...","issue":"...","fix":"..."}],"priorities":["..."]}.`,

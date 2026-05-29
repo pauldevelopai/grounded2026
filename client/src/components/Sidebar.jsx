@@ -21,6 +21,7 @@ const groundedItems = [
   // Grounded
   { to: '/ingestion', label: 'Ingestion & Scrapers', icon: '~', group: 'Grounded' },
   { to: '/settings/newsroom-profile', label: 'Newsroom Profile', icon: '~', group: 'Grounded' },
+  { to: '/settings/reference-data', label: 'Reference data', icon: '~', group: 'Grounded' },
   { to: '/node-admin', label: 'Nodes', icon: '~', group: 'Grounded' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Grounded' },
   { to: '/feedback', label: 'Feedback', icon: '~', group: 'Grounded' },

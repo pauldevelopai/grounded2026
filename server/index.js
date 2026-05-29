@@ -43,6 +43,7 @@ import contentSourcesRoutes from './routes/content-sources.js';
 import workflowsRoutes from './routes/workflows.js';
 import toolsRoutes from './routes/tools.js';
 import newsroomProfileRoutes from './routes/newsroom-profile.js';
+import referencesRoutes from './routes/references.js';
 import usecasesRoutes from './routes/usecases.js';
 import publicRoutes from './routes/public.js';
 import publicHtmlRoutes from './routes/public-html.js';
@@ -292,6 +293,7 @@ app.use('/api/content-sources', requireAuth, contentSourcesRoutes);
 app.use('/api/workflows', requireAuth, workflowsRoutes);
 app.use('/api/tool-kit', requireAuth, toolsRoutes);
 app.use('/api/newsroom-profile', requireAuth, newsroomProfileRoutes);
+app.use('/api/references', requireAuth, referencesRoutes);
 // AI Legal use-cases CRUD (admin)
 app.use('/api/usecases', requireAuth, usecasesRoutes);
 // AI chatbot: all authenticated users

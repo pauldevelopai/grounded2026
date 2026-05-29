@@ -3,6 +3,7 @@
 // and parses the JSON response. One place = consistent enrichment everywhere.
 import { callClaude } from '../claude.js';
 import { loadProfile, formatProfileForPrompt } from './profile.js';
+import { loadReferences, formatReferences } from './references.js';
 
 export function parseJson(raw) {
   const s = String(raw == null ? '' : raw);
@@ -14,6 +15,16 @@ export function parseJson(raw) {
 export async function aiRun(system, userContent, maxTokens = 2000) {
   const profile = await loadProfile();
   const ctx = profile ? `## Newsroom profile (ground your answer in this)\n${formatProfileForPrompt(profile)}\n\n` : '';
+  const raw = await callClaude({ system, userContent: ctx + userContent, maxTokens, temperature: 0.3 });
+  return parseJson(raw);
+}
+
+// Same as aiRun, plus the tool's reference library (funders / personas / etc.).
+export async function aiRunForTool(toolSlug, system, userContent, maxTokens = 2000) {
+  const [profile, refs] = await Promise.all([loadProfile(), loadReferences(toolSlug)]);
+  const ctx =
+    (profile ? `## Newsroom profile (ground your answer in this)\n${formatProfileForPrompt(profile)}\n\n` : '') +
+    (refs.length ? `${formatReferences(refs)}\n\n` : '');
   const raw = await callClaude({ system, userContent: ctx + userContent, maxTokens, temperature: 0.3 });
   return parseJson(raw);
 }
