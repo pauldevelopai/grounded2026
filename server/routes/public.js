@@ -585,7 +585,20 @@ router.get('/subscriptions/unsubscribe/:token', async (req, res) => {
 // FTS-backed: we pull up to 6 relevant cases + regulations for the question
 // and hand them to Claude as ONLY-ALLOWED context. Scoped strictly to AI law.
 
-router.post('/chat', async (req, res) => {
+// Nodes run on the user's own machine (a different origin) and their "Ask For
+// Help" bubble POSTs here, so the chat answers are identical everywhere. This
+// endpoint is fully public and cookieless, so a wildcard CORS origin is safe.
+function chatCors(req, res, next) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+}
+router.options('/chat', chatCors);
+
+router.post('/chat', chatCors, async (req, res) => {
   try {
     const ip = (req.headers['x-forwarded-for'] || req.ip || 'unknown').toString().split(',')[0].trim();
     const limit = checkChatRateLimit(ip);
