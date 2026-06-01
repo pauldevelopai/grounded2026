@@ -407,21 +407,33 @@ input, select, textarea {
 
 .login-card {
   background: white;
-  padding: 40px;
-  border-radius: 12px;
+  padding: 36px 32px;
+  border-radius: 14px;
   width: 100%;
-  max-width: 400px;
+  max-width: 380px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
 .login-card h1 {
-  font-size: 28px;
-  margin-bottom: 4px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 2px;
 }
 
-.login-card p {
+/* Grounded wordmark subtitle */
+.login-card .brand-sub {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-secondary);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+}
+
+.login-card .login-instruction {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 22px;
 }
 
 .login-error {

@@ -67,7 +67,8 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <h1>Grounded</h1>
-        <p>{mode === 'login' ? 'Sign in to continue' : 'Create your account'}</p>
+        <p className="brand-sub">Newsroom-owned AI · by Develop AI</p>
+        <p className="login-instruction">{mode === 'login' ? 'Sign in to continue' : 'Create your account'}</p>
 
         {error && <div className="login-error">{error}</div>}
 
