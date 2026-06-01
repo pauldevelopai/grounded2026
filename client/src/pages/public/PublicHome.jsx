@@ -1,7 +1,7 @@
 // Home — represents the whole of Grounded across its three sections: Builder
-// (Nodes + Tools), Tracker (the open AI-legal dataset), and Monetisation
-// (revenue strategies). A stats row shows what the app currently contains; the
-// three cards explain each section. The legal feed is no longer the centrepiece.
+// (Nodes + Tools), Tracker (the open AI-legal dataset), and Training (the
+// learning hub). A stats row shows what the app currently contains; the three
+// cards explain each section. The legal feed is no longer the centrepiece.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
@@ -26,11 +26,11 @@ const SECTIONS = [
     ],
   },
   {
-    tag: 'Monetisation',
-    title: 'Turn journalism into revenue in the AI era',
-    body: 'Practical strategies for capturing value from your content and your rights — extracting value from your archive, charging AI crawlers, Answer Engine Optimization, and bargaining collectively with other newsrooms.',
+    tag: 'Training',
+    title: 'Train your newsroom to use AI well',
+    body: 'Practical, hands-on training for journalists and editors — courses and modules that build the skills to use AI confidently, critically and safely in everyday newsroom work.',
     links: [
-      { label: 'See the strategies →', href: '/monetisation', external: false },
+      { label: 'Explore training →', href: '/training', external: false },
     ],
   },
 ];
@@ -64,7 +64,7 @@ export default function PublicHome() {
         </h1>
         <p style={{ fontSize: 17, color: 'var(--text-secondary)', maxWidth: 780, lineHeight: 1.6, margin: 0 }}>
           One place for newsrooms to <b>build</b> AI tools they own and run, <b>track</b> how AI is being
-          fought over in courts and parliaments, and <b>monetise</b> their journalism in the AI era.
+          fought over in courts and parliaments, and <b>train</b> their teams to use AI well.
         </p>
       </section>
 
