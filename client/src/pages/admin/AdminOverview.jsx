@@ -34,15 +34,18 @@ export default function AdminOverview() {
 
   useEffect(() => {
     apiFetch('/admin/overview').then(setData).catch(e => setError(e.message || 'Could not load'));
-    apiFetch('/nodes/admin/overview').then(setNodes).catch(() => setNodes({ hosted: [], local: [], feedback: [] }));
+    apiFetch('/nodes/admin/overview').then(setNodes).catch(() => setNodes({ nodes: [], local: [], feedback: [] }));
   }, []);
 
   if (error) return (<div><PageHeader title="Grounded admin" /><div className="empty-state"><h3>{error}</h3></div></div>);
   if (!data) return (<div><PageHeader title="Grounded admin" /><p style={muted}>Loading…</p></div>);
 
   const { users = [], userStats = {}, feedbackRecent = [], feedbackStats = {}, legal = {} } = data;
-  const hosted = nodes?.hosted || [];
+  const nodeList = nodes?.nodes || [];
   const local = nodes?.local || [];
+  // Distinct newsrooms that have used any hosted Node online.
+  const hostedNewsrooms = new Set();
+  nodeList.forEach((n) => (n.newsrooms || []).forEach((r) => r.newsroom_id && hostedNewsrooms.add(r.newsroom_id)));
   const nameOf = (u) => u.user_name || u.user_email || 'Unknown';
 
   return (
@@ -56,7 +59,7 @@ export default function AdminOverview() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 28 }}>
         <Stat label="Users" value={userStats.total ?? 0} sub={`${userStats.active ?? 0} active · ${userStats.admins ?? 0} admin`} />
         <Stat label="Feedback" value={feedbackStats.total ?? 0} sub={`${feedbackStats.pending ?? 0} pending`} to="/feedback" />
-        <Stat label="Hosted newsrooms" value={hosted.length} sub="using a Node online" to="/node-admin" />
+        <Stat label="Hosted newsrooms" value={hostedNewsrooms.size} sub="using a Node online" to="/node-admin" />
         <Stat label="Local installs" value={local.length} sub="opted-in beacons" to="/node-admin" />
         <Stat label="Lawsuits" value={legal.lawsuits ?? '—'} to="/lawsuits" />
         <Stat label="Regulations" value={legal.regulations ?? '—'} to="/regulation-tracker" />

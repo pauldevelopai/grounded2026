@@ -103,75 +103,111 @@ router.post('/beacon', async (req, res) => {
   }
 });
 
+// Friendly display names for the hosted Nodes (slug → product name).
+const NODE_LABELS = { analytics: 'Audience Signal', verifier: 'Election Watch', podcasting: 'Podcast Studio' };
+const labelForNode = (slug) => NODE_LABELS[slug] || slug.replace(/_/g, ' ');
+
 // ── GET /api/nodes/admin/overview — ADMIN ────────────────────────────────────
+// Generalised across EVERY hosted Node: each Node writes its own
+// node_<slug>_activity table (created by the Node, not by a tracker migration),
+// so we discover them from the catalog and report each one — usage, op
+// breakdown, recent events, errors — plus feedback aggregated across all Nodes
+// and the opted-in local installs (node_beacons).
 router.get('/admin/overview', requireAuth, requireRole('admin'), async (req, res) => {
   try {
-    // The hosted Node's tables are created by the Node itself, not by tracker
-    // migrations — guard against them not existing yet on this box.
-    const { rows: [reg] } = await pool.query(
-      `SELECT to_regclass('public.node_analytics_activity') AS activity,
-              to_regclass('public.node_analytics_stories')  AS stories`
-    );
+    // Discover hosted-Node activity tables. The pattern is strict, and the names
+    // come from the system catalog, so interpolating them below is safe.
+    const { rows: tbls } = await pool.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name ~ '^node_[a-z0-9_]+_activity$'
+      ORDER BY table_name
+    `);
 
-    let hosted = [];
-    let feedback = [];
-    let recent = [];
-    if (reg.activity) {
-      const usage = await pool.query(`
-        SELECT a.newsroom_id,
-               tm.name  AS member_name,
-               tm.email AS member_email,
-               COUNT(*) FILTER (WHERE a.kind = 'run' AND a.op = 'ingest') AS ingests,
-               COUNT(*) FILTER (WHERE a.kind = 'run' AND a.op = 'brief')  AS briefs,
-               COUNT(*) FILTER (WHERE a.kind = 'error')                   AS errors,
-               COUNT(*) FILTER (WHERE a.kind = 'feedback')                AS feedback_count,
+    const nodes = [];
+    const feedback = [];
+
+    for (const { table_name } of tbls) {
+      const slug = table_name.replace(/^node_/, '').replace(/_activity$/, '');
+      if (!/^[a-z0-9_]+$/.test(slug)) continue;          // defence-in-depth
+      const T = `node_${slug}_activity`;
+
+      const { rows: usage } = await pool.query(`
+        SELECT a.newsroom_id, tm.name AS member_name, tm.email AS member_email,
+               COUNT(*) FILTER (WHERE a.kind = 'run')      AS runs,
+               COUNT(*) FILTER (WHERE a.kind = 'error')    AS errors,
+               COUNT(*) FILTER (WHERE a.kind = 'feedback') AS feedback_count,
                MAX(a.ts) AS last_activity_at
-        FROM node_analytics_activity a
+        FROM ${T} a
         LEFT JOIN team_members tm ON tm.id::text = a.newsroom_id
         GROUP BY a.newsroom_id, tm.name, tm.email
         ORDER BY MAX(a.ts) DESC NULLS LAST
       `);
-      hosted = usage.rows;
 
-      if (reg.stories) {
-        const story = await pool.query(`
-          SELECT newsroom_id,
-                 COUNT(*)                    AS stories,
-                 COUNT(DISTINCT source_label) AS sources
-          FROM node_analytics_stories
-          GROUP BY newsroom_id
-        `);
-        const byId = new Map(story.rows.map((r) => [r.newsroom_id, r]));
-        hosted = hosted.map((h) => ({
-          ...h,
-          stories: Number(byId.get(h.newsroom_id)?.stories || 0),
-          sources: Number(byId.get(h.newsroom_id)?.sources || 0),
-        }));
+      const { rows: ops } = await pool.query(`
+        SELECT op, COUNT(*)::int AS n FROM ${T}
+        WHERE kind = 'run' AND op IS NOT NULL AND op <> ''
+        GROUP BY op ORDER BY n DESC LIMIT 12
+      `);
+
+      const { rows: recent } = await pool.query(`
+        SELECT a.ts, a.kind, a.op, tm.email AS member_email
+        FROM ${T} a
+        LEFT JOIN team_members tm ON tm.id::text = a.newsroom_id
+        ORDER BY a.ts DESC LIMIT 15
+      `);
+
+      const { rows: fb } = await pool.query(`
+        SELECT a.newsroom_id, tm.name AS member_name, tm.email AS member_email,
+               a.ts, a.op, a.response AS message
+        FROM ${T} a
+        LEFT JOIN team_members tm ON tm.id::text = a.newsroom_id
+        WHERE a.kind = 'feedback' ORDER BY a.ts DESC LIMIT 200
+      `);
+      for (const f of fb) feedback.push({ ...f, node: slug });
+
+      // Audience Signal also tracks ingested stories in its own table.
+      let hasStories = false;
+      if (slug === 'analytics') {
+        const { rows: [reg] } = await pool.query(`SELECT to_regclass('public.node_analytics_stories') AS s`);
+        if (reg.s) {
+          const { rows: st } = await pool.query(`
+            SELECT newsroom_id, COUNT(*)::int AS stories, COUNT(DISTINCT source_label)::int AS sources
+            FROM node_analytics_stories GROUP BY newsroom_id
+          `);
+          const byId = new Map(st.map((r) => [r.newsroom_id, r]));
+          usage.forEach((u) => {
+            u.stories = Number(byId.get(u.newsroom_id)?.stories || 0);
+            u.sources = Number(byId.get(u.newsroom_id)?.sources || 0);
+          });
+          hasStories = true;
+        }
       }
 
-      const fb = await pool.query(`
-        SELECT a.newsroom_id,
-               tm.name  AS member_name,
-               tm.email AS member_email,
-               a.ts, a.op, a.response AS message
-        FROM node_analytics_activity a
-        LEFT JOIN team_members tm ON tm.id::text = a.newsroom_id
-        WHERE a.kind = 'feedback'
-        ORDER BY a.ts DESC
-        LIMIT 200
-      `);
-      feedback = fb.rows;
-
-      const rec = await pool.query(`
-        SELECT a.ts, a.kind, a.op, a.story_count, a.source,
-               tm.email AS member_email
-        FROM node_analytics_activity a
-        LEFT JOIN team_members tm ON tm.id::text = a.newsroom_id
-        ORDER BY a.ts DESC
-        LIMIT 25
-      `);
-      recent = rec.rows;
+      nodes.push({
+        slug,
+        label: labelForNode(slug),
+        has_stories: hasStories,
+        newsrooms: usage.map((u) => ({
+          newsroom_id: u.newsroom_id,
+          member_name: u.member_name,
+          member_email: u.member_email,
+          runs: Number(u.runs || 0),
+          errors: Number(u.errors || 0),
+          feedback_count: Number(u.feedback_count || 0),
+          last_activity_at: u.last_activity_at,
+          ...(u.stories !== undefined ? { stories: u.stories, sources: u.sources } : {}),
+        })),
+        ops,
+        recent,
+        totals: {
+          newsrooms: usage.length,
+          runs: usage.reduce((a, u) => a + Number(u.runs || 0), 0),
+          errors: usage.reduce((a, u) => a + Number(u.errors || 0), 0),
+        },
+      });
     }
+
+    feedback.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
 
     await ensureBeaconTable();
     const { rows: local } = await pool.query(`
@@ -181,7 +217,7 @@ router.get('/admin/overview', requireAuth, requireRole('admin'), async (req, res
       ORDER BY last_seen DESC
     `);
 
-    res.json({ hosted, feedback, local, recent });
+    res.json({ nodes, feedback: feedback.slice(0, 200), local });
   } catch (err) {
     console.error('[nodes/admin/overview]', err.message);
     res.status(500).json({ message: 'Internal server error' });
