@@ -6,7 +6,7 @@
 // system block, Haiku, low temperature).
 
 import pool from '../../db/pool.js';
-import { callClaudeClassifier } from '../claude.js';
+import { classifyInChunks } from '../claude.js';
 
 const BATCH = 20;
 const TEMP = 0.1;
@@ -49,28 +49,23 @@ export async function triageDataSecurityPending({ limit = BATCH } = {}) {
   );
   if (items.length === 0) return { triaged: 0, promoted: 0, rejected: 0 };
 
-  const userContent = '# Items\n' + items.map((it, i) =>
-    `## ${i}\nTitle: ${it.title || '(none)'}\nText: ${(it.content || '').slice(0, 1200)}`
-  ).join('\n\n');
+  const results = await classifyInChunks({
+    system: SYSTEM,
+    items,
+    buildUserContent: (slice) => '# Items\n' + slice.map((it, i) =>
+      `## ${i}\nTitle: ${it.title || '(none)'}\nText: ${(it.content || '').slice(0, 1200)}`
+    ).join('\n\n'),
+    perItemOutTokens: 180,
+    temperature: TEMP,
+    label: 'data-security-triage',
+  });
 
-  let results = [];
-  try {
-    const raw = await callClaudeClassifier({
-      cachedSystem: SYSTEM,
-      userContent,
-      maxTokens: Math.min(4000, 180 * items.length + 200),
-      temperature: TEMP,
-    });
-    results = parseJsonArray(raw);
-  } catch (err) {
-    console.error('[data-security-triage] classifier failed:', err.message);
-    return { triaged: 0, promoted: 0, rejected: 0, error: err.message };
-  }
-
-  let promoted = 0, rejected = 0;
+  let promoted = 0, rejected = 0, triaged = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    const r = results.find(x => x && x.i === i) || results[i] || { relevant: false };
+    const r = results[i];
+    if (!r) continue;   // chunk failed → leave pending, retry next run
+    triaged++;
     const validTopic = TOPICS.includes(r.topic);
     if (r.relevant && validTopic) {
       const src = await pool.query('SELECT name FROM content_sources WHERE id = $1', [it.source_id]);
@@ -96,14 +91,5 @@ export async function triageDataSecurityPending({ limit = BATCH } = {}) {
       rejected++;
     }
   }
-  return { triaged: items.length, promoted, rejected };
-}
-
-function parseJsonArray(raw) {
-  if (Array.isArray(raw)) return raw;
-  const s = String(raw);
-  const start = s.indexOf('[');
-  const end = s.lastIndexOf(']');
-  if (start === -1 || end === -1) return [];
-  try { return JSON.parse(s.slice(start, end + 1)); } catch { return []; }
+  return { triaged, promoted, rejected };
 }

@@ -4,7 +4,7 @@
 // compiled oss_tools row (status 'review'). Mirrors the monetisation triage.
 
 import pool from '../../db/pool.js';
-import { callClaudeClassifier } from '../claude.js';
+import { classifyInChunks } from '../claude.js';
 
 const BATCH = 20;
 const TEMP = 0.1;
@@ -38,28 +38,23 @@ export async function triageToolsPending({ limit = BATCH } = {}) {
   );
   if (items.length === 0) return { triaged: 0, promoted: 0, rejected: 0 };
 
-  const userContent = '# Items\n' + items.map((it, i) =>
-    `## ${i}\nTitle: ${it.title || '(none)'}\nURL: ${it.url || ''}\nText: ${(it.content || '').slice(0, 1200)}`
-  ).join('\n\n');
+  const results = await classifyInChunks({
+    system: SYSTEM,
+    items,
+    buildUserContent: (slice) => '# Items\n' + slice.map((it, i) =>
+      `## ${i}\nTitle: ${it.title || '(none)'}\nURL: ${it.url || ''}\nText: ${(it.content || '').slice(0, 1200)}`
+    ).join('\n\n'),
+    perItemOutTokens: 200,
+    temperature: TEMP,
+    label: 'tools-triage',
+  });
 
-  let results = [];
-  try {
-    const raw = await callClaudeClassifier({
-      cachedSystem: SYSTEM,
-      userContent,
-      maxTokens: Math.min(4000, 200 * items.length + 200),
-      temperature: TEMP,
-    });
-    results = parseJsonArray(raw);
-  } catch (err) {
-    console.error('[tools-triage] classifier failed:', err.message);
-    return { triaged: 0, promoted: 0, rejected: 0, error: err.message };
-  }
-
-  let promoted = 0, rejected = 0;
+  let promoted = 0, rejected = 0, triaged = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    const r = results.find(x => x && x.i === i) || results[i] || { relevant: false };
+    const r = results[i];
+    if (!r) continue;   // chunk failed → leave pending, retry next run
+    triaged++;
     if (r.relevant && r.name) {
       const ins = await pool.query(
         `INSERT INTO oss_tools
@@ -83,13 +78,5 @@ export async function triageToolsPending({ limit = BATCH } = {}) {
       rejected++;
     }
   }
-  return { triaged: items.length, promoted, rejected };
-}
-
-function parseJsonArray(raw) {
-  if (Array.isArray(raw)) return raw;
-  const s = String(raw);
-  const start = s.indexOf('['), end = s.lastIndexOf(']');
-  if (start === -1 || end === -1) return [];
-  try { return JSON.parse(s.slice(start, end + 1)); } catch { return []; }
+  return { triaged, promoted, rejected };
 }

@@ -67,9 +67,13 @@ async function callAnthropicClassifier({ cachedSystem, userContent, maxTokens, t
 // Tune via GROQ_MIN_INTERVAL_MS=NN if you upgrade to Dev Tier (250K TPM).
 let lastGroqCallAt = 0;
 const GROQ_MIN_INTERVAL_MS = parseInt(process.env.GROQ_MIN_INTERVAL_MS || '45000', 10);
-// Cap output budget for triage. Output JSON rarely exceeds 400 tokens; capping
-// shaves the reserved-but-unused tokens that count against TPM.
-const GROQ_MAX_OUTPUT_TOKENS = parseInt(process.env.GROQ_MAX_OUTPUT_TOKENS || '500', 10);
+// Ceiling on the reserved output budget for a triage call. Must be large enough
+// for the WHOLE JSON array a chunk produces — too low and Groq's JSON mode
+// truncates mid-array and rejects it with 400 json_validate_failed. The caller
+// asks for ~200 tokens/item; classifyInChunks keeps chunks ≤8 items, so ~1800
+// tokens is the working need and 2000 leaves headroom. (Reserved output counts
+// against TPM, so we don't set this wildly high.)
+const GROQ_MAX_OUTPUT_TOKENS = parseInt(process.env.GROQ_MAX_OUTPUT_TOKENS || '2000', 10);
 
 async function callGroqClassifier({ cachedSystem, userContent, maxTokens, temperature }) {
   const apiKey = process.env.GROQ_API_KEY;
@@ -117,6 +121,64 @@ export async function callClaudeClassifier({ cachedSystem, userContent, maxToken
   if (LLM_BACKEND === 'anthropic') return callAnthropicClassifier(args);
   if (LLM_BACKEND === 'groq')      return callGroqClassifier(args);
   return callOllamaClassifier(args);
+}
+
+// Tolerant JSON-array parser shared by the batch classifiers: strips any
+// preamble/fence and slices the outermost [...]. Returns [] on failure.
+export function parseJsonArrayLoose(raw) {
+  if (Array.isArray(raw)) return raw;
+  const s = String(raw);
+  const start = s.indexOf('['), end = s.lastIndexOf(']');
+  if (start === -1 || end === -1) return [];
+  try { return JSON.parse(s.slice(start, end + 1)); } catch { return []; }
+}
+
+/**
+ * Run a batched JSON-array classifier in Groq-safe CHUNKS. One LLM call per
+ * chunk; chunking keeps a single request's tokens (input + reserved output)
+ * under the Groq free-tier 8K TPM ceiling — a 30-item batch in one call both
+ * blew that ceiling (413) and overflowed the output budget so the JSON
+ * truncated (400). Defaults match the triage callers.
+ *
+ *   items            — the rows to classify (any shape)
+ *   buildUserContent — (slice) => string; MUST index the slice 0..n-1
+ *   perItemOutTokens — output budget per item (caller's historical value)
+ *   chunkSize        — items per LLM call (≤8 keeps us comfortably under 8K TPM)
+ *
+ * Returns a sparse array aligned to `items`: results[i] is the model's object
+ * for items[i], or `undefined` if its chunk failed — so the caller can leave
+ * those rows pending and retry them next run instead of mis-rejecting them.
+ */
+export async function classifyInChunks({
+  system, items, buildUserContent,
+  perItemOutTokens = 200, chunkSize = 8, temperature = 0.1, label = 'triage',
+}) {
+  const results = new Array(items.length);
+  for (let start = 0; start < items.length; start += chunkSize) {
+    const slice = items.slice(start, start + chunkSize);
+    try {
+      const raw = await callClaudeClassifier({
+        cachedSystem: system,
+        userContent: buildUserContent(slice),
+        maxTokens: perItemOutTokens * slice.length + 200,
+        temperature,
+      });
+      const parsed = parseJsonArrayLoose(raw);
+      const hasIndex = parsed.some((r) => r && Number.isInteger(r.i));
+      parsed.forEach((r, k) => {
+        if (!r) return;
+        // Prefer the model's own `i` (chunk-local); fall back to position.
+        const local = hasIndex ? r.i : k;
+        if (Number.isInteger(local) && local >= 0 && local < slice.length) {
+          results[start + local] = { ...r, i: start + local };
+        }
+      });
+    } catch (err) {
+      console.error(`[${label}] chunk ${start}-${start + slice.length - 1} failed:`, err.message);
+      // Leave this chunk's slots undefined → caller leaves them pending.
+    }
+  }
+  return results;
 }
 
 // Centralised API call with error handling and retries
