@@ -212,29 +212,37 @@ export async function callClaude({ system, userContent, maxTokens = 2000, messag
 }
 
 /**
- * Public AI Legal chatbot.
+ * Grounded "Ask For Help" assistant.
  *
- * Answers questions about AI lawsuits + regulations, scoped strictly to what
- * we have in the database (passed in as `contextItems`). The caller is
- * responsible for retrieving the relevant items via FTS.
+ * The single help assistant for the whole of Grounded (newsroom-owned AI by
+ * Develop AI) — the public site AND the bubble inside every Node all POST here.
+ * It helps newsrooms IMPLEMENT AI: it knows Grounded's parts (the AI Legal
+ * tracker, the Nodes, the AIKit tools) and answers grounded in Grounded's own
+ * data — passed in as `contextItems`, retrieved by the caller across the AI-law
+ * tables AND the curated resource datasets (tools, ethics, monetisation,
+ * data-security). When the data doesn't cover a question it still helps from
+ * general newsroom-AI knowledge and points to the right part of Grounded.
  *
- * Returns { reply, citations } where citations is an array of
- * {kind, id, name} for the items the model referenced.
+ * Returns { reply, citations } where citations is the subset of contextItems
+ * the model referenced (each keeps its fields incl. `url` for the frontend).
  */
-export async function chatAboutAiLegal({ history = [], message, contextItems = [] }) {
-  if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+const CITE_KINDS = 'lawsuit|regulation|tool|ethics|monetisation|datasecurity';
 
-  const contextBlock = contextItems.length === 0 ? '(no relevant items found in database)' :
-    contextItems.map(c => {
-      if (c.kind === 'lawsuit') {
-        return [
-          `## Lawsuit [id=${c.id}]: ${c.name}`,
-          `Jurisdiction: ${c.jurisdiction} · Status: ${c.status} · Type: ${c.type}`,
-          c.parties ? `Parties: ${c.parties}` : null,
-          c.dates ? `Dates: ${c.dates}` : null,
-          c.summary ? `Summary: ${c.summary}` : null,
-        ].filter(Boolean).join('\n');
-      }
+function formatGroundedContext(items) {
+  if (!items.length) {
+    return '(no matching items in Grounded\'s data for this question — answer from general newsroom-AI knowledge and point the user to the relevant part of Grounded.)';
+  }
+  return items.map(c => {
+    if (c.kind === 'lawsuit') {
+      return [
+        `## Lawsuit [id=${c.id}]: ${c.name}`,
+        `Jurisdiction: ${c.jurisdiction} · Status: ${c.status} · Type: ${c.type}`,
+        c.parties ? `Parties: ${c.parties}` : null,
+        c.dates ? `Dates: ${c.dates}` : null,
+        c.summary ? `Summary: ${c.summary}` : null,
+      ].filter(Boolean).join('\n');
+    }
+    if (c.kind === 'regulation') {
       return [
         `## Regulation [id=${c.id}]: ${c.name}`,
         `Jurisdiction: ${c.jurisdiction} · Status: ${c.status} · Type: ${c.type}`,
@@ -242,30 +250,57 @@ export async function chatAboutAiLegal({ history = [], message, contextItems = [
         c.dates ? `Dates: ${c.dates}` : null,
         c.summary ? `Summary: ${c.summary}` : null,
       ].filter(Boolean).join('\n');
-    }).join('\n\n');
+    }
+    if (c.kind === 'tool') {
+      return [
+        `## Open-source tool [id=${c.id}]: ${c.name}`,
+        [c.category, c.language, c.license].filter(Boolean).join(' · ') || null,
+        c.description ? `What it does: ${c.description}` : null,
+        c.newsroom_use ? `Newsroom use: ${c.newsroom_use}` : null,
+        c.url ? `Link: ${c.url}` : null,
+      ].filter(Boolean).join('\n');
+    }
+    const label = c.kind === 'ethics' ? 'AI-ethics resource'
+      : c.kind === 'monetisation' ? 'AI-monetisation resource'
+      : 'Newsroom data-security resource';
+    return [
+      `## ${label} [id=${c.id}]: ${c.name}`,
+      c.topic ? `Topic: ${c.topic}` : null,
+      c.summary ? `Summary: ${c.summary}` : null,
+      c.source_name ? `Source: ${c.source_name}` : null,
+      c.url ? `Link: ${c.url}` : null,
+    ].filter(Boolean).join('\n');
+  }).join('\n\n');
+}
 
+export async function chatWithGroundedHelp({ history = [], message, contextItems = [] }) {
+  if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  const contextBlock = formatGroundedContext(contextItems);
   const messages = history.map(m => ({ role: m.role, content: m.content }));
   messages.push({
     role: 'user',
-    content: `Context from the AI Legal database:\n\n${contextBlock}\n\n# User question\n${message}`,
+    content: `Relevant items from Grounded's own data (may be empty):\n\n${contextBlock}\n\n# User question\n${message}`,
   });
 
   const response = await client.messages.create({
     model: MODEL,
     max_tokens: 900,
-    temperature: 0.2,
-    system: `You are the AI Legal research assistant for ailegal.co.za — a public tracker of AI lawsuits and AI regulations worldwide.
+    temperature: 0.3,
+    system: `You are "Ask For Help", the assistant for Grounded — newsroom-owned AI, by Develop AI. You appear on the public Grounded site and inside every Grounded tool, so people reach you from across the whole platform.
 
-Your job: answer questions about AI law, AI regulations, and specific cases or regulations, using ONLY the context block provided. If the context doesn't contain the answer, say so and suggest what the user could browse on the site.
+Your purpose is to help newsrooms IMPLEMENT AI well. Grounded has three parts, and you help across all of them:
+1. AI Legal tracker — a public tracker of AI lawsuits and AI regulations worldwide.
+2. Nodes — small AI tools a newsroom runs, owns and adapts; each one downloads with a single command or runs online. Current Nodes: "Audience Signal" (audience/readership analytics), "Election Watch" (claim verification + Facebook origin tracking for election misinformation), "Podcast Studio" (podcast production), and "AI-Ready Archive" (make an archive AI-searchable).
+3. Tools — AIKit, a set of practical AI utilities for newsroom work.
+Grounded also curates resources on AI ethics, AI monetisation, and newsroom data security.
 
-Rules:
-- Stay strictly on topic: AI law, AI regulations, and the specific cases + regulations we track.
-- If asked about anything else (general advice, personal legal help, unrelated topics), politely decline and redirect to the tracker.
-- Do NOT offer legal advice. Clarify that you're summarising public records, not providing counsel.
-- Cite items by their id in brackets: [lawsuit:<uuid>] or [regulation:<uuid>]. The frontend will render these as links.
-- Be concise. 2-4 short paragraphs is usually enough.
-- Use plain text — no markdown headings, no bold.
-- If the user's question is vague, ask a clarifying question instead of guessing.`,
+How to answer:
+- Use the "items from Grounded's data" block as your primary source when it's relevant, and CITE what you draw on with bracket ids exactly as written in the item headers — e.g. [lawsuit:<id>], [regulation:<id>], [tool:<id>], [ethics:<id>], [monetisation:<id>], [datasecurity:<id>]. The app turns these into links.
+- When the data block doesn't cover the question, still help: give practical, concrete guidance on implementing AI in a newsroom, and point the user to the part of Grounded that fits (a specific Node, the tools, or one of the resource sections).
+- You can help with: choosing/standing up a Node, AI verification and misinformation, audience analytics, archives, podcasting, AI ethics and disclosure, AI monetisation, data security and source protection, and AI law/regulation context.
+- On legal topics, summarise public records — you are NOT a lawyer and do not give legal advice.
+- Be concise (2-4 short paragraphs), plain text, no markdown headings or bold. If a request is genuinely unrelated to newsrooms or AI, gently steer back. If a question is vague, ask one clarifying question.`,
     messages,
   });
 
@@ -274,13 +309,11 @@ Rules:
     .map(b => b.text)
     .join('\n');
 
-  // Parse citation markers from the reply: [lawsuit:<uuid>] or [regulation:<uuid>]
+  // Parse citation markers: [<kind>:<id>] for any supported kind.
   const cited = new Set();
-  const citeRe = /\[(lawsuit|regulation):([0-9a-f-]{8,})\]/gi;
+  const citeRe = new RegExp(`\\[(${CITE_KINDS}):([\\w-]{1,64})\\]`, 'gi');
   let m;
-  while ((m = citeRe.exec(text)) !== null) {
-    cited.add(`${m[1].toLowerCase()}:${m[2]}`);
-  }
+  while ((m = citeRe.exec(text)) !== null) cited.add(`${m[1].toLowerCase()}:${m[2]}`);
   const citations = contextItems.filter(c => cited.has(`${c.kind}:${c.id}`));
 
   return { reply: text, citations };

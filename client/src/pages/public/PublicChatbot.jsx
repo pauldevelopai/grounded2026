@@ -1,16 +1,18 @@
-// Floating chatbot for the public AI Legal site.
+// Floating "Ask For Help" chatbot for Grounded.
 // Collapsed: small circular button bottom-right. Expanded: chat panel.
-// Chat is scoped server-side to AI law topics only.
+// Server-side it spans the whole of Grounded — newsroom AI implementation,
+// the Nodes, the tools, and the AI-law / ethics / monetisation / data-security
+// resource datasets.
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
 
-const STORAGE_KEY = 'ailegal_chat_history_v1';
+const STORAGE_KEY = 'grounded_chat_history_v1';
 const SUGGESTIONS = [
-  'What cases has OpenAI been sued in?',
+  'Which Node should I start with?',
+  'How do I verify a suspicious election post?',
+  'How can my newsroom make money from AI?',
   'When does the EU AI Act take effect?',
-  'Which countries have decided AI copyright cases?',
-  'What is the Colorado AI Act?',
 ];
 
 export default function PublicChatbot() {
@@ -120,7 +122,7 @@ export default function PublicChatbot() {
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
           <span style={{ fontSize: 14, fontWeight: 700 }}>Ask For Help</span>
-          <span style={{ fontSize: 10, color: '#94A3B8' }}>Powered by Claude · scoped to AI law</span>
+          <span style={{ fontSize: 10, color: '#94A3B8' }}>Powered by Claude · across Grounded</span>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           {history.length > 0 && (
@@ -151,7 +153,7 @@ export default function PublicChatbot() {
       >
         <input
           type="text"
-          placeholder="Ask about an AI case or regulation…"
+          placeholder="Ask about implementing AI in your newsroom…"
           value={input}
           onChange={e => setInput(e.target.value)}
           disabled={loading}
@@ -197,20 +199,7 @@ function Bubble({ msg }) {
         {isUser ? msg.content : renderAssistantText(msg.content)}
         {msg.citations?.length > 0 && (
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #E5E7EB', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {msg.citations.map(c => (
-              <Link
-                key={`${c.kind}:${c.id}`}
-                to={c.kind === 'lawsuit' ? `/legal/lawsuits/${c.id}` : `/legal/regulations/${c.id}`}
-                style={{
-                  fontSize: 10, padding: '2px 8px', borderRadius: 10,
-                  background: c.kind === 'lawsuit' ? '#EEF2FF' : '#D1FAE5',
-                  color: c.kind === 'lawsuit' ? '#4F46E5' : '#065F46',
-                  textDecoration: 'none', fontWeight: 600,
-                }}
-              >
-                {c.kind === 'lawsuit' ? '⚖ ' : '📜 '}{c.name}
-              </Link>
-            ))}
+            {msg.citations.map(c => <CitationChip key={`${c.kind}:${c.id}`} c={c} />)}
           </div>
         )}
       </div>
@@ -218,10 +207,39 @@ function Bubble({ msg }) {
   );
 }
 
-// Strip bracketed citation markers like [lawsuit:uuid] from rendered text —
-// they're redundant once the citations chip row is shown below the bubble.
+// Strip bracketed citation markers like [tool:123] from rendered text — they're
+// redundant once the citation chip row is shown below the bubble.
 function renderAssistantText(text) {
-  return (text || '').replace(/\[(lawsuit|regulation):[0-9a-f-]{8,}\]/gi, '').replace(/\s+([.,;:])/g, '$1').trim();
+  return (text || '')
+    .replace(/\[(lawsuit|regulation|tool|ethics|monetisation|datasecurity):[\w-]{1,64}\]/gi, '')
+    .replace(/\s+([.,;:])/g, '$1').trim();
+}
+
+// Per-kind citation chip: lawsuits/regulations link to their tracker page;
+// resource items (tool/ethics/monetisation/data-security) link out to the source.
+const CITE_STYLE = {
+  lawsuit:      { icon: '⚖ ', bg: '#EEF2FF', fg: '#4F46E5' },
+  regulation:   { icon: '📜 ', bg: '#D1FAE5', fg: '#065F46' },
+  tool:         { icon: '🛠 ', bg: '#FEF3C7', fg: '#92400E' },
+  ethics:       { icon: '🧭 ', bg: '#F3E8FF', fg: '#6B21A8' },
+  monetisation: { icon: '💰 ', bg: '#CCFBF1', fg: '#0F766E' },
+  datasecurity: { icon: '🔒 ', bg: '#E2E8F0', fg: '#334155' },
+};
+function CitationChip({ c }) {
+  const s = CITE_STYLE[c.kind] || CITE_STYLE.tool;
+  const chipStyle = {
+    fontSize: 10, padding: '2px 8px', borderRadius: 10,
+    background: s.bg, color: s.fg, textDecoration: 'none', fontWeight: 600,
+  };
+  if (c.kind === 'lawsuit' || c.kind === 'regulation') {
+    return (
+      <Link to={c.kind === 'lawsuit' ? `/legal/lawsuits/${c.id}` : `/legal/regulations/${c.id}`} style={chipStyle}>
+        {s.icon}{c.name}
+      </Link>
+    );
+  }
+  if (!c.url) return <span style={chipStyle}>{s.icon}{c.name}</span>;
+  return <a href={c.url} target="_blank" rel="noopener noreferrer" style={chipStyle}>{s.icon}{c.name}</a>;
 }
 
 function LoadingBubble() {
@@ -242,7 +260,7 @@ function Intro({ onPick }) {
   return (
     <div style={{ padding: 8 }}>
       <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.5 }}>
-        I can answer questions about the AI lawsuits and regulations tracked on this site. I'm not a lawyer — I summarise public records.
+        I help newsrooms put AI to work — across Grounded's Nodes and tools, plus our resources on AI law, ethics, monetisation and data security. Ask me anything about implementing AI in your newsroom.
       </div>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Try</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

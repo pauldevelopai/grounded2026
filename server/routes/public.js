@@ -2,7 +2,7 @@
 // Mount BEFORE any auth middleware.
 import { Router } from 'express';
 import pool from '../db/pool.js';
-import { chatAboutAiLegal, callClaude } from '../services/claude.js';
+import { chatWithGroundedHelp, callClaude } from '../services/claude.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
@@ -702,10 +702,43 @@ router.post('/chat', chatCors, async (req, res) => {
       return fb.rows;
     }
 
-    const [lRows, rRows] = await Promise.all([search({ lawsuits: true }), search({ lawsuits: false })]);
+    // Curated resource datasets (tools / ethics / monetisation / data-security)
+    // — published items only, matched by ILIKE on the query tokens so the
+    // assistant can answer newsroom-AI-implementation questions, not just law.
+    const contentTokens = ftsQuery.split(/\s+/).filter(t => t.length > 2).slice(0, 5);
+    async function searchContent(kind) {
+      if (!contentTokens.length) return [];
+      const params = contentTokens.map(t => `%${t}%`);
+      try {
+        if (kind === 'tool') {
+          const ors = contentTokens.map((_, i) =>
+            `(name ILIKE $${i + 1} OR description ILIKE $${i + 1} OR newsroom_use ILIKE $${i + 1} OR category ILIKE $${i + 1})`).join(' OR ');
+          const { rows } = await pool.query(
+            `SELECT id, name, category, description, newsroom_use, url, language, license
+               FROM oss_tools WHERE status = 'published' AND (${ors})
+              ORDER BY relevance DESC NULLS LAST LIMIT 3`, params);
+          return rows.map(r => ({ kind: 'tool', ...r }));
+        }
+        const table = kind === 'ethics' ? 'ethics_items'
+          : kind === 'monetisation' ? 'monetisation_items' : 'data_security_items';
+        const ors = contentTokens.map((_, i) =>
+          `(title ILIKE $${i + 1} OR summary ILIKE $${i + 1} OR topic ILIKE $${i + 1})`).join(' OR ');
+        const { rows } = await pool.query(
+          `SELECT id, title AS name, topic, summary, url, source_name
+             FROM ${table} WHERE status = 'published' AND (${ors})
+            ORDER BY COALESCE(published_at, created_at) DESC LIMIT 2`, params);
+        return rows.map(r => ({ kind, ...r }));
+      } catch { return []; }   // table missing / schema drift → degrade gracefully
+    }
+
+    const [lRows, rRows, toolRows, ethRows, monRows, dsRows] = await Promise.all([
+      search({ lawsuits: true }), search({ lawsuits: false }),
+      searchContent('tool'), searchContent('ethics'), searchContent('monetisation'), searchContent('datasecurity'),
+    ]);
     const contextItems = [
       ...lRows.map(r => ({ kind: 'lawsuit',    ...r })),
       ...rRows.map(r => ({ kind: 'regulation', ...r })),
+      ...toolRows, ...ethRows, ...monRows, ...dsRows,
     ];
 
     // Sanitise history shape (defensive)
@@ -714,7 +747,7 @@ router.post('/chat', chatCors, async (req, res) => {
       .filter(h => h && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string')
       .map(h => ({ role: h.role, content: h.content.slice(0, 2000) }));
 
-    const { reply, citations } = await chatAboutAiLegal({
+    const { reply, citations } = await chatWithGroundedHelp({
       history: safeHistory,
       message: message.slice(0, 500),
       contextItems,
