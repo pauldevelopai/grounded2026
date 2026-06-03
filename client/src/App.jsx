@@ -66,10 +66,12 @@ import ReferenceData from './pages/settings/ReferenceData.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
 import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
+import Insights from './pages/admin/Insights.jsx';
 import PulseGate from './pages/pulse/PulseGate.jsx';
 import PulseOverview from './pages/pulse/PulseOverview.jsx';
 import PulseCycleDetail from './pages/pulse/PulseCycleDetail.jsx';
 import PulseNewsroomDetail from './pages/pulse/PulseNewsroomDetail.jsx';
+import PulseAnswer from './pages/pulse/PulseAnswer.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
@@ -110,6 +112,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/portal" element={<ParticipantPortal />} />
+          {/* Pulse public answer page — newsroom-facing, no login (Phase 4). */}
+          <Route path="/pulse/:token" element={<PulseAnswer />} />
 
           {/* ── Public site root (/) renders PublicHome with PublicLayout.
               Sub-pages live under /legal/* to avoid colliding with admin
@@ -184,6 +188,7 @@ export default function App() {
               {/* ── Admin-only routes — non-admins are redirected to /lawsuits ── */}
               <Route element={<AdminRoute />}>
                 <Route path="/admin" element={<AdminOverview />} />
+                <Route path="/insights" element={<Insights />} />
                 {/* ── Pulse (feature-flagged; PulseGate renders "Not found" when off) ── */}
                 <Route path="/admin/pulse" element={<PulseGate><PulseOverview /></PulseGate>} />
                 <Route path="/admin/pulse/cycles/:id" element={<PulseGate><PulseCycleDetail /></PulseGate>} />

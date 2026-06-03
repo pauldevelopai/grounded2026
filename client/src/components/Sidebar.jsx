@@ -5,7 +5,7 @@ import { useSectors } from '../context/SectorContext.jsx';
 import { usePulseEnabled } from '../hooks/usePulseEnabled.js';
 import NotificationBell from './NotificationBell.jsx';
 
-const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin', '/admin/pulse']);
+const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin', '/admin/pulse', '/insights']);
 
 // Grounded-only nav — always visible.
 const groundedItems = [
@@ -14,6 +14,7 @@ const groundedItems = [
   // now live as tiles + "Open →" links inside the Scraper Dashboard.
   { to: '/scraper-dashboard', label: 'Scraper Dashboard', icon: '~', group: 'AI Legal' },
   // Grounded
+  { to: '/insights', label: 'Insights', icon: '~', group: 'Grounded' },
   { to: '/node-admin', label: 'Nodes', icon: '~', group: 'Grounded' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Grounded' },
   { to: '/feedback', label: 'Feedback', icon: '~', group: 'Grounded' },
