@@ -1,7 +1,9 @@
-// AI Policies dashboard — one public page that pulls the latest from every
-// section of the "AI Policies" menu (Lawsuits, Regulations, Use cases, Ethics)
-// so a reader can scan it all in one place instead of clicking through. Data
-// comes from a single /public/overview call (counts + recent per section).
+// AI-and-the-law dashboard — ONE page that pulls every tracker together for a
+// NEWSROOM audience (not lawyers): the AI court cases, the regulations coming at
+// them, how other newsrooms/orgs actually use AI, ethics guidance they can adapt,
+// and the sources we watch. Each tracker carries a one-line "why this matters to
+// your newsroom" so a journalist knows why to care. Data: /public/overview
+// (counts + recent per tracker) + /public/sources (the watch-list).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
@@ -11,11 +13,12 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// One section column: header (count + "view all" link) and a list of recent rows.
-function Section({ title, count, to, viewAll, children }) {
+// One tracker column: header (count + "view all"), a journalist "why it matters"
+// line, then the recent rows.
+function Section({ title, count, to, viewAll, why, children }) {
   return (
     <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{title}</h2>
           {typeof count === 'number' && (
@@ -24,6 +27,7 @@ function Section({ title, count, to, viewAll, children }) {
         </div>
         <Link to={to} style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}>{viewAll} →</Link>
       </div>
+      {why && <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 14px 0' }}>{why}</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</div>
     </div>
   );
@@ -50,24 +54,29 @@ const Empty = () => <div style={{ fontSize: 13, color: 'var(--text-secondary)' }
 
 export default function PublicLegalDashboard() {
   const [data, setData] = useState(null);
+  const [sources, setSources] = useState(null);
   const [err, setErr] = useState(false);
   useEffect(() => {
     publicFetch('/public/overview').then(setData).catch(() => setErr(true));
+    publicFetch('/public/sources').then((s) => setSources(Array.isArray(s) ? s : [])).catch(() => setSources([]));
   }, []);
 
   const d = data || {};
+  const src = Array.isArray(sources) ? sources : [];
+
   return (
     <div>
-      <section style={{ marginBottom: 28, maxWidth: 760 }}>
+      <section style={{ marginBottom: 28, maxWidth: 780 }}>
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>
-          AI Policies &middot; Dashboard
+          For newsrooms · AI &amp; the law
         </div>
         <h1 style={{ fontSize: 36, fontWeight: 800, margin: '0 0 14px 0', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-          Everything in one place
+          AI and the law, tracked for your newsroom
         </h1>
         <p style={{ fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-          The latest from across the AI Policies tracker — lawsuits, regulations, real newsroom use cases and
-          ethics resources — without clicking through each section.
+          You don’t need a legal team to keep up. This is a journalist’s view of how AI is being
+          fought over in court, regulated around the world, and used in real newsrooms — plus the
+          ethics guidance and the sources behind it, all in one place. Plain language, updated continuously.
         </p>
       </section>
 
@@ -76,7 +85,8 @@ export default function PublicLegalDashboard() {
 
       {data && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
-          <Section title="Lawsuits" count={d.lawsuits?.count} to="/legal/lawsuits" viewAll="All lawsuits">
+          <Section title="Lawsuits" count={d.lawsuits?.count} to="/legal/lawsuits" viewAll="All lawsuits"
+                   why="Court fights over training data, copyright, defamation and deepfakes — the precedents that decide what you can publish, reuse and be sued for.">
             {(d.lawsuits?.recent || []).length === 0 ? <Empty /> : d.lawsuits.recent.map(c => (
               <Row key={c.id} to={`/legal/lawsuits/${c.id}`} title={c.case_name}
                    meta={[c.jurisdiction, c.status, fmtDate(c.updated_at)].filter(Boolean).join(' · ')}
@@ -84,7 +94,8 @@ export default function PublicLegalDashboard() {
             ))}
           </Section>
 
-          <Section title="Regulations" count={d.regulations?.count} to="/legal/regulations" viewAll="All regulations">
+          <Section title="Regulations" count={d.regulations?.count} to="/legal/regulations" viewAll="All regulations"
+                   why="The AI rules landing in each country — what your newsroom will have to comply with, and what your audience needs to know is coming.">
             {(d.regulations?.recent || []).length === 0 ? <Empty /> : d.regulations.recent.map(r => (
               <Row key={r.id} to={`/legal/regulations/${r.id}`} title={r.title}
                    meta={[r.jurisdiction, r.status, fmtDate(r.updated_at)].filter(Boolean).join(' · ')}
@@ -92,7 +103,8 @@ export default function PublicLegalDashboard() {
             ))}
           </Section>
 
-          <Section title="Use cases" count={d.useCases?.count} to="/legal/use-cases" viewAll="All use cases">
+          <Section title="Use cases" count={d.useCases?.count} to="/legal/use-cases" viewAll="All use cases"
+                   why="How other newsrooms and organisations actually put AI to work — borrow what’s working, and learn from what got them in trouble.">
             {(d.useCases?.recent || []).length === 0 ? <Empty /> : d.useCases.recent.map(u => (
               <Row key={u.id} to={`/legal/use-cases/${u.id}`} title={u.use_case_title || u.firm_name}
                    meta={[u.firm_name, u.jurisdiction, fmtDate(u.updated_at)].filter(Boolean).join(' · ')}
@@ -100,13 +112,36 @@ export default function PublicLegalDashboard() {
             ))}
           </Section>
 
-          <Section title="Ethics" count={d.ethics?.count} to="/legal/ethics" viewAll="Ethics guide">
+          <Section title="Ethics" count={d.ethics?.count} to="/legal/ethics" viewAll="Ethics guide"
+                   why="Real policies and guidance you can adapt into your own newsroom’s AI rules — without starting from a blank page.">
             {(d.ethics?.recent || []).length === 0 ? <Empty /> : d.ethics.recent.map(e => (
               <Row key={e.id} href={e.url} title={e.title}
                    meta={[e.item_type, e.source_name, fmtDate(e.updated_at)].filter(Boolean).join(' · ')}
                    summary={e.summary} />
             ))}
           </Section>
+
+          <Section title="Sources" count={src.length || undefined} to="/legal/sources" viewAll="All sources"
+                   why="Every place we watch for all of the above — so you can verify it yourself, cite the original, and dig deeper.">
+            {src.length === 0 ? <Empty /> : src.slice(0, 6).map(s => (
+              <Row key={s.id} href={s.url} title={s.name}
+                   meta={[s.kind, s.jurisdiction].filter(Boolean).join(' · ')} />
+            ))}
+          </Section>
+        </div>
+      )}
+
+      {/* Explore / build CTAs — the rest of the toolkit, in newsroom terms. */}
+      {data && (
+        <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <Link to="/legal/explore" className="card" style={{ flex: '1 1 280px', padding: 16, textDecoration: 'none', color: 'inherit' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Search everything →</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Ask a question across all the cases, rules and use cases at once.</div>
+          </Link>
+          <Link to="/legal/ethics-builder" className="card" style={{ flex: '1 1 280px', padding: 16, textDecoration: 'none', color: 'inherit' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Build your AI ethics policy →</div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>Generate a first-draft AI policy tailored to your newsroom in minutes.</div>
+          </Link>
         </div>
       )}
     </div>
