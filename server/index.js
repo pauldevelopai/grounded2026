@@ -36,6 +36,7 @@ import participantTokenRoutes from './routes/participant-tokens.js';
 import agentConversationRoutes from './routes/agent-conversations.js';
 import agentActionRoutes from './routes/agent-actions.js';
 import feedbackRoutes from './routes/feedback.js';
+import userQuestionsRoutes from './routes/user-questions.js';
 import lawsuitRoutes from './routes/lawsuits.js';
 import regulationRoutes from './routes/regulations.js';
 import legalSourcesRoutes from './routes/legal-sources.js';
@@ -303,6 +304,9 @@ app.use('/api/usecases', requireAuth, usecasesRoutes);
 app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
 // Feedback: all authenticated users can submit; admin can view/manage
 app.use('/api/feedback', requireAuth, feedbackRoutes);
+// Audience questions (outbound): any logged-in user fetches /next + answers;
+// authoring + results endpoints self-guard with requireRole('admin') inside.
+app.use('/api/user-questions', requireAuth, userQuestionsRoutes);
 
 // ── Pulse (feature-flagged) ────────────────────────────────────────────────────
 // requirePulse 404s the whole surface when PULSE_ENABLED!=true. Mounted before

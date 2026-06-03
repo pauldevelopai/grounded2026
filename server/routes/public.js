@@ -1265,6 +1265,27 @@ router.get('/ethics', async (req, res) => {
   }
 });
 
+// Published newsroom data-security resources (compiled by the data-security
+// pipeline), surfaced on the public Awareness page (/awareness), grouped by
+// topic. Mirrors /ethics; renders fine with no data.
+router.get('/data-security', async (req, res) => {
+  try {
+    const { topic } = req.query;
+    const params = [];
+    let where = `WHERE status = 'published'`;
+    if (topic) { params.push(topic); where += ` AND topic = $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT id, topic, item_type, title, summary, url, source_name, published_at
+         FROM data_security_items ${where}
+         ORDER BY COALESCE(published_at, created_at) DESC LIMIT 200`,
+      params
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    res.json({ items: [] }); // table may not exist yet — degrade gracefully
+  }
+});
+
 // AI Policies dashboard — counts + a few recent items for every section, in one
 // call, so the public dashboard renders without four round-trips.
 router.get('/overview', async (req, res) => {

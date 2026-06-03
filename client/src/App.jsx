@@ -67,6 +67,7 @@ import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
 import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
 import Insights from './pages/admin/Insights.jsx';
+import UserQuestions from './pages/admin/UserQuestions.jsx';
 import PulseGate from './pages/pulse/PulseGate.jsx';
 import PulseOverview from './pages/pulse/PulseOverview.jsx';
 import PulseCycleDetail from './pages/pulse/PulseCycleDetail.jsx';
@@ -94,6 +95,7 @@ const ToolsHub = lazy(() => import('./pages/toolkit/ToolsHub.jsx'));
 const ToolWorkspace = lazy(() => import('./pages/toolkit/ToolWorkspace.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
 const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
+const PublicAwareness = lazy(() => import('./pages/public/PublicAwareness.jsx'));
 const PublicEthics   = lazy(() => import('./pages/public/PublicEthics.jsx'));
 
 function LazyFallback() {
@@ -174,6 +176,9 @@ export default function App() {
             <Route path="/tool/:slug" element={<PublicLayout />}>
               <Route index element={<Suspense fallback={<LazyFallback />}><ToolWorkspace /></Suspense>} />
             </Route>
+            <Route path="/awareness" element={<PublicLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><PublicAwareness /></Suspense>} />
+            </Route>
           </Route>
 
           <Route element={<ProtectedRoute />}>
@@ -189,6 +194,7 @@ export default function App() {
               <Route element={<AdminRoute />}>
                 <Route path="/admin" element={<AdminOverview />} />
                 <Route path="/insights" element={<Insights />} />
+                <Route path="/admin/questions" element={<UserQuestions />} />
                 {/* ── Pulse (feature-flagged; PulseGate renders "Not found" when off) ── */}
                 <Route path="/admin/pulse" element={<PulseGate><PulseOverview /></PulseGate>} />
                 <Route path="/admin/pulse/cycles/:id" element={<PulseGate><PulseCycleDetail /></PulseGate>} />

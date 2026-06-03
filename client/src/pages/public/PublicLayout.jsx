@@ -3,6 +3,7 @@ import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { publicFetch } from '../../hooks/usePublicApi.js';
 import FeedbackBubble from '../../components/FeedbackBubble.jsx';
+import QuestionBubble from '../../components/QuestionBubble.jsx';
 
 // Lazy so the chatbot bundle doesn't block first paint — it's only used
 // once a visitor clicks the 💬 button.
@@ -42,7 +43,6 @@ const TRACKER_ITEMS = [
   { label: 'Use cases', to: '/legal/use-cases' },
   { label: 'Ethics', to: '/legal/ethics' },
   { label: 'Ethics Policy Builder', to: '/legal/ethics-builder' },
-  { label: 'Security Audit', to: '/tool/tool-security-audit' },
 ];
 const TRAINING_ITEMS = [
   { label: 'Training', to: '/training' },
@@ -151,6 +151,7 @@ export default function PublicLayout() {
             <NavLink to="/" end style={navStyle}>Home</NavLink>
             <NavDropdown label="Builder" items={menu.builder} activeWhen={p => p.startsWith('/monetisation')} />
             <NavDropdown label="AI Policies" items={menu.tracker} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
+            <NavLink to="/awareness" style={navStyle}>Awareness</NavLink>
             <NavDropdown label="Training" items={menu.training} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources')} />
             {user ? (
               <>
@@ -184,6 +185,8 @@ export default function PublicLayout() {
       {/* The universal "submit anything about Grounded" entry point. Shown to
           everyone; logged-out visitors get a sign-in prompt inside it. */}
       <FeedbackBubble />
+      {/* Outbound questions WE ask — only renders for logged-in users. */}
+      <QuestionBubble />
 
       <footer style={{
         borderTop: '1px solid var(--border-color)', background: 'var(--card-bg)',

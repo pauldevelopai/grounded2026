@@ -18,6 +18,7 @@ const groundedItems = [
   { to: '/node-admin', label: 'Nodes', icon: '~', group: 'Grounded' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Grounded' },
   { to: '/feedback', label: 'Feedback', icon: '~', group: 'Grounded' },
+  { to: '/admin/questions', label: 'Questions', icon: '~', group: 'Grounded' },
   { to: '/settings/team', label: 'Team Members', icon: '~', group: 'Grounded' },
 ];
 

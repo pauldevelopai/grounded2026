@@ -24,7 +24,6 @@ export const PUBLIC_NAV = {
     { label: 'Use cases', href: '/legal/use-cases' },
     { label: 'Ethics', href: '/legal/ethics' },
     { label: 'Ethics Policy Builder', href: '/legal/ethics-builder' },
-    { label: 'Security Audit', href: '/tool/tool-security-audit' },
   ],
   training: [
     { label: 'Training', href: '/training' },

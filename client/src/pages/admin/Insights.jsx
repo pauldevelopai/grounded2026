@@ -66,10 +66,12 @@ export default function Insights() {
   const pulseEnabled = usePulseEnabled();
   const [data, setData] = useState(null);
   const [cycles, setCycles] = useState(null);   // null = unknown/loading, [] = none
+  const [questions, setQuestions] = useState([]);   // outbound audience questions
   const [error, setError] = useState(null);
 
   useEffect(() => {
     apiFetch('/nodes/admin/overview').then(setData).catch((e) => setError(e.message || 'Could not load'));
+    apiFetch('/user-questions').then(setQuestions).catch(() => setQuestions([]));
   }, []);
 
   useEffect(() => {
@@ -171,6 +173,22 @@ export default function Insights() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Audience questions (outbound) ── */}
+      <SectionTitle count={questions.length}>Audience questions</SectionTitle>
+      {questions.length === 0 ? (
+        <Empty>No questions yet. Ask logged-in visitors something from <Link to="/admin/questions">Questions</Link> — answers build up here.</Empty>
+      ) : (
+        <div className="card" style={{ padding: 0, marginBottom: 28 }}>
+          {[...questions].sort((a, b) => b.response_count - a.response_count).slice(0, 6).map((q, i, arr) => (
+            <div key={q.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '8px 14px', borderBottom: i < arr.length - 1 ? '1px solid var(--border-color)' : 'none', opacity: q.is_active ? 1 : 0.6 }}>
+              <Link to="/admin/questions" style={{ fontWeight: 600, fontSize: 13 }}>{q.prompt}</Link>
+              {!q.is_active && <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>inactive</span>}
+              <span style={{ ...muted, ...num, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{q.response_count} answer{q.response_count === 1 ? '' : 's'}</span>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* ── Recent activity across all nodes ── */}
