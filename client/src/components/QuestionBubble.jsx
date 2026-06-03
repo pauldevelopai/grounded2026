@@ -59,11 +59,13 @@ export default function QuestionBubble() {
   return (
     <>
       {/* Slate button (distinct from the terracotta feedback bubble) so "we're
-          asking you" reads differently from "send feedback". Stacks above it. */}
+          asking you" reads differently from "send feedback". Third in the stack:
+          Feedback owns bottom:20, Ask For Help (PublicChatbot) owns bottom:84,
+          so this sits at bottom:148. */}
       <button
         onClick={() => setOpen(!open)}
         style={{
-          position: 'fixed', bottom: 84, right: 20, width: 52, height: 52,
+          position: 'fixed', bottom: 148, right: 20, width: 52, height: 52,
           borderRadius: '50%', background: '#3a6b7d', color: 'white', border: 'none',
           cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.25)', zIndex: 1000,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -89,7 +91,7 @@ export default function QuestionBubble() {
 
       {open && (
         <div style={{
-          position: 'fixed', bottom: 144, right: 20, width: 330,
+          position: 'fixed', bottom: 208, right: 20, width: 330,
           background: 'white', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
           zIndex: 1003, padding: 20, border: '1px solid var(--border-color)',
         }}>
