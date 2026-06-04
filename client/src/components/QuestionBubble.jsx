@@ -12,6 +12,7 @@ export default function QuestionBubble() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState(null);
+  const [pending, setPending] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [justAnswered, setJustAnswered] = useState(false);
@@ -22,8 +23,10 @@ export default function QuestionBubble() {
     try {
       const data = await apiFetch('/user-questions/next');
       setQuestion(data?.question || null);
+      setPending(data?.pending || 0);
     } catch {
       setQuestion(null);
+      setPending(0);
     } finally {
       setLoading(false);
     }
@@ -54,8 +57,6 @@ export default function QuestionBubble() {
     }
   }
 
-  const hasPending = !!question;
-
   return (
     <>
       {/* Slate button (distinct from the terracotta feedback bubble) so "we're
@@ -72,20 +73,22 @@ export default function QuestionBubble() {
         }}
         onMouseEnter={e => (e.currentTarget.style.background = '#2c5260')}
         onMouseLeave={e => (e.currentTarget.style.background = '#3a6b7d')}
-        title="A quick question from the Grounded team"
-        aria-label="Answer a question from the Grounded team"
+        title={pending > 0 ? `${pending} question${pending === 1 ? '' : 's'} from the Grounded team` : 'Messages from the Grounded team'}
+        aria-label="Messages from the Grounded team"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
           <path d="M12 17h.01" />
           <circle cx="12" cy="12" r="10" />
         </svg>
-        {/* Pulsing dot when there's an unanswered question waiting. */}
-        {hasPending && !open && (
+        {/* Count badge when there are unanswered questions waiting. */}
+        {pending > 0 && !open && (
           <span style={{
-            position: 'absolute', top: 2, right: 2, width: 12, height: 12,
-            borderRadius: '50%', background: '#e0533a', border: '2px solid white',
-          }} />
+            position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, padding: '0 5px',
+            borderRadius: 10, background: '#e0533a', color: 'white', border: '2px solid white',
+            fontSize: 11, fontWeight: 700, lineHeight: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>{pending > 9 ? '9+' : pending}</span>
         )}
       </button>
 
@@ -96,7 +99,7 @@ export default function QuestionBubble() {
           zIndex: 1003, padding: 20, border: '1px solid var(--border-color)',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h4 style={{ margin: 0, fontSize: 15 }}>Quick question</h4>
+            <h4 style={{ margin: 0, fontSize: 15 }}>From the Grounded team</h4>
             <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-secondary)' }}>x</button>
           </div>
 
@@ -109,7 +112,7 @@ export default function QuestionBubble() {
             </div>
           ) : !question ? (
             <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>
-              Nothing right now — thanks for helping us improve Grounded.
+              No questions for you right now. We'll pop one here when we'd like your input — thanks for helping us improve Grounded.
             </div>
           ) : (
             <div>

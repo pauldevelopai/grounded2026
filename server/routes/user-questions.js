@@ -11,11 +11,13 @@ const router = Router();
 
 // ── Any logged-in user ────────────────────────────────────────────────────────
 
-// The next active question this user hasn't answered yet (lowest sort_order first).
+// The next active question this user hasn't answered yet (lowest sort_order first),
+// plus how many are still pending — the bubble shows that count as a badge.
 router.get('/next', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, prompt, options, category
+      `SELECT id, prompt, options, category,
+              COUNT(*) OVER ()::int AS pending
          FROM user_questions q
         WHERE q.is_active = true
           AND NOT EXISTS (
@@ -26,7 +28,9 @@ router.get('/next', async (req, res) => {
         LIMIT 1`,
       [req.user.id]
     );
-    res.json({ question: rows[0] || null });
+    if (rows.length === 0) return res.json({ question: null, pending: 0 });
+    const { pending, ...question } = rows[0];
+    res.json({ question, pending });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });
