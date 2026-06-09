@@ -151,7 +151,6 @@ export default function PublicLayout() {
             <NavLink to="/" end style={navStyle}>Home</NavLink>
             <NavDropdown label="Builder" items={menu.builder} activeWhen={p => p.startsWith('/monetisation')} />
             <NavDropdown label="AI Policies" items={menu.tracker} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
-            <NavLink to="/awareness" style={navStyle}>Awareness</NavLink>
             <NavDropdown label="Training" items={menu.training} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources')} />
             {user ? (
               <>
