@@ -1,39 +1,17 @@
-// Home — represents the whole of Grounded across its three sections: Builder
-// (Nodes + Tools), Tracker (the open AI-legal dataset), and Training (the
-// learning hub). A stats row shows what the app currently contains; the three
-// cards explain each section. The legal feed is no longer the centrepiece.
+// Hub — the public front door for Grounded (Phase 1 · step 3).
+//
+// Rebuilt around the concept-note IA: the FIVE sections + THREE strategic
+// layers + the data-sovereignty foundation story. Reads the section labels,
+// blurbs, accents and public links from ui/sections.js so the Hub, the
+// /sections product front door and the section pages can never drift.
+//
+// GOVERNING RULE: no fake data. The stat row shows real counts (or an em-dash
+// while loading / if unavailable); sections with no public page yet say so and
+// invite sign-in rather than linking somewhere fabricated.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
-
-const SECTIONS = [
-  {
-    tag: 'Builder',
-    title: 'Tools your newsroom runs and owns',
-    body: 'Nodes are small, sharp AI tools built with newsrooms — run them on your own machine with one command, or use them online. Plus a growing toolkit for everyday work. Your data, your tools.',
-    links: [
-      { label: 'Explore Nodes →', href: '/nodes/', external: true },
-      { label: 'Browse Tools →', href: '/tools/', external: true },
-    ],
-  },
-  {
-    tag: 'Tracker',
-    title: 'Track AI in court and regulation',
-    body: 'A chronological, sourced, free-to-everyone feed of every significant AI lawsuit, regulation and real-world use case worldwide — and how they connect. Built and kept current by an automated source pipeline.',
-    links: [
-      { label: 'Open the tracker →', href: '/legal/lawsuits', external: false },
-      { label: 'See the connections →', href: '/legal/explore', external: false },
-    ],
-  },
-  {
-    tag: 'Training',
-    title: 'Train your newsroom to use AI well',
-    body: 'Practical, hands-on training for journalists and editors — courses and modules that build the skills to use AI confidently, critically and safely in everyday newsroom work.',
-    links: [
-      { label: 'Explore training →', href: '/training', external: false },
-    ],
-  },
-];
+import { SECTIONS, LAYERS } from '../../ui/sections.js';
 
 export default function PublicHome() {
   const [stats, setStats] = useState({ nodes: null, lawsuits: null, regulations: null, usecases: null });
@@ -53,49 +31,86 @@ export default function PublicHome() {
   }, []);
 
   return (
-    <div>
+    <div className="hub">
       {/* ── Hero ── */}
-      <section style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
-          Grounded · by Develop AI
-        </div>
-        <h1 style={{ fontSize: 40, fontWeight: 800, margin: '0 0 14px 0', letterSpacing: '-0.02em', color: 'var(--text-primary)', lineHeight: 1.1 }}>
-          Newsroom-owned AI
-        </h1>
-        <p style={{ fontSize: 17, color: 'var(--text-secondary)', maxWidth: 780, lineHeight: 1.6, margin: 0 }}>
-          One place for newsrooms to <b>build</b> AI tools they own and run, <b>track</b> how AI is being
-          fought over in courts and parliaments, and <b>train</b> their teams to use AI well.
+      <section className="hub-hero">
+        <div className="hub-eyebrow">Grounded · by Develop&nbsp;AI</div>
+        <h1>Newsroom-owned AI</h1>
+        <p className="hub-lede">
+          Shared AI infrastructure for African public-interest newsrooms — tools your team
+          <b> builds and owns</b>, the law and ethics around AI <b>tracked daily</b>, and the
+          training to use it well. Built with newsrooms, run on your terms.
         </p>
+        <div className="hub-hero-cta">
+          <Link to="/sections" className="hub-btn hub-btn-solid">Open the platform</Link>
+          <a href="/nodes/" className="hub-btn hub-btn-ghost">See the Nodes</a>
+        </div>
       </section>
 
-      {/* ── What's inside (stats) ── */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 36 }}>
+      {/* ── What's inside (real counts) ── */}
+      <section className="hub-stats">
         <Stat value={stats.nodes} label="Nodes you can run" to="/nodes/" external />
         <Stat value={stats.lawsuits} label="AI lawsuits tracked" to="/legal/lawsuits" />
         <Stat value={stats.regulations} label="Regulations tracked" to="/legal/regulations" />
         <Stat value={stats.usecases} label="Use cases logged" to="/legal/use-cases" />
       </section>
 
-      {/* ── The three sections ── */}
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
-        Three things Grounded does
-      </div>
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 36 }}>
-        {SECTIONS.map(s => (
-          <div key={s.tag} className="card" style={{ padding: 22, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-              {s.tag}
-            </div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 8px 0', color: 'var(--text-primary)' }}>{s.title}</h2>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.55, margin: '0 0 16px 0', flex: 1 }}>{s.body}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {s.links.map(l => l.external
-                ? <a key={l.href} href={l.href} style={ctaStyle}>{l.label}</a>
-                : <Link key={l.href} to={l.href} style={ctaStyle}>{l.label}</Link>)}
-            </div>
+      {/* ── The five sections ── */}
+      <div className="hub-section-label">What Grounded does · five sections</div>
+      <section className="hub-grid">
+        {SECTIONS.map((s) => (
+          <SectionCard key={s.key} section={s} />
+        ))}
+      </section>
+
+      {/* ── The three strategic layers ── */}
+      <div className="hub-section-label">Three strategic layers</div>
+      <p className="hub-layers-lede">
+        The cross-cutting views that sit above the sections — where a newsroom understands its own
+        work and chooses what to share. In development; built once the data that feeds them is real.
+      </p>
+      <section className="hub-grid hub-grid-layers">
+        {LAYERS.map((l) => (
+          <div key={l.key} className="hub-card hub-card-layer">
+            <span className="hub-soon">● In development</span>
+            <h3>{l.label}</h3>
+            <p>{l.blurb}</p>
           </div>
         ))}
       </section>
+
+      {/* ── The foundation: data sovereignty ── */}
+      <section className="hub-foundation">
+        <div className="hub-foundation-label">The foundation</div>
+        <h2>Your data and your tools stay yours</h2>
+        <p>
+          Every Node downloads and runs on your own machine with one command — or online if you
+          prefer. The newsroom owns its data, its archive and the tools built on top of them. The
+          network makes each tool sharper without pooling anyone's data into someone else's product.
+          That's what newsroom-owned means: shared infrastructure, sovereign newsrooms.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// One section as a public Hub card: accent-keyed, with its public front-door
+// link — or, where no public page exists yet, an honest sign-in invite.
+function SectionCard({ section }) {
+  const style = { '--accent': `var(${section.accentVar})` };
+  return (
+    <div className="hub-card hub-card-section" style={style}>
+      <h3>{section.label}</h3>
+      <p>{section.blurb}</p>
+      {section.hub ? (
+        section.hub.external ? (
+          <a href={section.hub.href} className="hub-card-cta">{section.hub.label} →</a>
+        ) : (
+          <Link to={section.hub.href} className="hub-card-cta">{section.hub.label} →</Link>
+        )
+      ) : (
+        <span className="hub-card-cta hub-card-cta-muted">In development · sign in to follow</span>
+      )}
     </div>
   );
 }
@@ -103,20 +118,15 @@ export default function PublicHome() {
 function Stat({ value, label, to, external }) {
   const inner = (
     <>
-      <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>
-        {value == null ? '—' : value}
-      </div>
-      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>{label}</div>
+      <div className="hub-stat-value">{value == null ? '—' : value}</div>
+      <div className="hub-stat-label">{label}</div>
     </>
   );
-  const style = { display: 'block', padding: 18, textDecoration: 'none' };
   return (
-    <div className="card" style={{ padding: 0 }}>
+    <div className="hub-stat">
       {external
-        ? <a href={to} style={style}>{inner}</a>
-        : <Link to={to} style={style}>{inner}</Link>}
+        ? <a href={to}>{inner}</a>
+        : <Link to={to}>{inner}</Link>}
     </div>
   );
 }
-
-const ctaStyle = { color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', fontSize: 14 };

@@ -18,13 +18,18 @@ The public wordmark everywhere is **"Grounded"** (subtitle "Newsroom-owned AI ·
 ## This repo (the tracker)
 
 - **`server/`** — Express + Postgres. Entry `server/index.js`. Routes in `server/routes/*`, mounted: public/open ones first, then an admin router (`requireAuth` + `requireRole('admin')`) at `/api`.
-- **`client/`** — React + Vite SPA. Public site under `pages/public/*` (`PublicLayout` + `PublicHome`); the authed admin app under `pages/*` with `components/Sidebar.jsx` + `Layout.jsx`.
+- **`client/`** — React + Vite SPA. Page components live in `pages/*`; the **shells** (the chrome that wraps them) live in `ui/*` and the IA is concept-note-led (see `docs/GROUNDED_V3_BUILD_PLAN.md` + `RESUME.md`). Four shells:
+  - **`pages/public/PublicLayout`** — the logged-out public site; its home is the GROUNDED Hub (`pages/public/PublicHome.jsx`, the 5 sections + 3 layers + foundation story).
+  - **`ui/ProductShell`** — the authed newsroom product (light top-bar): the five-section nav → `/sections` + `/sections/:key` (`ui/SectionsOverview` + `ui/SectionRoute`, both rendering `ui/SectionLanding` whose tiles are `ui/NodeCard`), the functions directory `/functions` (`ui/FunctionsDirectory`), Builder/Run/Awareness/Tracker/Pulse/Profile, and (admins only) "Admin" + "Studio" entries. IA source of truth = `ui/sections.js`.
+  - **`ui/AdminArea`** — GROUNDED platform admin (dark, blue badge): command centre, tracker ingestion, Nodes, feedback, users, reference data, jobs, policy docs.
+  - **`ui/StudioShell`** — Develop AI's back-office (dark, amber badge): CRM, fundraising, curriculum, mentoring, outreach, intelligence, database, etc.
+  - The operator shells share `ui/SectorSelect`. (The old `components/Sidebar.jsx` + `components/Layout.jsx` admin shell was retired in the Phase-1 restructure.)
 - **Auth**: JWT in an httpOnly cookie named **`tracker_token`** (set/read in `routes/auth.js` + `middleware/auth.js`), secret = `config.jwtSecret` (loaded from `/home/ubuntu/tracker/.env`, `dotenv override:true`). Users live in **`team_members`** (roles `'admin'`/`'member'`; `last_login` tracked). Self-registration → role `'member'`.
 - **DB migrations**: numbered SQL in `server/db/migrations/NNN_*.sql`, run by `node server/db/migrate.js` (tracked in a `migrations` table). NB there's a duplicate `066_*` (harmless — tracked by full filename).
 
 ### Grounded-specific surfaces added on top of the CRM
 - `routes/nodes.js` → `POST /api/nodes/beacon` (public; local-install telemetry) + `GET /api/nodes/admin/overview` (admin). Reads `node_<slug>_*` tables the hosted Nodes write.
-- `routes/admin.js` → `GET /api/admin/overview` (admin command-centre data: users + feedback + legal counts). Page: `pages/admin/AdminOverview.jsx` at **`/admin`** (Sidebar "Grounded admin").
+- `routes/admin.js` → `GET /api/admin/overview` (admin command-centre data: users + feedback + legal counts). Page: `pages/admin/AdminOverview.jsx` at **`/admin`** (the command centre, top of `ui/AdminArea`).
 - `routes/feedback.js` + `components/FeedbackBubble.jsx` + `pages/feedback/FeedbackList.jsx` — feedback from any logged-in user (public site, admin, AND inside hosted Nodes) lands here.
 - Nodes admin page: `pages/nodes/NodesAdmin.jsx` at **`/node-admin`** (NOT `/nodes` — `/nodes/*` is the Caddy-served front door).
 
@@ -43,7 +48,7 @@ cd /home/ubuntu/tracker && bash deploy.sh
 - **Caddy** fronts everything (auto-HTTPS), config `/etc/caddy/sites/ailegal.co.za.caddy`. **GOTCHA: Caddy has `admin off` → `systemctl reload` FAILS. Use `sudo systemctl restart caddy`.**
 - Routing on `grounded.developai.co.za`: tracker SPA at `/` (server :3001); `/tools/*` → AIKit (FastAPI :8000, proxied); `/nodes/` → static front door (`/var/www/nodes`); `/nodes/<slug>/app/*` → that hosted Node's pm2 process.
 - **pm2** processes: `tracker-server`, `aikit-server`, `audience-signal` (the hosted node-analytics), plus `<slug>-hosted` per hosted Node.
-- **Postgres** on 127.0.0.1:5432 (db `holly`), shared by the tracker AND the hosted Nodes (which write `node_<slug>_*` tables).
+- **Postgres** on 127.0.0.1:5432 (db **`tracker`** — renamed from the legacy `holly` on 2026-06-09, the last legacy-name hold-out, now gone; role/owner is still `holly` by design. History: `docs/DB_RENAME_RUNBOOK.md`), shared by the tracker AND the hosted Nodes (which write `node_<slug>_*` tables).
 
 ## The Nodes system (how to add one)
 

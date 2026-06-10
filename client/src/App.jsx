@@ -4,7 +4,12 @@ import { SectorProvider } from './context/SectorContext.jsx';
 import { AiAssistantProvider } from './context/AiAssistantContext.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
-import Layout from './components/Layout.jsx';
+import ProductShell from './ui/ProductShell.jsx';
+import SectionsOverview from './ui/SectionsOverview.jsx';
+import SectionRoute from './ui/SectionRoute.jsx';
+import FunctionsDirectory from './ui/FunctionsDirectory.jsx';
+import StudioShell from './ui/StudioShell.jsx';
+import AdminArea from './ui/AdminArea.jsx';
 
 // Redirects non-admin users to /lawsuits for all admin-only routes
 function AdminRoute() {
@@ -114,6 +119,9 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/portal" element={<ParticipantPortal />} />
+          {/* The step-1 staging preview is now the real product (ProductShell at
+              /sections). Old preview link redirects so nothing 404s. */}
+          <Route path="/_preview" element={<Navigate to="/sections" replace />} />
           {/* Pulse public answer page — newsroom-facing, no login (Phase 4). */}
           <Route path="/pulse/:token" element={<PulseAnswer />} />
 
@@ -161,45 +169,81 @@ export default function App() {
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
           </Route>
 
-          {/* ── Builder (workflow engine) — user section under the Builder menu.
-                Login required, but rendered in the PUBLIC chrome (not the admin shell). ── */}
+          {/* ── ProductShell — the concept-note-led newsroom product (Phase 1 · steps 2 + 5).
+                The 5 sections + 3 strategic layers + the real product pages: Builder, Run,
+                Awareness, the Tracker (lawsuits + regulations), Pulse and Profile. Login
+                required; Pulse + Profile stay admin-gated exactly as before. ── */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/builder" element={<PublicLayout />}>
-              <Route index element={<Suspense fallback={<LazyFallback />}><BuilderPage /></Suspense>} />
+            <Route element={<ProductShell />}>
+              <Route path="/sections" element={<SectionsOverview />} />
+              <Route path="/sections/:key" element={<SectionRoute />} />
+              <Route path="/functions" element={<FunctionsDirectory />} />
+              <Route path="/builder" element={<Suspense fallback={<LazyFallback />}><BuilderPage /></Suspense>} />
+              <Route path="/run" element={<Suspense fallback={<LazyFallback />}><RunPage /></Suspense>} />
+              <Route path="/awareness" element={<Suspense fallback={<LazyFallback />}><PublicAwareness /></Suspense>} />
+              {/* Tracker — available to all authenticated users */}
+              <Route path="/lawsuits" element={<LawsuitTracker />} />
+              <Route path="/regulation-tracker" element={<RegulationTracker />} />
+              {/* Pulse + Profile — admin-gated (unchanged), reached from the section pages */}
+              <Route element={<AdminRoute />}>
+                <Route path="/admin/pulse" element={<PulseGate><PulseOverview /></PulseGate>} />
+                <Route path="/admin/pulse/cycles/:id" element={<PulseGate><PulseCycleDetail /></PulseGate>} />
+                <Route path="/admin/pulse/newsrooms/:id" element={<PulseGate><PulseNewsroomDetail /></PulseGate>} />
+                <Route path="/settings/newsroom-profile" element={<NewsroomProfile />} />
+              </Route>
             </Route>
-            <Route path="/run" element={<PublicLayout />}>
-              <Route index element={<Suspense fallback={<LazyFallback />}><RunPage /></Suspense>} />
-            </Route>
+          </Route>
+
+          {/* Toolkit pages stay in the public chrome for now — folded into the
+              Content Production functions directory in step 6. */}
+          <Route element={<ProtectedRoute />}>
             <Route path="/tools-hub" element={<PublicLayout />}>
               <Route index element={<Suspense fallback={<LazyFallback />}><ToolsHub /></Suspense>} />
             </Route>
             <Route path="/tool/:slug" element={<PublicLayout />}>
               <Route index element={<Suspense fallback={<LazyFallback />}><ToolWorkspace /></Suspense>} />
             </Route>
-            <Route path="/awareness" element={<PublicLayout />}>
-              <Route index element={<Suspense fallback={<LazyFallback />}><PublicAwareness /></Suspense>} />
-            </Route>
           </Route>
 
+          {/* ── AdminArea — GROUNDED platform admin (Phase 1 · step 5). Admin-gated,
+                its own operator shell (replaces the old admin Layout/Sidebar). Gathers
+                the platform ops — command centre, tracker ingestion, Nodes, feedback,
+                users, reference data, jobs, policy docs — into one area. Component code
+                + paths unchanged. Reached via the admin-only "Admin" entry in ProductShell. ── */}
           <Route element={<ProtectedRoute />}>
-            <Route element={<Layout />}>
-
-              {/* ── Available to all authenticated users ── */}
-              <Route path="/lawsuits" element={<LawsuitTracker />} />
-              <Route path="/regulation-tracker" element={<RegulationTracker />} />
-              <Route path="/legal-sources" element={<LegalSourcesPage />} />
-              <Route path="/use-cases-admin" element={<UseCasesAdmin />} />
-
-              {/* ── Admin-only routes — non-admins are redirected to /lawsuits ── */}
-              <Route element={<AdminRoute />}>
+            <Route element={<AdminRoute />}>
+              <Route element={<AdminArea />}>
                 <Route path="/admin" element={<AdminOverview />} />
                 <Route path="/insights" element={<Insights />} />
                 <Route path="/admin/questions" element={<UserQuestions />} />
-                {/* ── Pulse (feature-flagged; PulseGate renders "Not found" when off) ── */}
-                <Route path="/admin/pulse" element={<PulseGate><PulseOverview /></PulseGate>} />
-                <Route path="/admin/pulse/cycles/:id" element={<PulseGate><PulseCycleDetail /></PulseGate>} />
-                <Route path="/admin/pulse/newsrooms/:id" element={<PulseGate><PulseNewsroomDetail /></PulseGate>} />
+                <Route path="/scraper-dashboard" element={<ScraperDashboard />} />
+                <Route path="/ingestion" element={<IngestionPage />} />
+                <Route path="/legal-sources" element={<LegalSourcesPage />} />
+                <Route path="/use-cases-admin" element={<UseCasesAdmin />} />
+                <Route path="/node-admin" element={<NodesAdmin />} />
+                <Route path="/documents" element={<DocumentsList />} />
+                <Route path="/documents/new" element={<DocumentGenerate />} />
+                <Route path="/documents/:id" element={<DocumentDetail />} />
+                <Route path="/feedback" element={<FeedbackList />} />
+                <Route path="/settings/team" element={<TeamSettings />} />
+                <Route path="/settings/reference-data" element={<ReferenceData />} />
+                <Route path="/settings/jobs" element={<BackgroundJobs />} />
+              </Route>
+            </Route>
+          </Route>
+
+          {/* ── Studio — Develop AI back-office (Phase 1 · step 4). Admin-gated,
+                its own StudioShell. Component code + paths are UNCHANGED (so every
+                internal link and bookmark survives); only the wrapping shell + nav
+                placement moved out of the Grounded admin sidebar. Reversible. ── */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AdminRoute />}>
+              <Route element={<StudioShell />}>
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/agents" element={<BackgroundJobs />} />
+                <Route path="/agents/curriculum" element={<CurriculumBuilderAgent />} />
+                <Route path="/agents/leads" element={<LeadFinderAgent />} />
+                <Route path="/agents/coach" element={<ImplementationCoachAgent />} />
                 <Route path="/contacts" element={<ContactsList />} />
                 <Route path="/contacts/:id" element={<ContactDetail />} />
                 <Route path="/organisations" element={<OrganisationsList />} />
@@ -208,46 +252,30 @@ export default function App() {
                 <Route path="/programmes/:id" element={<CohortDetail />} />
                 <Route path="/assessments" element={<AssessmentsList />} />
                 <Route path="/assessments/:id" element={<AssessmentDetail />} />
+                <Route path="/leads" element={<LeadsPage />} />
                 <Route path="/training-materials" element={<TrainingMaterials />} />
                 <Route path="/course-builder" element={<CurriculumBuilderAgent />} />
                 <Route path="/curriculum" element={<CoursesList />} />
                 <Route path="/curriculum/:id" element={<CourseDetail />} />
-                <Route path="/documents" element={<DocumentsList />} />
-                <Route path="/documents/new" element={<DocumentGenerate />} />
-                <Route path="/documents/:id" element={<DocumentDetail />} />
                 <Route path="/mentoring" element={<MentoringPage />} />
                 <Route path="/services" element={<ServicesList />} />
                 <Route path="/services/:id" element={<EngagementDetail />} />
                 <Route path="/marketing/campaigns" element={<CampaignsList />} />
                 <Route path="/marketing/campaigns/:id" element={<CampaignDetail />} />
                 <Route path="/marketing/social" element={<SocialContent />} />
-                <Route path="/leads" element={<LeadsPage />} />
                 <Route path="/fundraising" element={<PipelineView />} />
                 <Route path="/fundraising/funders" element={<FundersList />} />
                 <Route path="/fundraising/funders/:id" element={<FunderDetail />} />
                 <Route path="/fundraising/opportunities/:id" element={<OpportunityDetail />} />
-                <Route path="/settings/sectors" element={<SectorSettings />} />
-                <Route path="/settings/team" element={<TeamSettings />} />
-                <Route path="/settings/gmail" element={<GmailSettings />} />
-                <Route path="/settings/jobs" element={<BackgroundJobs />} />
                 <Route path="/intelligence" element={<IntelligenceList />} />
                 <Route path="/knowledge" element={<KnowledgeBase />} />
                 <Route path="/newsletter" element={<NewsletterDigest />} />
                 <Route path="/database" element={<DatabaseEditor />} />
                 <Route path="/learning" element={<LearningDashboard />} />
                 <Route path="/learning/:contactId" element={<JourneyDetail />} />
-                <Route path="/agents" element={<BackgroundJobs />} />
-                <Route path="/agents/curriculum" element={<CurriculumBuilderAgent />} />
-                <Route path="/agents/leads" element={<LeadFinderAgent />} />
-                <Route path="/agents/coach" element={<ImplementationCoachAgent />} />
-                <Route path="/feedback" element={<FeedbackList />} />
-                <Route path="/node-admin" element={<NodesAdmin />} />
-                <Route path="/scraper-dashboard" element={<ScraperDashboard />} />
-              <Route path="/ingestion" element={<IngestionPage />} />
-                <Route path="/settings/newsroom-profile" element={<NewsroomProfile />} />
-                <Route path="/settings/reference-data" element={<ReferenceData />} />
+                <Route path="/settings/sectors" element={<SectorSettings />} />
+                <Route path="/settings/gmail" element={<GmailSettings />} />
               </Route>
-
             </Route>
           </Route>
         </Routes>
