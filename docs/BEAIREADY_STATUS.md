@@ -13,8 +13,19 @@
 4. **Real L2B user** (not committed): create one member user, `newsroom_id` = the L2B tenant, temp password Paul hands over. Easiest: the AdminArea → Newsrooms UI once it supports business tenants (Part C), or a one-off bcrypt insert (mirror `082`'s note).
 5. **Test on a phone**: `https://beaiready.developai.co.za` renders with HTTPS; `grounded.developai.co.za` unchanged; `grounded.developai.co.za/beaiready` reroutes.
 
-## Remaining (local code — can build next)
-- **Part C** — `BusinessDashboard.jsx` at `/dashboard` (kind=business): 3 pillar cards, trainings read-only over `service_engagements`+`engagement_sessions` (by org), training materials scoped, toolbox link. Migrations `083_recommendations` + `084_business_metrics`. Em-dash where no data. **Plus the kind-based route gate** (business users → /dashboard, never the newsroom UI).
-- **Part D** — `intake_forms` + `intake_responses` + `forms_sheet_sync` hourly job (CSV → upsert by row-hash).
-- **Part E** — extend Pulse to `kind=business` tenants (branch newsroom-specific prompt copy).
-- **Handover checklist** — see the spec's HANDOVER CHECKLIST before Paul emails L2B the URL + login.
+## Done + verified locally (Part C — committed 17d909d)
+- Migrations `083_recommendations` + `084_business_metrics` (reversible). `routes/beaiready.js` (`/api/beaiready`, requireAuth, every read scoped to the caller's own tenant): recommendations, the five metrics (latest per metric), trainings read-only over `service_engagements`+`engagement_sessions` by the tenant's org, training materials (final courses in the tenant's sector). Admin-only writes for recs + metrics.
+- `pages/beaiready/BusinessDashboard.jsx` at `/dashboard`: five-metric row (em-dash until entered), three pillar cards (Governance → policy builder + live legal trackers; Visibility/Security → the audit's recommendations), upcoming/past trainings, materials, intake summary, toolbox link, BetterBoss roadmap-only.
+- **Route gate**: on the beaiready host the ONLY authed surface is `/dashboard` (newsroom product/admin/studio routes aren't mounted there); Login lands business clients on `/dashboard`. Verified: honest empty states for L2B; a seeded rec + metric rendered + isolated per tenant (office sees none; admin switcher sees L2B); test data removed.
+
+## Done + verified locally (Part D — committed ac449e3)
+- Migration `085_beaiready_intake.sql`: `intake_forms` + `intake_responses` (idempotent per-tenant upsert) + registers the hourly `forms_sheet_sync` job. `services/forms-sync.js` fetches each form's published CSV (no Google keys), parses it, upserts by sha256 row-hash. `/api/beaiready/intake` + dashboard summary. Verified end-to-end via a `data:` URL (2 rows, idempotent re-run, timestamps parsed); test data removed.
+
+## Part E — Pulse for business: DEFERRED (honest finding, not a prompt tweak)
+The spec assumed Pulse was AI-generated questions where you "branch the prompt copy." The **actual** Pulse (`server/pulse/*`, `routes/pulse*.js`) is a deep **Airtable-backed, Node-install + newsroom-matching** system: it requires `AIRTABLE_API_KEY`/`AIRTABLE_BASE_ID`, generates questions about *which Node a newsroom installed*, fuzzy-matches free-text newsroom names to Airtable records, and runs a generate→plan→report cycle. A "business" tenant (L2B) installs no Nodes and isn't in that Airtable model, so branching the prompt alone would produce nonsense (asking L2B which Node they installed) — a real business-Pulse needs its **own question model + delivery**, which is a separate design, not a safe edit. Per the governing rules (no fake data, break nothing), I did **not** bolt a broken branch onto the working newsroom Pulse.
+- **No breakage risk today**: businesses aren't auto-enrolled in Pulse (it's an admin/Airtable action), so nothing exposes business users to newsroom Pulse copy.
+- **The business input channel is Part D** (Forms intake) — which matches the spec's own line: *"Google Forms remains fallback only."*
+- **To build a real business-Pulse later**: a business question set (the 3-pillar SME questions), tenant-kind-aware generation, and delivery via the existing `/pulse/:token` page + an in-Postgres store (not the newsroom Airtable). Flagged for Paul to decide.
+
+## Handover checklist (before emailing L2B the URL + login)
+Per the spec's HANDOVER CHECKLIST. The box steps above (deploy + DNS + Caddy + real L2B user) open the door; then verify on a phone, confirm Grounded unchanged, L2B login → BusinessDashboard sees only its own data, BetterBoss "coming soon", no fake numbers.
