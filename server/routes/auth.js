@@ -5,6 +5,7 @@ import pool from '../db/pool.js';
 import config from '../config.js';
 import { requireAuth } from '../middleware/auth.js';
 import { bridgeAikitLogin, bridgeAikitLogout } from '../services/aikit-bridge.js';
+import { OFFICE_NEWSROOM_ID } from '../lib/tenancy.js';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, name, email, password_hash, role, sector_ids FROM team_members WHERE email = $1 AND tracker_access = true AND is_active = true',
+      'SELECT id, name, email, password_hash, role, sector_ids, newsroom_id FROM team_members WHERE email = $1 AND tracker_access = true AND is_active = true',
       [email]
     );
 
@@ -31,7 +32,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, sector_ids: user.sector_ids },
+      { id: user.id, email: user.email, role: user.role, sector_ids: user.sector_ids, newsroom_id: user.newsroom_id },
       config.jwtSecret,
       { expiresIn: '7d' }
     );
@@ -50,7 +51,7 @@ router.post('/login', async (req, res) => {
     // Mirror sign-in into AIKit so /aikit/* is also authenticated.
     await bridgeAikitLogin(res, user);
 
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, newsroom_id: user.newsroom_id } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Internal server error' });
@@ -76,18 +77,22 @@ router.post('/register', async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, 10);
 
+    // Self-registrations land in the office newsroom — the same shared space
+    // they effectively joined pre-multi-tenancy. Real partner newsrooms get
+    // their users via admin-managed onboarding (Phase 2d), which will also
+    // revisit this default (e.g. invite tokens).
     const { rows } = await pool.query(
-      `INSERT INTO team_members (name, email, password_hash, role, tracker_access, is_active)
-       VALUES ($1, $2, $3, 'member', true, true)
-       RETURNING id, name, email, role, sector_ids`,
-      [name, email, password_hash]
+      `INSERT INTO team_members (name, email, password_hash, role, tracker_access, is_active, newsroom_id)
+       VALUES ($1, $2, $3, 'member', true, true, $4)
+       RETURNING id, name, email, role, sector_ids, newsroom_id`,
+      [name, email, password_hash, OFFICE_NEWSROOM_ID]
     );
 
     const user = rows[0];
 
     // Auto-login: issue JWT + cookie
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, sector_ids: user.sector_ids || [] },
+      { id: user.id, email: user.email, role: user.role, sector_ids: user.sector_ids || [], newsroom_id: user.newsroom_id },
       config.jwtSecret,
       { expiresIn: '7d' }
     );
@@ -128,7 +133,11 @@ router.post('/logout', async (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, name, email, role, sector_ids FROM team_members WHERE id = $1',
+      `SELECT tm.id, tm.name, tm.email, tm.role, tm.sector_ids, tm.newsroom_id,
+              n.name AS newsroom_name, n.slug AS newsroom_slug
+         FROM team_members tm
+         LEFT JOIN newsrooms n ON n.id = tm.newsroom_id
+        WHERE tm.id = $1`,
       [req.user.id]
     );
     if (rows.length === 0) {

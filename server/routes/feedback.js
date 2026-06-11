@@ -2,7 +2,11 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { callClaude } from '../services/claude.js';
 import { requireRole } from '../middleware/auth.js';
+import { resolveNewsroomId } from '../lib/tenancy.js';
 
+// Feedback is a PLATFORM surface: every tenant's feedback lands in Develop AI's
+// one ops queue (admin reads are cross-newsroom by design). Writes are tagged
+// with the submitter's newsroom (Phase 2c) so items are attributable per-tenant.
 const router = Router();
 
 // ── Admin-only: list, update, delete, generate prompts ────────────────────────
@@ -25,9 +29,10 @@ router.post('/', async (req, res) => {
   try {
     const { content, page, category, priority } = req.body;
     if (!content) return res.status(400).json({ message: 'content required' });
+    const nid = await resolveNewsroomId(req);
     const { rows } = await pool.query(
-      `INSERT INTO feedback (user_id, page, category, content, priority) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.user.id, page || null, category || 'feature', content, priority || 'medium']
+      `INSERT INTO feedback (user_id, newsroom_id, page, category, content, priority) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [req.user.id, nid, page || null, category || 'feature', content, priority || 'medium']
     );
     res.status(201).json(rows[0]);
   } catch (err) {

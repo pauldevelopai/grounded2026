@@ -4,7 +4,7 @@
 > **Last updated: 2026-06-10.**
 
 ## One-line state
-Building the **GROUNDED V3 concept note** into the live `grounded2026` app, **local-first**. **🎉 Phase 1 is COMPLETE (steps 1–7).** The IA + cosmetic restructure is done: three clean shells, concept-note-led nav, honest empty states, no fake data, no backend changes. **Next is Phase 2** (multi-tenancy `newsroom_id` + confirming the bucket model) — OR commit/deploy Phase 1 first.
+Building the **GROUNDED V3 concept note** into the live `grounded2026` app, **local-first**. **Phase 1 COMPLETE** (committed to branch `phase-1-ia-restructure`, NOT merged/deployed). **Phase 2 (multi-tenancy): steps 2a + 2b + 2c DONE — newsroom isolation WORKS and is verified** (see [`PHASE2_PLAN.md`](PHASE2_PLAN.md) for the full record incl. the two-newsroom isolation test). **Next: step 2d** (AdminArea → Newsrooms onboarding UI: create newsroom + its users; admin newsroom switcher in the UI sending `X-Newsroom-Id`) → 2e (enforce NOT NULL + defaults on log tables) → 2f (node-model unification).
 
 ## How to resume in one command
 ```bash
@@ -99,10 +99,15 @@ Phase 1 (IA + cosmetic restructure) is done and meets its definition of done: ev
 1. **Commit/deploy Phase 1?** All of steps 1–7 are local + uncommitted. Say "commit the GROUNDED work" to branch + commit + push (nothing deploys until you ask).
 2. Eyeball the three shells (**/sections**, **/functions**, **/**, + admin-only **Admin**/**Studio**) — accent colours + groupings are still cheap to change (`index.css` + `sections.js`).
 
-## Local environment (already set up)
-- DB: local Postgres **:5433**, db `tracker`, real data (53 lawsuits) — no fakes.
-- Server: Express **:3001** (`grounded2026/server`, `npm run dev`). Client: Vite **:5173** (`grounded2026/client`, `npm run dev`). Vite proxies `/api` → :3001.
-- Env: `grounded2026/.env` (DATABASE_URL → :5433, keys present). **NB:** the `.env` `ADMIN_EMAIL`/`ADMIN_PASSWORD` no longer match the DB user — a direct `POST /api/auth/login` with them returns 401 (the team_members row has a different password hash). Use Paul's real login to view the authed product at `/sections`.
+## Local environment — THE WHOLE PLATFORM runs locally (2026-06-10)
+`bash grounded2026/start.sh` boots everything; anything already up is left alone.
+- DB: local Postgres **:5433**, db `tracker`, real data (53 lawsuits) — no fakes. (AIKit's own db `toolkitrag` also on :5433.)
+- Server: Express **:3001** (`grounded2026/server`). Client: Vite **:5173** (`grounded2026/client`).
+- **Hosted Nodes (multi-tenant, local):** analytics :4101 · verifier :4102 · progress :4103 · aiready :4104 · salesrep :4105 — repos in `PYTHON 2026/Nodes/node-*`, started with the tracker's `JWT_SECRET` + `DATABASE_URL` + `PORT` injected at process start (their own `.env` files untouched; same contract as the box's `deploy-node.sh`). They write `node_<slug>_*` tables in the local db. Podcasting = local-lite only (hosted needs blob storage).
+- **Nodes front door:** served at `/nodes/` from the local `PYTHON 2026/Nodes/nodes` repo by a tiny middleware in `client/vite.config.js`, which also mirrors Caddy's routing: `/nodes/<slug>/app/*` → that node's local port (prefix stripped), `/nodes/<slug>/mac|windows` → GitHub installer redirects.
+- **AIKit (`/tools/`):** FastAPI on **:8000** — source `ONMAC/aikit_bundle/aikit_source`, venv `~/.venvs/aikit`, its `.env` written 2026-06-10 (db `toolkitrag` on :5433, **EMBEDDING_PROVIDER=local_stub** because there's no OPENAI_API_KEY on this machine — drop a real key into that `.env` + set `EMBEDDING_PROVIDER=openai` for real embedding search).
+- Verified end-to-end in the browser: login → local front door → Audience Signal + Election Watch hosted apps authenticate via the `tracker_token` cookie ("RUNNING LOCALLY" banner) against the local DB.
+- Env: `grounded2026/.env` (DATABASE_URL → :5433, keys present). **Local login works:** `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`paul@developai.co.za` / the value in `.env`). The local user's `password_hash` was reset to the `.env` value on 2026-06-10 (the hash had drifted) — **local DB only; the box is untouched.** Verified: login → `/sections` (ProductShell) and `/admin` (AdminArea) both render with real data + the admin "Admin"/"Studio" entries.
 
 ## Not yet committed / deployed
 - All `docs/` changes + the new `client/src/ui/*` + `index.css` + `App.jsx` route are **local, uncommitted**.

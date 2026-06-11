@@ -9,14 +9,16 @@ import pool from '../db/pool.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';  // side-effect: registers the tool blocks
 import '../services/blocks/agents.js'; // side-effect: registers the agent blocks
+import { resolveNewsroomId, runWithNewsroom } from '../lib/tenancy.js';
 
 const router = Router();
 const COOKIE = process.env.AUTH_COOKIE || 'tracker_token';
 const DIRECT = new Set(['tool', 'agent']); // categories usable directly here
 
-function ctxFrom(req) {
+function ctxFrom(req, newsroomId) {
   return {
     userId: req.user?.id || null,
+    newsroomId: newsroomId || null,
     authToken: req.cookies?.[COOKIE] || null,
     origin: process.env.PUBLIC_BASE_URL || `https://${req.get('host')}`,
   };
@@ -45,11 +47,13 @@ router.post('/:slug/run', async (req, res) => {
     }
   }
   try {
-    const output = await b.run(input, ctxFrom(req));
+    const nid = await resolveNewsroomId(req);
+    // Ambient tenancy: the block's profile/reference loaders see THIS newsroom.
+    const output = await runWithNewsroom(nid, () => b.run(input, ctxFrom(req, nid)));
     const { rows } = await pool.query(
-      `INSERT INTO tool_outputs (tool, user_id, title, input, output)
-       VALUES ($1,$2,$3,$4::jsonb,$5::jsonb) RETURNING id, created_at`,
-      [b.slug, req.user?.id || null, req.body?.title || null, JSON.stringify(input), JSON.stringify(output ?? null)]
+      `INSERT INTO tool_outputs (tool, user_id, newsroom_id, title, input, output)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb) RETURNING id, created_at`,
+      [b.slug, req.user?.id || null, nid, req.body?.title || null, JSON.stringify(input), JSON.stringify(output ?? null)]
     );
     res.json({ id: rows[0].id, created_at: rows[0].created_at, output });
   } catch (err) {
@@ -59,9 +63,10 @@ router.post('/:slug/run', async (req, res) => {
 });
 
 router.get('/:slug/history', async (req, res) => {
+  const nid = await resolveNewsroomId(req);
   const { rows } = await pool.query(
-    `SELECT id, title, input, output, created_at FROM tool_outputs WHERE tool = $1 ORDER BY created_at DESC LIMIT 50`,
-    [req.params.slug]
+    `SELECT id, title, input, output, created_at FROM tool_outputs WHERE tool = $1 AND newsroom_id = $2 ORDER BY created_at DESC LIMIT 50`,
+    [req.params.slug, nid]
   );
   res.json(rows);
 });
