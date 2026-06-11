@@ -8,14 +8,37 @@ import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
 
 const STORAGE_KEY = 'grounded_chat_history_v1';
-const SUGGESTIONS = [
-  'Which Node should I start with?',
-  'How do I verify a suspicious election post?',
-  'How can my newsroom make money from AI?',
-  'When does the EU AI Act take effect?',
-];
 
-export default function PublicChatbot() {
+// Same component, same endpoint, same RAG — two voices. The `audience` prop
+// (default 'newsroom') swaps the copy and is sent to the server so its system
+// prompt answers as Grounded (newsrooms) or BE AI READY (businesses).
+const AUDIENCE_COPY = {
+  newsroom: {
+    subtitle: 'Powered by Claude · across Grounded',
+    placeholder: 'Ask about implementing AI in your newsroom…',
+    intro: "I help newsrooms put AI to work — across Grounded's Nodes and tools, plus our resources on AI law, ethics, monetisation and data security. Ask me anything about implementing AI in your newsroom.",
+    suggestions: [
+      'Which Node should I start with?',
+      'How do I verify a suspicious election post?',
+      'How can my newsroom make money from AI?',
+      'When does the EU AI Act take effect?',
+    ],
+  },
+  business: {
+    subtitle: 'Powered by Claude · Be AI Ready',
+    placeholder: 'Ask about making your business AI ready…',
+    intro: 'I help small and medium businesses get AI ready across three pillars — Visibility (how AI represents you), Governance (your AI policy and accountability) and Security (where your data leaks to AI). Ask me anything.',
+    suggestions: [
+      'How do AI assistants describe my business today?',
+      'Do we need an AI policy — and what goes in it?',
+      'Which AI tools leak our data, and how do we stop it?',
+      'How do we become the answer AI returns in our industry?',
+    ],
+  },
+};
+
+export default function PublicChatbot({ audience = 'newsroom' }) {
+  const copy = AUDIENCE_COPY[audience] || AUDIENCE_COPY.newsroom;
   const [open, setOpen] = useState(false);
   const [history, setHistory] = useState([]);
   const [input, setInput] = useState('');
@@ -56,6 +79,7 @@ export default function PublicChatbot() {
         body: JSON.stringify({
           message: msg,
           history: history.map(h => ({ role: h.role, content: h.content })),
+          audience,
         }),
       });
       setHistory([...nextHistory, {
@@ -122,7 +146,7 @@ export default function PublicChatbot() {
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
           <span style={{ fontSize: 14, fontWeight: 700 }}>Ask For Help</span>
-          <span style={{ fontSize: 10, color: '#94A3B8' }}>Powered by Claude · across Grounded</span>
+          <span style={{ fontSize: 10, color: '#94A3B8' }}>{copy.subtitle}</span>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           {history.length > 0 && (
@@ -135,7 +159,7 @@ export default function PublicChatbot() {
       {/* Messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 12, background: '#FAFAF9' }}>
         {history.length === 0 && (
-          <Intro onPick={send} />
+          <Intro onPick={send} copy={copy} />
         )}
         {history.map((msg, i) => <Bubble key={i} msg={msg} />)}
         {loading && <LoadingBubble />}
@@ -153,7 +177,7 @@ export default function PublicChatbot() {
       >
         <input
           type="text"
-          placeholder="Ask about implementing AI in your newsroom…"
+          placeholder={copy.placeholder}
           value={input}
           onChange={e => setInput(e.target.value)}
           disabled={loading}
@@ -256,15 +280,15 @@ function LoadingBubble() {
   );
 }
 
-function Intro({ onPick }) {
+function Intro({ onPick, copy }) {
   return (
     <div style={{ padding: 8 }}>
       <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.5 }}>
-        I help newsrooms put AI to work — across Grounded's Nodes and tools, plus our resources on AI law, ethics, monetisation and data security. Ask me anything about implementing AI in your newsroom.
+        {copy.intro}
       </div>
       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Try</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {SUGGESTIONS.map(s => (
+        {copy.suggestions.map(s => (
           <button key={s} onClick={() => onPick(s)} style={{
             textAlign: 'left', padding: '8px 10px', fontSize: 12,
             border: '1px solid var(--border-color)', borderRadius: 8,

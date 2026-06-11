@@ -82,6 +82,9 @@ import PulseAnswer from './pages/pulse/PulseAnswer.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
+import BeAIReadyLayout from './pages/beaiready/BeAIReadyLayout.jsx';
+import BeAIReadyHome from './pages/beaiready/BeAIReadyHome.jsx';
+import BeAIReadyRedirect from './pages/beaiready/BeAIReadyRedirect.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
 import PublicLawsuitDetail from './pages/public/PublicLawsuitDetail.jsx';
 import PublicRegulationsList from './pages/public/PublicRegulationsList.jsx';
@@ -112,6 +115,14 @@ function LazyFallback() {
   );
 }
 
+// One app, two doors (BEAIREADY spec Part B). On beaiready.* the public routes
+// wrap in BeAIReadyLayout and / renders the BE AI READY landing; on every other
+// host (grounded.*) behaviour is byte-for-byte unchanged — PublicShell is just
+// PublicLayout and PublicRootHome is PublicHome.
+const IS_BEAIREADY = typeof window !== 'undefined' && window.location.hostname.startsWith('beaiready');
+const PublicShell = IS_BEAIREADY ? BeAIReadyLayout : PublicLayout;
+const PublicRootHome = IS_BEAIREADY ? BeAIReadyHome : PublicHome;
+
 export default function App() {
   return (
     <AuthProvider>
@@ -120,21 +131,24 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/portal" element={<ParticipantPortal />} />
+          {/* On the main host, /beaiready reroutes to the dedicated subdomain. */}
+          <Route path="/beaiready" element={<BeAIReadyRedirect />} />
           {/* The step-1 staging preview is now the real product (ProductShell at
               /sections). Old preview link redirects so nothing 404s. */}
           <Route path="/_preview" element={<Navigate to="/sections" replace />} />
           {/* Pulse public answer page — newsroom-facing, no login (Phase 4). */}
           <Route path="/pulse/:token" element={<PulseAnswer />} />
 
-          {/* ── Public site root (/) renders PublicHome with PublicLayout.
-              Sub-pages live under /legal/* to avoid colliding with admin
-              routes (/lawsuits, /regulations, /sources, etc.). */}
-          <Route path="/" element={<PublicLayout />}>
-            <Route index element={<PublicHome />} />
+          {/* ── Public site root (/) — PublicShell + home pick the door by host
+              (grounded.* → PublicLayout/PublicHome; beaiready.* → the BE AI READY
+              landing). Sub-pages live under /legal/* to avoid colliding with
+              admin routes (/lawsuits, /regulations, /sources, etc.). */}
+          <Route path="/" element={<PublicShell />}>
+            <Route index element={<PublicRootHome />} />
           </Route>
 
           {/* ── Public AI Legal site (sub-pages) — no auth required ── */}
-          <Route path="/legal" element={<PublicLayout />}>
+          <Route path="/legal" element={<PublicShell />}>
             <Route index element={<PublicHome />} />
             <Route path="dashboard"      element={<Suspense fallback={<LazyFallback />}><PublicLegalDashboard /></Suspense>} />
             <Route path="ethics-builder" element={<Suspense fallback={<LazyFallback />}><EthicsPolicyBuilder /></Suspense>} />
@@ -156,17 +170,17 @@ export default function App() {
           </Route>
 
           {/* ── Monetisation — third top-level public section ── */}
-          <Route path="/monetisation" element={<PublicLayout />}>
+          <Route path="/monetisation" element={<PublicShell />}>
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicMonetisation /></Suspense>} />
           </Route>
 
           {/* ── Open-source tools directory (reached from the Tools page) ── */}
-          <Route path="/open-source" element={<PublicLayout />}>
+          <Route path="/open-source" element={<PublicShell />}>
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicToolsDirectory /></Suspense>} />
           </Route>
 
           {/* ── Training — videos & materials from published courses ── */}
-          <Route path="/training" element={<PublicLayout />}>
+          <Route path="/training" element={<PublicShell />}>
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
           </Route>
 

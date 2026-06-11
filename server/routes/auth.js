@@ -134,7 +134,7 @@ router.get('/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT tm.id, tm.name, tm.email, tm.role, tm.sector_ids, tm.newsroom_id,
-              n.name AS newsroom_name, n.slug AS newsroom_slug
+              n.name AS newsroom_name, n.slug AS newsroom_slug, n.kind AS newsroom_kind
          FROM team_members tm
          LEFT JOIN newsrooms n ON n.id = tm.newsroom_id
         WHERE tm.id = $1`,

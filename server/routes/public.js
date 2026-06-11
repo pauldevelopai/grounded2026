@@ -607,7 +607,7 @@ router.post('/chat', chatCors, async (req, res) => {
       return res.status(429).json({ message: `Too many questions. Try again in ${Math.ceil(limit.retryAfter / 60)} minutes.` });
     }
 
-    const { message, history = [] } = req.body || {};
+    const { message, history = [], audience } = req.body || {};
     if (!message || typeof message !== 'string' || message.length < 2) {
       return res.status(400).json({ message: 'message required' });
     }
@@ -751,6 +751,7 @@ router.post('/chat', chatCors, async (req, res) => {
       history: safeHistory,
       message: message.slice(0, 500),
       contextItems,
+      audience: audience === 'business' ? 'business' : 'newsroom',
     });
 
     res.json({ reply, citations, context_used: contextItems.length });

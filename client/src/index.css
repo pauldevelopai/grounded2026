@@ -892,3 +892,63 @@ a.layer-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); transform: transla
 .sections-overview-head h1 { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px; }
 .sections-overview-head p { color: var(--text-secondary); font-size: 15px; margin-top: var(--space-2); max-width: 70ch; line-height: 1.6; }
 .section-block { margin-bottom: var(--space-8); }
+
+/* ── BE AI READY landing additions — append to client/src/index.css ──
+   Adds ONLY the classes BeAIReadyHome.jsx uses that don't exist yet
+   (verified missing 11 Jun 2026: hub-card-kicker, hub-band, hub-tiers,
+   hub-tier*, hub-foot-note). Everything else reuses existing hub-* styles.
+   Scoped under .hub-beaiready where it overrides, global where additive. */
+
+.hub-beaiready { --beaiready-accent: #c75b39; }
+.hub-beaiready .hub-btn-solid { background: var(--beaiready-accent); border-color: var(--beaiready-accent); }
+.hub-beaiready .hub-eyebrow { color: var(--beaiready-accent); }
+
+.hub-card-kicker {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: #c75b39; margin-bottom: 6px;
+}
+.hub-card-q { color: #c75b39; font-size: 13px; margin: 4px 0 8px; }
+
+.hub-band {
+  background: #faf6f1; border-left: 4px solid #c75b39; border-radius: 12px;
+  padding: 22px 26px; margin: 10px 0 26px;
+}
+.hub-band h2 { font-size: 22px; margin: 0 0 8px; letter-spacing: -0.3px; }
+.hub-band p { margin: 0; color: #4a443d; line-height: 1.6; }
+
+.hub-tiers { display: flex; gap: 16px; margin: 10px 0 14px; flex-wrap: wrap; }
+.hub-tier {
+  flex: 1; min-width: 200px; border: 1px solid #e4dcd2; border-radius: 12px;
+  padding: 18px; position: relative; background: #fff;
+}
+.hub-tier-featured { border-color: #c75b39; box-shadow: 0 4px 16px rgba(199,91,57,0.10); }
+.hub-tier h3 { margin: 0 0 4px; font-size: 17px; }
+.hub-tier-ribbon {
+  position: absolute; top: -10px; left: 18px; background: #c75b39; color: #fff;
+  font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 20px;
+}
+.hub-tier-size { font-size: 12.5px; color: #6b6359; margin-bottom: 10px; }
+.hub-tier-price { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+.hub-tier-note { font-size: 11.5px; color: #8a8076; margin-top: 6px; }
+
+.hub-foot-note { font-size: 13px; color: #6b6359; line-height: 1.6; margin: 6px 0 30px; }
+.hub-foot-note a { color: #c75b39; }
+
+@media (max-width: 640px) {
+  .hub-tiers { flex-direction: column; }
+}
+
+/* v3 additions: pillar bullets, market stats footnotes, how-it-works steps */
+.hub-card-points { margin: 8px 0 0; padding-left: 18px; }
+.hub-card-points li { font-size: 12.5px; color: #4a443d; margin-bottom: 4px; }
+.hub-market-stats .hub-stat-value { color: #c75b39; }
+.hub-footnotes { font-size: 11px; color: #8a8076; margin: 6px 0 24px; line-height: 1.5; }
+.hub-steps { margin: 8px 0 26px; }
+.hub-step { display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; }
+.hub-step-n {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+  background: #1c1b1a; color: #e0855f; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.hub-step p { margin: 2px 0 0; font-size: 13px; color: #6b6359; }
