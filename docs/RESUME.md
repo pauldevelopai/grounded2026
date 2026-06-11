@@ -109,7 +109,11 @@ Phase 1 (IA + cosmetic restructure) is done and meets its definition of done: ev
 - Verified end-to-end in the browser: login → local front door → Audience Signal + Election Watch hosted apps authenticate via the `tracker_token` cookie ("RUNNING LOCALLY" banner) against the local DB.
 - Env: `grounded2026/.env` (DATABASE_URL → :5433, keys present). **Local login works:** `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`paul@developai.co.za` / the value in `.env`). The local user's `password_hash` was reset to the `.env` value on 2026-06-10 (the hash had drifted) — **local DB only; the box is untouched.** Verified: login → `/sections` (ProductShell) and `/admin` (AdminArea) both render with real data + the admin "Admin"/"Studio" entries.
 
-## Deploying Phase 1+2 to the box — the runbook (READY 2026-06-11)
+## Deploying Phase 1+2 to the box — ✅ DONE & VERIFIED LIVE 2026-06-11
+
+**The box is now running Phase 1+2** (branch `phase-1-ia-restructure`, head `5ffb174`; DB backed up to `~/tracker-backup-*.sql` on the box first). Verified on grounded.developai.co.za: `/api/newsrooms` → 401 (new route live), migrations 080+081 applied (deploy.sh `set -e` reached the pm2 restart), and the live JS bundle carries the Hub + Functions + AdminArea code. Future deploys: the box is now on the `phase-1-ia-restructure` branch, so `cd /home/ubuntu/tracker && bash deploy.sh` is enough.
+
+<details><summary>Original runbook (kept for reference)</summary>
 
 Branch **`phase-1-ia-restructure`** (head `9d0ba65`) is pushed and is a **superset of both `origin/main` and `origin/pulse-system`** (main was merged in — the Ask-For-Help polish + public-chat CORS), so deploying it loses nothing whichever branch the box was on. All steps via **Lightsail browser SSH** (the old SSH key is leaked/rotated — don't use a pasted key).
 
@@ -126,6 +130,7 @@ cd /home/ubuntu/tracker && git stash && git fetch origin && git checkout phase-1
 **Rollback if needed**: SQL at the foot of `server/db/migrations/080…sql` + `081…sql`, or restore the backup: `psql -U holly tracker < ~/tracker-backup-….sql`. To revert the code: `git checkout <old-branch> && bash deploy.sh`.
 
 **Box notes:** no new env vars (office newsroom id is baked in); existing logins keep working (legacy-token DB fallback); the hosted Nodes are untouched by this deploy (their runtime tenancy unification is the Phase-3 opener below).
+</details>
 
 ## ▶ NEXT SESSION — where we pick up
 
