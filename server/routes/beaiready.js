@@ -158,4 +158,20 @@ router.get('/materials', async (req, res) => {
   } catch (err) { console.error('[beaiready/materials]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Intake responses (from synced Google-Form CSVs — spec Part D) ────────────
+router.get('/intake', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: forms } = await pool.query(
+      `SELECT f.form_name, f.last_synced_at,
+              (SELECT COUNT(*)::int FROM intake_responses r
+                WHERE r.newsroom_id = f.newsroom_id AND r.form_name = f.form_name) AS response_count
+         FROM intake_forms f WHERE f.newsroom_id = $1 AND f.is_enabled = true
+        ORDER BY f.form_name`,
+      [newsroomId]
+    );
+    res.json(forms);
+  } catch (err) { console.error('[beaiready/intake]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 export default router;

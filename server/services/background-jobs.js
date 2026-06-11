@@ -5,6 +5,7 @@ import { createKnowledgeEntry } from './knowledge.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
 import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scraper.js';
 import { startScan, finishScan, updateScan } from './scan-state.js';
+import { runFormsSheetSync } from './forms-sync.js';
 
 // Helper: create a notification for all admin users (broadcast)
 async function notify(type, title, message, link = null) {
@@ -925,6 +926,7 @@ async function runEthicsTriage() {
 }
 
 export const JOB_REGISTRY = {
+  forms_sheet_sync: runFormsSheetSync,
   follow_up_monitor: runFollowUpMonitor,
   content_generator: runContentGenerator,
   industry_researcher: runIndustryResearcher,

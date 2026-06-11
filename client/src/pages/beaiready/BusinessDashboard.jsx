@@ -29,12 +29,14 @@ export default function BusinessDashboard() {
   const [metrics, setMetrics] = useState(null);
   const [trainings, setTrainings] = useState(null);
   const [materials, setMaterials] = useState(null);
+  const [intake, setIntake] = useState(null);
 
   useEffect(() => {
     apiFetch('/beaiready/recommendations').then(setRecs).catch(() => setRecs([]));
     apiFetch('/beaiready/metrics').then(setMetrics).catch(() => setMetrics([]));
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
     apiFetch('/beaiready/materials').then(setMaterials).catch(() => setMaterials([]));
+    apiFetch('/beaiready/intake').then(setIntake).catch(() => setIntake([]));
   }, []);
 
   const metricVal = (key) => {
@@ -137,6 +139,25 @@ export default function BusinessDashboard() {
                     ))}
                   </ul>
                 )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Intake (from your connected forms — spec Part D) ── */}
+      <div className="hub-section-label">Intake</div>
+      <section className="hub-band" style={{ marginBottom: 24 }}>
+        {intake == null ? (
+          <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
+        ) : intake.length === 0 ? (
+          <p style={{ margin: 0 }}>No intake forms connected yet. Your form responses feed your strategy and training prep.</p>
+        ) : (
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {intake.map((f) => (
+              <li key={f.form_name} style={{ fontSize: 13.5 }}>
+                <strong>{f.form_name}</strong> — {f.response_count} response{f.response_count === 1 ? '' : 's'}
+                {f.last_synced_at && <span style={{ color: '#8a8076' }}> · synced {new Date(f.last_synced_at).toLocaleDateString()}</span>}
               </li>
             ))}
           </ul>
