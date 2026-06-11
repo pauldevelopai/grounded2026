@@ -85,6 +85,7 @@ import PublicHome from './pages/public/PublicHome.jsx';
 import BeAIReadyLayout from './pages/beaiready/BeAIReadyLayout.jsx';
 import BeAIReadyHome from './pages/beaiready/BeAIReadyHome.jsx';
 import BeAIReadyRedirect from './pages/beaiready/BeAIReadyRedirect.jsx';
+import BusinessDashboard from './pages/beaiready/BusinessDashboard.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
 import PublicLawsuitDetail from './pages/public/PublicLawsuitDetail.jsx';
 import PublicRegulationsList from './pages/public/PublicRegulationsList.jsx';
@@ -184,6 +185,22 @@ export default function App() {
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
           </Route>
 
+          {/* ── BE AI READY business authed area (spec Part C). On the beaiready
+                host the ONLY authed surface is the client dashboard; the newsroom
+                product/admin/studio routes below aren't mounted there at all, so a
+                business user can never reach the newsroom UI. ── */}
+          {IS_BEAIREADY && (
+            <Route element={<ProtectedRoute />}>
+              <Route element={<BeAIReadyLayout />}>
+                <Route path="/dashboard" element={<BusinessDashboard />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Route>
+            </Route>
+          )}
+
+          {/* ── The newsroom product / platform-admin / studio surfaces — mounted
+                on the grounded host only (not on the beaiready business door). ── */}
+          {!IS_BEAIREADY && (<>
           {/* ── ProductShell — the concept-note-led newsroom product (Phase 1 · steps 2 + 5).
                 The 5 sections + 3 strategic layers + the real product pages: Builder, Run,
                 Awareness, the Tracker (lawsuits + regulations), Pulse and Profile. Login
@@ -294,6 +311,7 @@ export default function App() {
               </Route>
             </Route>
           </Route>
+          </>)}
         </Routes>
         </AiAssistantProvider>
       </SectorProvider>

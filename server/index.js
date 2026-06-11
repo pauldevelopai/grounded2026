@@ -51,6 +51,7 @@ import publicHtmlRoutes from './routes/public-html.js';
 import nodesRoutes from './routes/nodes.js';
 import adminOverviewRoutes from './routes/admin.js';
 import newsroomsRoutes from './routes/newsrooms.js';
+import beaireadyRoutes from './routes/beaiready.js';
 import pulseRoutes from './routes/pulse.js';
 import pulsePublicRoutes from './routes/pulse-public.js';
 import { requirePulse } from './middleware/pulse-flag.js';
@@ -305,6 +306,8 @@ app.use('/api/usecases', requireAuth, usecasesRoutes);
 app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
 // Feedback: all authenticated users can submit; admin can view/manage
 app.use('/api/feedback', requireAuth, feedbackRoutes);
+// BE AI READY business dashboard data — reads scoped to the caller's own tenant.
+app.use('/api/beaiready', requireAuth, beaireadyRoutes);
 // Audience questions (outbound): any logged-in user fetches /next + answers;
 // authoring + results endpoints self-guard with requireRole('admin') inside.
 app.use('/api/user-questions', requireAuth, userQuestionsRoutes);

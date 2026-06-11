@@ -41,9 +41,14 @@ export default function Login() {
 
     setLoading(true);
     try {
+      // On the BE AI READY door, the only authed surface is the client
+      // dashboard — always land business clients there.
+      const isBeAIReady = window.location.hostname.startsWith('beaiready');
       if (mode === 'login') {
         const user = await login(email, password);
-        if (next) {
+        if (isBeAIReady) {
+          navigate('/dashboard');
+        } else if (next) {
           // safeNext already validated this is an in-app path. Use
           // window.location for /aikit/* (Express-served) so the page
           // reloads against the new session cookies.
@@ -53,7 +58,8 @@ export default function Login() {
         }
       } else {
         await register(name.trim(), email, password);
-        if (next) window.location.href = next;
+        if (isBeAIReady) navigate('/dashboard');
+        else if (next) window.location.href = next;
         else navigate('/lawsuits');
       }
     } catch (err) {
