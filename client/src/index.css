@@ -831,6 +831,8 @@ a.layer-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); transform: transla
 .hub-btn-solid:hover { background: var(--accent-hover); }
 .hub-btn-ghost { border: 1px solid var(--border-color); color: var(--text-primary); }
 .hub-btn-ghost:hover { background: #F8FAFC; }
+.hub-btn-text { display: inline-flex; align-items: center; padding: 10px 6px; font-size: 14px; font-weight: 600; color: var(--text-secondary); text-decoration: none; }
+.hub-btn-text:hover { color: var(--text-primary); }
 
 .hub-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-8); }
 .hub-stat { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius); box-shadow: var(--shadow); }
