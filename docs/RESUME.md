@@ -109,22 +109,31 @@ Phase 1 (IA + cosmetic restructure) is done and meets its definition of done: ev
 - Verified end-to-end in the browser: login → local front door → Audience Signal + Election Watch hosted apps authenticate via the `tracker_token` cookie ("RUNNING LOCALLY" banner) against the local DB.
 - Env: `grounded2026/.env` (DATABASE_URL → :5433, keys present). **Local login works:** `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`paul@developai.co.za` / the value in `.env`). The local user's `password_hash` was reset to the `.env` value on 2026-06-10 (the hash had drifted) — **local DB only; the box is untouched.** Verified: login → `/sections` (ProductShell) and `/admin` (AdminArea) both render with real data + the admin "Admin"/"Studio" entries.
 
-## Deploying Phase 1+2 to the box — the runbook
+## Deploying Phase 1+2 to the box — the runbook (READY 2026-06-11)
 
-Everything is on branch **`phase-1-ia-restructure`** (pushed). The box deploys whatever branch it has checked out, via `deploy.sh`. Steps (all via **Lightsail browser SSH**; the old SSH key is leaked/rotated — don't use a pasted key):
+Branch **`phase-1-ia-restructure`** (head `9d0ba65`) is pushed and is a **superset of both `origin/main` and `origin/pulse-system`** (main was merged in — the Ask-For-Help polish + public-chat CORS), so deploying it loses nothing whichever branch the box was on. All steps via **Lightsail browser SSH** (the old SSH key is leaked/rotated — don't use a pasted key).
 
-1. **Back up the box DB first** (migrations 080+081 run during deploy; they're additive + reversible, but belt-and-braces):
-   ```bash
-   pg_dump -U holly tracker > ~/tracker-backup-$(date +%Y%m%d).sql
-   ```
-2. **Check which branch the box is on**: `cd /home/ubuntu/tracker && git branch --show-current` (expected: `pulse-system` or `main`).
-3. **Merge the work into that branch** (on this Mac, or via a GitHub PR):
-   ```bash
-   git checkout <box-branch> && git pull && git merge phase-1-ia-restructure && git push
-   ```
-4. **Deploy on the box**: `cd /home/ubuntu/tracker && bash deploy.sh`
-   (pulls → npm install → **runs migrations 080+081** → client build → pm2 restart.)
-5. **Smoke-test live**: `/` (Hub), `/sections` (product, login), `/newsrooms-admin` (admin), `/nodes/` + open a hosted Node (cookie still valid), workflows still listed (they all backfilled to the office newsroom).
-6. **If anything is wrong**: the rollback SQL is at the foot of `server/db/migrations/080…sql` + `081…sql`, and the DB backup from step 1 restores everything: `psql -U holly tracker < ~/tracker-backup-….sql`.
+**Step 1 — back up the box DB first** (migrations 080+081 run during deploy; additive + reversible, but belt-and-braces):
+```bash
+pg_dump -U holly tracker > ~/tracker-backup-$(date +%Y%m%d-%H%M).sql && ls -la ~/tracker-backup-*.sql
+```
+**Step 2 — deploy** (checks out the superset branch + runs deploy.sh = pull → npm install → migrations 080+081 → client build → pm2 restart):
+```bash
+cd /home/ubuntu/tracker && git stash && git fetch origin && git checkout phase-1-ia-restructure && git pull --ff-only && bash deploy.sh
+```
+**Step 3 — smoke-test live**: `/` (Hub), `/sections` (product, login), `/newsrooms-admin` (admin → create a real newsroom), `/nodes/` + open a hosted Node (cookie still valid), and confirm existing workflows still list (they all backfilled to the office newsroom).
 
-**Box notes:** no new env vars needed (the office newsroom id is baked in); existing logged-in users keep working (legacy-token DB fallback); the hosted Nodes are untouched by this deploy (their runtime tenancy unification is the named Phase-3 follow-up).
+**Rollback if needed**: SQL at the foot of `server/db/migrations/080…sql` + `081…sql`, or restore the backup: `psql -U holly tracker < ~/tracker-backup-….sql`. To revert the code: `git checkout <old-branch> && bash deploy.sh`.
+
+**Box notes:** no new env vars (office newsroom id is baked in); existing logins keep working (legacy-token DB fallback); the hosted Nodes are untouched by this deploy (their runtime tenancy unification is the Phase-3 opener below).
+
+## ▶ NEXT SESSION — where we pick up
+
+Resume anytime: `bash grounded2026/start.sh`, then tell Claude **"Pick up the GROUNDED V3 plan"**.
+
+**First task of Phase 3 — unify the hosted-Node runtime's tenancy (cross-repo):**
+- Today `grounded-node-runtime/src/server-hosted.js` sets `tenantOf = (u) => String(u.id)` — the hosted Nodes key their `node_<slug>_*` data by **user id**, not newsroom. Now that the tracker JWT carries a real `newsroom_id` (Phase 2b), change `tenantOf` to `(u) => u.newsroom_id || String(u.id)`.
+- Then: bump + tag the runtime, `npm install` the new tag in each `node-*` repo, redeploy the hosted Nodes, and run a **one-time re-key** on the box mapping existing `node_*` rows from their user-id tenant key → the user's newsroom id (office for current data).
+- It's its own deploy (separate repos + a data migration) — do NOT bundle with the Phase-1/2 deploy above.
+
+Then the **Phase 3 feature build-out** (each real-data-only, see `GROUNDED_V3_BUILD_PLAN.md`): Archivist first (per-newsroom RAG — the multi-tenancy we just built is its prerequisite), then Digital Security Audit, Policy Builder, Translator, etc.
