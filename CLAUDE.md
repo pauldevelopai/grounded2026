@@ -33,6 +33,10 @@ The public wordmark everywhere is **"Grounded"** (subtitle "Newsroom-owned AI ·
 - `routes/feedback.js` + `components/FeedbackBubble.jsx` + `pages/feedback/FeedbackList.jsx` — feedback from any logged-in user (public site, admin, AND inside hosted Nodes) lands here.
 - Nodes admin page: `pages/nodes/NodesAdmin.jsx` at **`/node-admin`** (NOT `/nodes` — `/nodes/*` is the Caddy-served front door).
 
+## Local dev — the WHOLE platform runs locally
+
+`bash start.sh` boots everything on this machine: Postgres check (:5433, db `tracker`), server :3001, client :5173, the five hosted Nodes (:4101–4105, against the local DB), and AIKit :8000. `client/vite.config.js` mirrors the box's Caddy routing (front door at `/nodes/`, per-slug app proxies, `/tools` → :8000). State + caveats: `docs/RESUME.md`.
+
 ## Deploying (CRITICAL — front-end changes don't show until you build)
 
 On the box (`/home/ubuntu/tracker`), via **Lightsail browser SSH** (the old SSH key was leaked and must be rotated; don't use a chat-pasted key):
@@ -52,14 +56,14 @@ cd /home/ubuntu/tracker && bash deploy.sh
 
 ## The Nodes system (how to add one)
 
-Nodes are separate repos (`pauldevelopai/node-<slug>`) built on the shared runtime `@developai/grounded-node-runtime` (current tag **`v0.9.0`**):
+Nodes are separate repos (`pauldevelopai/node-<slug>`) built on the shared runtime `@developai/grounded-node-runtime` (current tag **`v0.14.0`**):
 - **Local** = `createServer({ slug, host: createLiteHost(...), handlers })` (index.js).
 - **Hosted** = `createHostedServer({ slug, handlers, ensureSchema?, mountRoutes?, productName, staticDir })` (server-hosted.js) — verifies the `tracker_token` cookie, scopes a per-request Postgres host, injects the Grounded nav + feedback + "run locally" footer.
-- **Two storage patterns:** Postgres tables via `ensureSchema` (node-analytics), or per-newsroom key/value via `host.store` + custom routes via `mountRoutes` (node-verifier). The latter (runtime v0.9.0) is how file-based Nodes go multi-tenant.
+- **Two storage patterns:** Postgres tables via `ensureSchema` (node-analytics), or per-newsroom key/value via `host.store` + custom routes via `mountRoutes` (node-verifier). The latter (runtime v0.14.0) is how file-based Nodes go multi-tenant.
 
 **To add a Node, see `pauldevelopai/nodes` → `HANDOVER.md` (whole-system map) then `ADD_A_NODE.md` (the recipe).** Short version: build the repo from the `node-analytics` or `node-verifier` pattern → add an entry to `nodes/nodes.json` (front door renders from it) → for hosting, run `nodes/deploy-node.sh <slug> <port>` on the box and paste the Caddy block it prints.
 
-**GOTCHA (npm + github deps):** Nodes pin the runtime to a tag (`github:pauldevelopai/grounded-node-runtime#v0.9.0`). `npm install` can serve a STALE cached copy — if a Node runs old runtime code, force it: `rm -rf node_modules/@developai && npm install`.
+**GOTCHA (npm + github deps):** Nodes pin the runtime to a tag (`github:pauldevelopai/grounded-node-runtime#v0.14.0`). `npm install` can serve a STALE cached copy — if a Node runs old runtime code, force it: `rm -rf node_modules/@developai && npm install`.
 
 ## Repos
 - `pauldevelopai/tracker` (this) — AI Legal site + admin + the Grounded shell.
