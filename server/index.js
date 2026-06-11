@@ -50,6 +50,7 @@ import publicRoutes from './routes/public.js';
 import publicHtmlRoutes from './routes/public-html.js';
 import nodesRoutes from './routes/nodes.js';
 import adminOverviewRoutes from './routes/admin.js';
+import newsroomsRoutes from './routes/newsrooms.js';
 import pulseRoutes from './routes/pulse.js';
 import pulsePublicRoutes from './routes/pulse-public.js';
 import { requirePulse } from './middleware/pulse-flag.js';
@@ -326,6 +327,7 @@ admin.use(requireAuth);
 admin.use(requireRole('admin'));
 
 admin.use('/admin',                adminOverviewRoutes);
+admin.use('/newsrooms',            newsroomsRoutes);   // Phase 2d — newsroom onboarding
 admin.use('/sectors',              sectorRoutes);
 admin.use('/contacts',             sectorFilter, contactRoutes);
 admin.use('/organisations',        sectorFilter, organisationRoutes);

@@ -71,6 +71,7 @@ import ReferenceData from './pages/settings/ReferenceData.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
 import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
+import NewsroomsAdmin from './pages/admin/NewsroomsAdmin.jsx';
 import Insights from './pages/admin/Insights.jsx';
 import UserQuestions from './pages/admin/UserQuestions.jsx';
 import PulseGate from './pages/pulse/PulseGate.jsx';
@@ -214,6 +215,7 @@ export default function App() {
             <Route element={<AdminRoute />}>
               <Route element={<AdminArea />}>
                 <Route path="/admin" element={<AdminOverview />} />
+                <Route path="/newsrooms-admin" element={<NewsroomsAdmin />} />
                 <Route path="/insights" element={<Insights />} />
                 <Route path="/admin/questions" element={<UserQuestions />} />
                 <Route path="/scraper-dashboard" element={<ScraperDashboard />} />

@@ -16,11 +16,13 @@ import { usePulseEnabled } from '../hooks/usePulseEnabled.js';
 import AiAssistantPanel from '../components/AiAssistantPanel.jsx';
 import FeedbackBubble from '../components/FeedbackBubble.jsx';
 import SectorSelect from './SectorSelect.jsx';
+import NewsroomSwitcher from './NewsroomSwitcher.jsx';
 
 const ADMIN_NAV = [
   { to: '/admin',                  label: 'Command centre',   group: 'Overview' },
   { to: '/insights',               label: 'Insights',         group: 'Overview' },
   { to: '/admin/questions',        label: 'Questions',        group: 'Overview' },
+  { to: '/newsrooms-admin',        label: 'Newsrooms',        group: 'Newsrooms' },
   { to: '/scraper-dashboard',      label: 'Scraper Dashboard', group: 'AI Legal tracker' },
   { to: '/ingestion',              label: 'Ingestion',        group: 'AI Legal tracker' },
   { to: '/legal-sources',          label: 'Sources',          group: 'AI Legal tracker' },
@@ -96,6 +98,10 @@ export default function AdminArea() {
           </Link>
         </div>
 
+        {/* Act-as-newsroom (Phase 2d) + the Develop AI sector filter */}
+        <div style={{ padding: '12px 16px 0' }}>
+          <NewsroomSwitcher dark />
+        </div>
         <SectorSelect />
 
         <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>

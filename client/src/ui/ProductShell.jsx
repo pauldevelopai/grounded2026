@@ -15,6 +15,7 @@ import { SECTIONS } from './sections.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import FeedbackBubble from '../components/FeedbackBubble.jsx';
 import QuestionBubble from '../components/QuestionBubble.jsx';
+import NewsroomSwitcher from './NewsroomSwitcher.jsx';
 
 export default function ProductShell() {
   const { user, logout } = useAuth();
@@ -57,7 +58,9 @@ export default function ProductShell() {
             <NavLink to="/functions" className="product-nav-link">Functions</NavLink>
             <NavLink to="/settings/newsroom-profile" className="product-nav-link">Profile</NavLink>
             {/* Operator entries — running the product (Admin) and Develop AI's
-                own back-office (Studio) — admins only. */}
+                own back-office (Studio) — admins only. The switcher lets an
+                admin use the product AS a chosen newsroom (dogfooding). */}
+            {isAdmin && <NewsroomSwitcher />}
             {isAdmin && <NavLink to="/admin" className="product-nav-link outline">Admin</NavLink>}
             {isAdmin && <NavLink to="/dashboard" className="product-nav-link outline">Studio</NavLink>}
             {user ? (

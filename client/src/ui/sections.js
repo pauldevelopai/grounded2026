@@ -25,11 +25,11 @@ export const SECTIONS = [
     functions: [
       { name: 'Builder',                key: 'builder',     status: 'live',    runs: 'online', to: '/builder', blurb: 'Drag functions onto a canvas and wire them into saved workflows.' },
       { name: 'Run',                    key: 'run',         status: 'live',    runs: 'online', to: '/run',     blurb: 'Your team triggers the workflows the builder ships — no code, no prompts.' },
-      { name: 'Verifier',               key: 'verifier',    status: 'live',    runs: 'both',   to: null, blurb: 'Checks claims against external sources and the newsroom archive; returns confidence, evidence, gaps.' },
-      { name: 'Researcher',             key: 'researcher',  status: 'live',    runs: 'online', to: null, blurb: 'Pulls and scrapes public records, court filings and disclosures into a dossier.' },
-      { name: 'Copywriter',             key: 'copywriter',  status: 'live',    runs: 'online', to: null, blurb: 'Writes social copy, headlines and scripts in the newsroom house style.' },
-      { name: 'Digital News Gatherer',  key: 'gatherer',    status: 'live',    runs: 'online', to: null, blurb: 'Triages inbound tips and submissions into a single editor queue.' },
-      { name: 'Social Media Listener',  key: 'listener',    status: 'live',    runs: 'online', to: null, blurb: 'Detects coordination and foreign-origin signals in social posts.' },
+      { name: 'Verifier',               key: 'verifier',    status: 'live',    runs: 'both',   to: '/tool/agent-verifier', blurb: 'Checks claims against external sources and the newsroom archive; returns confidence, evidence, gaps.' },
+      { name: 'Researcher',             key: 'researcher',  status: 'live',    runs: 'online', to: '/tool/agent-researcher', blurb: 'Pulls and scrapes public records, court filings and disclosures into a dossier.' },
+      { name: 'Copywriter',             key: 'copywriter',  status: 'live',    runs: 'online', to: '/tool/agent-copywriter', blurb: 'Writes social copy, headlines and scripts in the newsroom house style.' },
+      { name: 'Digital News Gatherer',  key: 'gatherer',    status: 'live',    runs: 'online', to: '/tool/agent-news-gatherer', blurb: 'Triages inbound tips and submissions into a single editor queue.' },
+      { name: 'Social Media Listener',  key: 'listener',    status: 'live',    runs: 'online', to: '/tool/agent-social-listener', blurb: 'Detects coordination and foreign-origin signals in social posts.' },
       { name: 'Archivist',              key: 'archivist',   status: 'partial', runs: 'local',  to: null, blurb: 'Semantic search over the newsroom’s own archive. Embeddings infra exists; per-newsroom index in progress.' },
       { name: 'Translator',             key: 'translator',  status: 'soon',    runs: 'local',  to: null, blurb: 'English ↔ African languages with a per-newsroom glossary that compounds with every edit.' },
       { name: 'Audio & Video Producer', key: 'producer',    status: 'partial', runs: 'both',   to: null, href: '/nodes/', blurb: 'Radio scripts, podcasts, audiograms and vertical video. Podcast Studio node exists; video path in progress.' },
@@ -44,8 +44,8 @@ export const SECTIONS = [
     functions: [
       { name: 'Audience Signal',   key: 'audience',     status: 'live', runs: 'both',   to: null, href: '/nodes/', blurb: 'Reads what your audience actually rewards by beat, format and over time — engagement rate, not raw reach.' },
       { name: 'AI-Ready Archive',  key: 'airready',     status: 'live', runs: 'both',   to: null, href: '/nodes/', blurb: 'Turn your archive into AI-discoverable formats and control what crawlers and LLMs can see.' },
-      { name: 'Fundraiser',        key: 'fundraiser',   status: 'soon', runs: 'online', to: null, blurb: 'A live funder library + grant-draft scaffolding. Newsroom-facing version in development (real funders only).' },
-      { name: 'Operations Manager',key: 'operations',   status: 'soon', runs: 'online', to: null, blurb: 'Editorial calendar, freelancer coordination, logistics — AI across the whole organisation.' },
+      { name: 'Fundraiser',        key: 'fundraiser',   status: 'partial', runs: 'online', to: '/tool/tool-fundraiser', blurb: 'A live funder library + grant-draft scaffolding. Newsroom-facing version in development (real funders only).' },
+      { name: 'Operations Manager',key: 'operations',   status: 'partial', runs: 'online', to: '/tool/tool-operations', blurb: 'Editorial calendar, freelancer coordination, logistics — AI across the whole organisation.' },
     ],
   },
   {
@@ -69,8 +69,8 @@ export const SECTIONS = [
     functions: [
       { name: 'Legal, Ethics & Regulation Tracker', key: 'tracker',   status: 'live',    runs: 'online', to: '/lawsuits', blurb: 'A daily feed of AI lawsuits, regulations and use-cases worldwide, cross-referenced and searchable.' },
       { name: 'Awareness',                          key: 'awareness', status: 'live',    runs: 'online', to: '/awareness', blurb: 'Data-security essentials for newsrooms — source protection, devices, accounts, surveillance.' },
-      { name: 'Policy Builder',                     key: 'policy',    status: 'partial', runs: 'online', to: null, blurb: 'Build a newsroom AI-governance framework grounded in your own implementations, not a generic policy.' },
-      { name: 'Digital Security Audit',             key: 'audit',     status: 'soon',    runs: 'online', to: null, blurb: 'Inventory external tools and score each against your jurisdiction pack; a prioritised fix list.' },
+      { name: 'Policy Builder',                     key: 'policy',    status: 'partial', runs: 'online', to: '/legal/ethics-builder', blurb: 'Build a newsroom AI-governance framework grounded in your own implementations, not a generic policy.' },
+      { name: 'Digital Security Audit',             key: 'audit',     status: 'partial', runs: 'online', to: '/tool/tool-security-audit', blurb: 'Inventory external tools and score each against your jurisdiction pack; a prioritised fix list.' },
     ],
   },
   {

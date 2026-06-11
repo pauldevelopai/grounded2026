@@ -67,8 +67,8 @@ router.post('/', async (req, res) => {
     if (!name) return res.status(400).json({ message: 'name required' });
     const nid = await resolveNewsroomId(req);
     let slug = slugify(name);
-    // ensure unique slug (slug index is global, so check globally)
-    const exists = await pool.query('SELECT 1 FROM workflows WHERE slug = $1', [slug]);
+    // ensure unique slug within this newsroom (per-newsroom unique index, 081)
+    const exists = await pool.query('SELECT 1 FROM workflows WHERE slug = $1 AND newsroom_id = $2', [slug, nid]);
     if (exists.rowCount) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
     const { rows } = await pool.query(
       `INSERT INTO workflows (created_by, newsroom_id, name, slug, description, definition, problem_statement, problem_category, user_instructions, trigger_phrase)

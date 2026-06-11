@@ -4,7 +4,7 @@
 > **Last updated: 2026-06-10.**
 
 ## One-line state
-Building the **GROUNDED V3 concept note** into the live `grounded2026` app, **local-first**. **Phase 1 COMPLETE** (committed to branch `phase-1-ia-restructure`, NOT merged/deployed). **Phase 2 (multi-tenancy): steps 2a + 2b + 2c DONE — newsroom isolation WORKS and is verified** (see [`PHASE2_PLAN.md`](PHASE2_PLAN.md) for the full record incl. the two-newsroom isolation test). **Next: step 2d** (AdminArea → Newsrooms onboarding UI: create newsroom + its users; admin newsroom switcher in the UI sending `X-Newsroom-Id`) → 2e (enforce NOT NULL + defaults on log tables) → 2f (node-model unification).
+Building the **GROUNDED V3 concept note** into the live `grounded2026` app, **local-first**. **Phase 1 COMPLETE. 🎉 PHASE 2 COMPLETE (2a–2f)** — full multi-tenancy: schema + auth + scoping + the Newsrooms onboarding UI + admin switcher + enforced constraints + node-model unification (17 clickable function cards; every live function opens its real workspace). Full record: [`PHASE2_PLAN.md`](PHASE2_PLAN.md). **Named follow-up (start of Phase 3): unify the hosted-Node runtime's tenancy** (currently keys by user id — `tenantOf` in `grounded-node-runtime` — switch to `newsroom_id` + re-key node rows; cross-repo, deliberately NOT in this deploy). **Next: deploy to the box** (runbook below), then Phase 3 feature build-out (Archivist first).
 
 ## How to resume in one command
 ```bash
@@ -109,7 +109,22 @@ Phase 1 (IA + cosmetic restructure) is done and meets its definition of done: ev
 - Verified end-to-end in the browser: login → local front door → Audience Signal + Election Watch hosted apps authenticate via the `tracker_token` cookie ("RUNNING LOCALLY" banner) against the local DB.
 - Env: `grounded2026/.env` (DATABASE_URL → :5433, keys present). **Local login works:** `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env` (`paul@developai.co.za` / the value in `.env`). The local user's `password_hash` was reset to the `.env` value on 2026-06-10 (the hash had drifted) — **local DB only; the box is untouched.** Verified: login → `/sections` (ProductShell) and `/admin` (AdminArea) both render with real data + the admin "Admin"/"Studio" entries.
 
-## Not yet committed / deployed
-- All `docs/` changes + the new `client/src/ui/*` + `index.css` + `App.jsx` route are **local, uncommitted**.
-- The earlier `holly`→`tracker` DB rename is **live on the box and done**; its repo doc edits are also uncommitted.
-- When ready: commit + push, then deploy to the box. Nothing has been pushed yet.
+## Deploying Phase 1+2 to the box — the runbook
+
+Everything is on branch **`phase-1-ia-restructure`** (pushed). The box deploys whatever branch it has checked out, via `deploy.sh`. Steps (all via **Lightsail browser SSH**; the old SSH key is leaked/rotated — don't use a pasted key):
+
+1. **Back up the box DB first** (migrations 080+081 run during deploy; they're additive + reversible, but belt-and-braces):
+   ```bash
+   pg_dump -U holly tracker > ~/tracker-backup-$(date +%Y%m%d).sql
+   ```
+2. **Check which branch the box is on**: `cd /home/ubuntu/tracker && git branch --show-current` (expected: `pulse-system` or `main`).
+3. **Merge the work into that branch** (on this Mac, or via a GitHub PR):
+   ```bash
+   git checkout <box-branch> && git pull && git merge phase-1-ia-restructure && git push
+   ```
+4. **Deploy on the box**: `cd /home/ubuntu/tracker && bash deploy.sh`
+   (pulls → npm install → **runs migrations 080+081** → client build → pm2 restart.)
+5. **Smoke-test live**: `/` (Hub), `/sections` (product, login), `/newsrooms-admin` (admin), `/nodes/` + open a hosted Node (cookie still valid), workflows still listed (they all backfilled to the office newsroom).
+6. **If anything is wrong**: the rollback SQL is at the foot of `server/db/migrations/080…sql` + `081…sql`, and the DB backup from step 1 restores everything: `psql -U holly tracker < ~/tracker-backup-….sql`.
+
+**Box notes:** no new env vars needed (the office newsroom id is baked in); existing logged-in users keep working (legacy-token DB fallback); the hosted Nodes are untouched by this deploy (their runtime tenancy unification is the named Phase-3 follow-up).
