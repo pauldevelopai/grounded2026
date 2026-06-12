@@ -3,11 +3,16 @@
 // CALLER'S OWN business tenant (its newsroom + linked organisation); a business
 // member can only ever see their own data. Admin-only writes self-guard inline.
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
 import { callClaude } from '../services/claude.js';
 import { runVisibilityScan } from '../services/visibility-scan.js';
+
+function slugify(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+}
 
 const router = Router();
 
@@ -417,6 +422,109 @@ Data the business puts into it: ${it.data_shared || 'unspecified'}`;
     );
     res.json(upd[0]);
   } catch (err) { console.error('[beaiready/inv/assess]', err); res.status(500).json({ message: err.message || 'Assessment failed' }); }
+});
+
+// ── Admin · manage client businesses (each business = one tenant/login) ─────
+// All admin-only. A "client" is a newsrooms row with kind='business' + a linked
+// organisation; its users are team_members homed in that newsroom.
+router.get('/admin/clients', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT n.id, n.name, n.slug, n.is_active, n.created_at, o.website, o.country, s.name AS sector,
+              (SELECT COUNT(*)::int FROM team_members t WHERE t.newsroom_id = n.id) AS user_count,
+              EXISTS (SELECT 1 FROM ai_policies p WHERE p.newsroom_id = n.id) AS has_policy,
+              (SELECT COUNT(*)::int FROM visibility_checks v WHERE v.newsroom_id = n.id) AS visibility_checks,
+              (SELECT COUNT(*)::int FROM ai_tool_inventory i WHERE i.newsroom_id = n.id) AS tools_logged,
+              (SELECT COUNT(*)::int FROM recommendations r WHERE r.newsroom_id = n.id) AS recommendations,
+              (SELECT COUNT(*)::int FROM business_metrics m WHERE m.newsroom_id = n.id) AS metrics
+         FROM newsrooms n
+         LEFT JOIN organisations o ON o.id = n.organisation_id
+         LEFT JOIN sectors s ON s.id = o.sector_id
+        WHERE n.kind = 'business'
+        ORDER BY n.created_at`
+    );
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/admin/clients]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Create a client: organisation + business tenant + (optional) first login.
+router.post('/admin/clients', requireRole('admin'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { name, website, adminEmail, adminPassword } = req.body || {};
+    if (!name || !name.trim()) return res.status(400).json({ message: 'business name required' });
+    let slug = slugify(name);
+    if (!slug) return res.status(400).json({ message: 'could not derive a slug' });
+    const taken = await client.query('SELECT 1 FROM newsrooms WHERE slug = $1', [slug]);
+    if (taken.rowCount) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+
+    await client.query('BEGIN');
+    // Business sector (idempotent — created in migration 082, but be safe).
+    await client.query(
+      `INSERT INTO sectors (name, slug, colour, description)
+       SELECT 'Business', 'business', '#c75b39', 'BE AI READY client businesses (SMEs).'
+       WHERE NOT EXISTS (SELECT 1 FROM sectors WHERE slug = 'business')`
+    );
+    const sector = await client.query("SELECT id FROM sectors WHERE slug = 'business'");
+    const org = await client.query(
+      `INSERT INTO organisations (name, type, country, website, sector_id)
+       VALUES ($1, 'client', 'South Africa', $2, $3) RETURNING id`,
+      [name.trim(), website || null, sector.rows[0].id]
+    );
+    const nr = await client.query(
+      `INSERT INTO newsrooms (name, slug, kind, organisation_id) VALUES ($1,$2,'business',$3) RETURNING *`,
+      [name.trim(), slug, org.rows[0].id]
+    );
+    let user = null;
+    if (adminEmail && adminPassword) {
+      if (adminPassword.length < 6) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'password must be at least 6 characters' }); }
+      const exists = await client.query('SELECT 1 FROM team_members WHERE email = $1', [adminEmail.trim().toLowerCase()]);
+      if (exists.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'a user with that email already exists' }); }
+      const hash = await bcrypt.hash(adminPassword, 10);
+      const u = await client.query(
+        `INSERT INTO team_members (name, email, password_hash, role, tracker_access, is_active, newsroom_id)
+         VALUES ($1,$2,$3,'member',true,true,$4) RETURNING id, name, email`,
+        [name.trim(), adminEmail.trim().toLowerCase(), hash, nr.rows[0].id]
+      );
+      user = u.rows[0];
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ ...nr.rows[0], user_count: user ? 1 : 0, first_user: user });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[beaiready/admin/clients/post]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally { client.release(); }
+});
+
+router.get('/admin/clients/:id/users', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, email, role, is_active, last_login, created_at
+         FROM team_members WHERE newsroom_id = $1 ORDER BY created_at`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/admin/clients/users]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/admin/clients/:id/users', requireRole('admin'), async (req, res) => {
+  try {
+    const { name, email, password } = req.body || {};
+    if (!name || !email || !password) return res.status(400).json({ message: 'name, email and password required' });
+    if (password.length < 6) return res.status(400).json({ message: 'password must be at least 6 characters' });
+    const nr = await pool.query("SELECT 1 FROM newsrooms WHERE id = $1 AND kind = 'business'", [req.params.id]);
+    if (!nr.rowCount) return res.status(404).json({ message: 'client not found' });
+    const exists = await pool.query('SELECT 1 FROM team_members WHERE email = $1', [email.trim().toLowerCase()]);
+    if (exists.rowCount) return res.status(409).json({ message: 'a user with that email already exists' });
+    const hash = await bcrypt.hash(password, 10);
+    const { rows } = await pool.query(
+      `INSERT INTO team_members (name, email, password_hash, role, tracker_access, is_active, newsroom_id)
+       VALUES ($1,$2,$3,'member',true,true,$4) RETURNING id, name, email, role, created_at`,
+      [name.trim(), email.trim().toLowerCase(), hash, req.params.id]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/admin/clients/users/post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

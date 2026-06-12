@@ -18,16 +18,6 @@ const IS_BEAIREADY = typeof window !== 'undefined' &&
   (window.location.hostname.startsWith('beaiready') ||
    (import.meta.env.DEV && window.sessionStorage.getItem('beaiready') === '1'));
 
-// beaiready.<domain> → grounded.<domain> (and beaiready.localhost → localhost
-// via the dev fallthrough), keeping port + protocol.
-function mainHostUrl(path) {
-  const { protocol, hostname, port } = window.location;
-  const mainHost = hostname.startsWith('beaiready.')
-    ? hostname.replace(/^beaiready\./, hostname === 'beaiready.localhost' ? '' : 'grounded.')
-    : hostname;
-  return `${protocol}//${mainHost}${port ? `:${port}` : ''}${path}`;
-}
-
 export default function Login() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -63,12 +53,9 @@ export default function Login() {
       if (mode === 'login') {
         const user = await login(email, password);
         if (IS_BEAIREADY) {
-          if (user.role === 'admin') {
-            try { window.sessionStorage.removeItem('beaiready'); } catch {}
-            window.location.href = mainHostUrl('/admin');
-          } else {
-            navigate('/dashboard');
-          }
+          // Admins → the BE AI READY admin portal (its own, not Grounded's);
+          // client businesses → their dashboard.
+          navigate(user.role === 'admin' ? '/admin' : '/dashboard');
         } else if (next) {
           // safeNext already validated this is an in-app path. Use
           // window.location for /aikit/* (Express-served) so the page
