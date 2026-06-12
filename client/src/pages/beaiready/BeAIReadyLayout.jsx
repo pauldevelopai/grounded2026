@@ -8,6 +8,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import FeedbackBubble from '../../components/FeedbackBubble.jsx';
+import { PILLARS } from './pillars.js';
 
 const PublicChatbot = lazy(() => import('../public/PublicChatbot.jsx'));
 
@@ -41,13 +42,11 @@ export default function BeAIReadyLayout() {
             </span>
             <span style={{ fontSize: 10.5, color: TERRACOTTA, fontWeight: 600 }}>by Develop&nbsp;AI</span>
           </Link>
-          <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* The offering itself — every item is a real page on THIS site. */}
-            <Link to="/visibility" style={linkStyle}>Visibility</Link>
-            <Link to="/audit" style={linkStyle}>The Audit</Link>
-            <Link to="/governance" style={linkStyle}>Governance</Link>
-            <Link to="/toolbox" style={linkStyle}>Toolbox</Link>
-            <Link to="/training" style={linkStyle}>Training</Link>
+          <nav style={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* The six pillars — every item is a real page on THIS site. */}
+            {PILLARS.map((p) => (
+              <Link key={p.key} to={`/pillar/${p.key}`} style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>{p.nav}</Link>
+            ))}
             {user ? (
               <Link to="/dashboard" style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
                 My dashboard

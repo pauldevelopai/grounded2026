@@ -86,9 +86,7 @@ import BeAIReadyLayout from './pages/beaiready/BeAIReadyLayout.jsx';
 import BeAIReadyHome from './pages/beaiready/BeAIReadyHome.jsx';
 import BeAIReadyRedirect from './pages/beaiready/BeAIReadyRedirect.jsx';
 import BusinessDashboard from './pages/beaiready/BusinessDashboard.jsx';
-import BeAIReadyVisibility from './pages/beaiready/BeAIReadyVisibility.jsx';
-import BeAIReadyAudit from './pages/beaiready/BeAIReadyAudit.jsx';
-import BeAIReadyGovernance from './pages/beaiready/BeAIReadyGovernance.jsx';
+import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
@@ -162,9 +160,7 @@ export default function App() {
                 the beaiready door; every nav item is a real page on THIS site). ── */}
           {IS_BEAIREADY && (
             <Route element={<BeAIReadyLayout />}>
-              <Route path="/visibility" element={<BeAIReadyVisibility />} />
-              <Route path="/audit" element={<BeAIReadyAudit />} />
-              <Route path="/governance" element={<BeAIReadyGovernance />} />
+              <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
               <Route path="/toolbox" element={<BeAIReadyToolbox />} />
             </Route>
           )}
