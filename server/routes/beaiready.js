@@ -296,4 +296,109 @@ router.post('/visibility/scan', async (req, res) => {
   } catch (err) { console.error('[beaiready/visibility/scan]', err); res.status(500).json({ message: err.message || 'Scan failed' }); }
 });
 
+// ── Data Security · the company's AI-tool inventory + acceptability ─────────
+// Try to recognise a logged tool in the assessed-tools DB (by name).
+async function matchTool(name) {
+  const { rows } = await pool.query(
+    `SELECT id, name, vendor, category, description, strengths, limitations, pricing
+       FROM ai_legal_tools WHERE is_published = true AND name ILIKE $1
+      ORDER BY length(name) ASC LIMIT 1`,
+    [`%${name.trim()}%`]
+  );
+  return rows[0] || null;
+}
+
+router.get('/security/inventory', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT i.*, t.name AS matched_name, t.description AS matched_description,
+              t.strengths AS matched_strengths, t.limitations AS matched_limitations
+         FROM ai_tool_inventory i
+         LEFT JOIN ai_legal_tools t ON t.id = i.matched_tool_id
+        WHERE i.newsroom_id = $1 ORDER BY i.created_at DESC`,
+      [newsroomId]
+    );
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/inv/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/security/inventory', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { tool_name, used_by, data_shared } = req.body || {};
+    if (!tool_name || !tool_name.trim()) return res.status(400).json({ message: 'tool_name required' });
+    const match = await matchTool(tool_name);
+    const { rows } = await pool.query(
+      `INSERT INTO ai_tool_inventory (newsroom_id, tool_name, used_by, data_shared, matched_tool_id)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [newsroomId, tool_name.trim(), used_by || null, data_shared || null, match?.id || null]
+    );
+    res.status(201).json({ ...rows[0], matched_name: match?.name || null });
+  } catch (err) { console.error('[beaiready/inv/post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/security/inventory/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { used_by, data_shared, acceptability, ruling, fix } = req.body || {};
+    const { rows } = await pool.query(
+      `UPDATE ai_tool_inventory SET
+         used_by = COALESCE($1, used_by), data_shared = COALESCE($2, data_shared),
+         acceptability = COALESCE($3, acceptability), ruling = COALESCE($4, ruling),
+         fix = COALESCE($5, fix), updated_at = NOW()
+       WHERE id = $6 AND newsroom_id = $7 RETURNING *`,
+      [used_by ?? null, data_shared ?? null, acceptability ?? null, ruling ?? null, fix ?? null, req.params.id, newsroomId]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'not found' });
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready/inv/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/security/inventory/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    await pool.query('DELETE FROM ai_tool_inventory WHERE id = $1 AND newsroom_id = $2', [req.params.id, newsroomId]);
+    res.json({ ok: true });
+  } catch (err) { console.error('[beaiready/inv/del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// AI acceptability ruling for one logged tool (uses the matched assessment +
+// what data the business says it puts in). Saves the ruling + fix on the row.
+router.post('/security/inventory/:id/assess', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT i.*, t.name AS matched_name, t.description AS matched_description,
+              t.strengths AS matched_strengths, t.limitations AS matched_limitations
+         FROM ai_tool_inventory i LEFT JOIN ai_legal_tools t ON t.id = i.matched_tool_id
+        WHERE i.id = $1 AND i.newsroom_id = $2`,
+      [req.params.id, newsroomId]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'not found' });
+    const it = rows[0];
+    const system = `You are a data-security adviser for a small/medium business assessing whether an AI tool is acceptable to use given what the business puts into it. Be practical and strict about POPIA/client-data risk. Return ONLY a single-line JSON object:
+{"acceptability": "approved"|"restricted"|"avoid",
+ "ruling": "one short plain sentence — why",
+ "fix": "one short, concrete action to make it safe (or '' if approved as-is)"}`;
+    const ctx = `Tool: ${it.tool_name}${it.matched_name ? ` (recognised as ${it.matched_name})` : ' (not in our assessed-tools database)'}
+What it is: ${it.matched_description || 'unknown'}
+Known strengths: ${it.matched_strengths || 'unknown'}
+Known limitations / risks: ${it.matched_limitations || 'unknown'}
+Used by: ${it.used_by || 'unspecified'}
+Data the business puts into it: ${it.data_shared || 'unspecified'}`;
+    const raw = String(await callClaude({ system, userContent: ctx, maxTokens: 250, temperature: 0 }));
+    let out = { acceptability: 'restricted', ruling: raw.slice(0, 160), fix: '' };
+    const a = raw.indexOf('{'), b = raw.lastIndexOf('}');
+    if (a >= 0 && b > a) { try { out = JSON.parse(raw.slice(a, b + 1)); } catch { /* keep */ } }
+    const ok = ['approved', 'restricted', 'avoid'].includes(out.acceptability) ? out.acceptability : 'restricted';
+    const { rows: upd } = await pool.query(
+      `UPDATE ai_tool_inventory SET acceptability=$1, ruling=$2, fix=$3, updated_at=NOW()
+       WHERE id=$4 AND newsroom_id=$5 RETURNING *`,
+      [ok, out.ruling || null, out.fix || null, req.params.id, newsroomId]
+    );
+    res.json(upd[0]);
+  } catch (err) { console.error('[beaiready/inv/assess]', err); res.status(500).json({ message: err.message || 'Assessment failed' }); }
+});
+
 export default router;

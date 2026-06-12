@@ -59,10 +59,10 @@ export const PILLARS = [
       'Every interaction with AI is a data decision. Log the AI tools your company actually uses, see what ' +
       'each one collects, and get a clear ruling on what is acceptable — and what to stop.',
     features: [
-      { name: 'Log your company’s AI tools', status: 'building',
-        what: 'Your team logs every AI tool in use — official and unofficial — and we establish what each one collects and where that data goes.' },
-      { name: 'What’s acceptable, what isn’t', status: 'building',
-        what: 'Each tool scored for data safety against your rules, with a prioritised fix list: which leaks to plug first, and how.' },
+      { name: 'Log your company’s AI tools', status: 'live', to: '/dashboard/security',
+        what: 'Log every AI tool in use — official and unofficial — and what data goes into each. Auto-matched to our assessed-tools database. (Client sign-in.)' },
+      { name: 'What’s acceptable, what isn’t', status: 'live', to: '/dashboard/security',
+        what: 'An acceptability ruling per tool (approved / restricted / avoid) with a prioritised fix — which leaks to plug first, and how.' },
     ],
   },
   {

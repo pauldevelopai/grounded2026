@@ -83,6 +83,11 @@ export default function BusinessDashboard() {
                   <Link to="/dashboard/visibility" style={{ fontWeight: 600 }}>How AI sees your business →</Link>
                 </p>
               )}
+              {pillar === 'security' && (
+                <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 8px' }}>
+                  <Link to="/dashboard/security" style={{ fontWeight: 600 }}>Your AI tools & data exposure →</Link>
+                </p>
+              )}
               {pillar === 'governance' && (
                 <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 8px' }}>
                   <Link to="/dashboard/governance" style={{ fontWeight: 600 }}>
