@@ -6,6 +6,7 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
+import { callClaude } from '../services/claude.js';
 
 const router = Router();
 
@@ -172,6 +173,82 @@ router.get('/intake', async (req, res) => {
     );
     res.json(forms);
   } catch (err) { console.error('[beaiready/intake]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Governance · the tenant's AI-use policy (lives in the dashboard) ─────────
+router.get('/policy', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      'SELECT id, title, content, brief, updated_at FROM ai_policies WHERE newsroom_id = $1',
+      [newsroomId]
+    );
+    res.json(rows[0] || null);
+  } catch (err) { console.error('[beaiready/policy/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Generate a business AI-use policy draft from a short brief (does NOT save —
+// the client reviews, edits and saves with PUT). Business-framed, ZA/POPIA aware.
+router.post('/policy/generate', async (req, res) => {
+  try {
+    const { businessName = '', sector = '', aiUses = '', existingPolicy = '' } = req.body || {};
+    if (existingPolicy && existingPolicy.length > 20000) {
+      return res.status(400).json({ message: 'Policy text is too long (max ~20,000 characters).' });
+    }
+    const system = `You are an AI-governance adviser helping a SMALL OR MEDIUM BUSINESS (not a newsroom) write its AI-use policy. Be concrete and practical for a business — covering: acceptable AI use by staff, what company/client/personal data may and may not be put into AI tools, approved vs unapproved tools, accountability (who approves AI use, who answers when something goes wrong), POPIA and emerging AI-regulation alignment, and review cadence. Plain language a manager can adopt and defend — never generic boilerplate.
+
+Respond in TWO parts, in this exact order:
+
+PART 1 — a single-line JSON object (NO code fence, NO newlines inside it) with keys:
+  "title": string,
+  "summary": "1-2 sentence overview",
+  "checklist": ["short adoptable action items the business should do to put this policy in place"]
+
+PART 2 — a line containing exactly:
+---POLICY---
+…then the full policy as markdown (clear sections, concrete rules a business can actually follow). Put NO JSON here.`;
+
+    const brief = existingPolicy && existingPolicy.trim().length >= 40
+      ? `MODE: review and improve this existing policy for a business.\nBusiness: ${businessName || '(unspecified)'}\nSector: ${sector || '(unspecified)'}\n\nEXISTING POLICY:\n${existingPolicy}`
+      : `MODE: draft a new AI-use policy from this brief.\nBusiness: ${businessName || 'a small/medium business'}\nSector: ${sector || '(unspecified)'}\nHow they use (or plan to use) AI: ${aiUses || '(unspecified — cover common SME uses: drafting, summarising, customer comms, analysis)'}\nJurisdiction: South Africa (POPIA).`;
+
+    const raw = String(await callClaude({ system, userContent: brief, maxTokens: 3000, temperature: 0.3 }));
+    const [metaPart, ...rest] = raw.split('---POLICY---');
+    const policyMarkdown = rest.join('---POLICY---').trim();
+    let meta = {};
+    const jsonStr = metaPart.replace(/```json|```/g, '');
+    const a = jsonStr.indexOf('{'), b = jsonStr.lastIndexOf('}');
+    if (a >= 0 && b > a) { try { meta = JSON.parse(jsonStr.slice(a, b + 1)); } catch { /* defaults */ } }
+    res.json({
+      title: meta.title || 'AI-use policy',
+      summary: meta.summary || '',
+      checklist: Array.isArray(meta.checklist) ? meta.checklist : [],
+      content: policyMarkdown || raw.replace('---POLICY---', '').trim(),
+    });
+  } catch (err) {
+    console.error('[beaiready/policy/generate]', err);
+    res.status(500).json({ message: err.message || 'Could not generate the policy. Please try again.' });
+  }
+});
+
+// Save / update the tenant's current policy (the business owns + edits it).
+router.put('/policy', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { title, content, brief } = req.body || {};
+    if (!content || !content.trim()) return res.status(400).json({ message: 'content required' });
+    const { rows } = await pool.query(
+      `INSERT INTO ai_policies (newsroom_id, title, content, brief, updated_by)
+       VALUES ($1, $2, $3, $4::jsonb, $5)
+       ON CONFLICT (newsroom_id) DO UPDATE
+         SET title = EXCLUDED.title, content = EXCLUDED.content,
+             brief = COALESCE(EXCLUDED.brief, ai_policies.brief),
+             updated_by = EXCLUDED.updated_by, updated_at = NOW()
+       RETURNING id, title, content, updated_at`,
+      [newsroomId, (title || 'AI-use policy').slice(0, 200), content, brief ? JSON.stringify(brief) : null, req.user?.id || null]
+    );
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready/policy/put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

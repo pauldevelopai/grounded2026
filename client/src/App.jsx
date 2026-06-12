@@ -86,6 +86,7 @@ import BeAIReadyLayout from './pages/beaiready/BeAIReadyLayout.jsx';
 import BeAIReadyHome from './pages/beaiready/BeAIReadyHome.jsx';
 import BeAIReadyRedirect from './pages/beaiready/BeAIReadyRedirect.jsx';
 import BusinessDashboard from './pages/beaiready/BusinessDashboard.jsx';
+import BusinessGovernance from './pages/beaiready/BusinessGovernance.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
@@ -213,6 +214,7 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<BeAIReadyLayout />}>
                 <Route path="/dashboard" element={<BusinessDashboard />} />
+                <Route path="/dashboard/governance" element={<BusinessGovernance />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Route>

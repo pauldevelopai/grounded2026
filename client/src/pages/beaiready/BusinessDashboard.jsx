@@ -30,6 +30,7 @@ export default function BusinessDashboard() {
   const [trainings, setTrainings] = useState(null);
   const [materials, setMaterials] = useState(null);
   const [intake, setIntake] = useState(null);
+  const [policy, setPolicy] = useState(undefined);
 
   useEffect(() => {
     apiFetch('/beaiready/recommendations').then(setRecs).catch(() => setRecs([]));
@@ -37,6 +38,7 @@ export default function BusinessDashboard() {
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
     apiFetch('/beaiready/materials').then(setMaterials).catch(() => setMaterials([]));
     apiFetch('/beaiready/intake').then(setIntake).catch(() => setIntake([]));
+    apiFetch('/beaiready/policy').then(setPolicy).catch(() => setPolicy(null));
   }, []);
 
   const metricVal = (key) => {
@@ -78,7 +80,13 @@ export default function BusinessDashboard() {
               <div className="hub-card-kicker">{PILLAR_LABEL[pillar]}</div>
               {pillar === 'governance' && (
                 <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 8px' }}>
-                  <Link to="/legal/ethics-builder">Build your AI policy →</Link><br />
+                  <Link to="/dashboard/governance" style={{ fontWeight: 600 }}>
+                    {policy ? 'Your AI policy →' : 'Build your AI policy →'}
+                  </Link>
+                  {policy === undefined ? '' : policy
+                    ? <span style={{ color: '#16a34a' }}> · in place</span>
+                    : <span style={{ color: '#8a8076' }}> · not yet built</span>}
+                  <br />
                   <Link to="/legal/lawsuits">AI lawsuits</Link> · <Link to="/legal/regulations">regulations</Link>, tracked daily
                 </p>
               )}

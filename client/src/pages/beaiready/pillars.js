@@ -41,8 +41,8 @@ export const PILLARS = [
     features: [
       { name: 'Legal, Ethics & Regulation tracker', status: 'live', to: '/legal/lawsuits',
         what: 'A daily-updated feed of AI lawsuits, regulations and ethics worldwide — the live infrastructure that keeps your governance current.' },
-      { name: 'Build your AI policy', status: 'partial', to: '/legal/ethics-builder',
-        what: 'A bespoke AI-use policy and framework, built around the AI you actually use — aligned with POPIA and emerging regulation.' },
+      { name: 'Build your AI policy', status: 'live', to: '/dashboard/governance',
+        what: 'A bespoke AI-use policy, generated from a short brief, then edited and owned by you — aligned with POPIA. Lives in your dashboard. (Client sign-in.)' },
     ],
   },
   {
