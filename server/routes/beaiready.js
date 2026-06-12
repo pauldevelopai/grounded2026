@@ -7,6 +7,7 @@ import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
 import { callClaude } from '../services/claude.js';
+import { runVisibilityScan } from '../services/visibility-scan.js';
 
 const router = Router();
 
@@ -249,6 +250,50 @@ router.put('/policy', async (req, res) => {
     );
     res.json(rows[0]);
   } catch (err) { console.error('[beaiready/policy/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Visibility · how AI sees the business (Claude-only v1) ───────────────────
+async function businessForScan(req) {
+  const { newsroomId, organisationId } = await tenantContext(req);
+  let name = null, sector = null, location = null, website = null;
+  if (organisationId) {
+    const { rows } = await pool.query(
+      `SELECT o.name, o.country, o.website, s.name AS sector
+         FROM organisations o LEFT JOIN sectors s ON s.id = o.sector_id WHERE o.id = $1`,
+      [organisationId]
+    );
+    if (rows[0]) { name = rows[0].name; location = rows[0].country; website = rows[0].website; sector = rows[0].sector; }
+  }
+  if (!name) {
+    const { rows } = await pool.query('SELECT name FROM newsrooms WHERE id = $1', [newsroomId]);
+    name = rows[0]?.name || null;
+  }
+  return { newsroomId, business: { name, sector, location, website } };
+}
+
+router.get('/visibility', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    // The most recent scan's checks.
+    const { rows } = await pool.query(
+      `SELECT id, model, question, response, assessment, ran_at, scan_id
+         FROM visibility_checks
+        WHERE newsroom_id = $1
+          AND scan_id = (SELECT scan_id FROM visibility_checks WHERE newsroom_id = $1 ORDER BY ran_at DESC LIMIT 1)
+        ORDER BY ran_at`,
+      [newsroomId]
+    );
+    res.json({ checks: rows, ran_at: rows[0]?.ran_at || null, model: rows[0]?.model || null });
+  } catch (err) { console.error('[beaiready/visibility/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/visibility/scan', async (req, res) => {
+  try {
+    const { newsroomId, business } = await businessForScan(req);
+    if (!business.name) return res.status(400).json({ message: 'No business name on file to scan.' });
+    const result = await runVisibilityScan(newsroomId, business);
+    res.json({ ...result, business });
+  } catch (err) { console.error('[beaiready/visibility/scan]', err); res.status(500).json({ message: err.message || 'Scan failed' }); }
 });
 
 export default router;

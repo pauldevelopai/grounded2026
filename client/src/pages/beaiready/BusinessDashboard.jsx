@@ -78,6 +78,11 @@ export default function BusinessDashboard() {
           return (
             <div key={pillar} className="hub-card hub-card-section" style={{ '--accent': '#c75b39' }}>
               <div className="hub-card-kicker">{PILLAR_LABEL[pillar]}</div>
+              {pillar === 'visibility' && (
+                <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 8px' }}>
+                  <Link to="/dashboard/visibility" style={{ fontWeight: 600 }}>How AI sees your business →</Link>
+                </p>
+              )}
               {pillar === 'governance' && (
                 <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 8px' }}>
                   <Link to="/dashboard/governance" style={{ fontWeight: 600 }}>

@@ -24,8 +24,8 @@ export const PILLARS = [
       'back in seconds — assembled from whatever those systems can find about you. We take command of how ' +
       'AI sees your business, and structure your data so you appear as the answer.',
     features: [
-      { name: 'How AI sees your business', status: 'building',
-        what: 'A regular scan of how the major AI assistants describe your business — what they say, what they miss, and what they get wrong — tracked over time in your dashboard.' },
+      { name: 'How AI sees your business', status: 'partial', to: '/dashboard/visibility',
+        what: 'Run a scan of how AI describes your business — whether you’re named, how, and what’s wrong or missing. v1 queries Claude; ChatGPT & Gemini added once keys are configured. (Client sign-in.)' },
       { name: 'Your data, structured for AI', status: 'building',
         what: 'Your content and data shaped so AI systems read, trust and cite you correctly — accurately and currently.' },
     ],
