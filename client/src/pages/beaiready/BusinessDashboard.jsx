@@ -59,7 +59,10 @@ export default function BusinessDashboard() {
       </p>
 
       {/* ── The five productivity metrics (entered-only; em-dash otherwise) ── */}
-      <div className="hub-section-label">Productivity</div>
+      <div className="hub-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span>Productivity</span>
+        <Link to="/dashboard/productivity" style={{ fontSize: 12, color: '#c75b39', fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>Manage →</Link>
+      </div>
       <section className="hub-stats" style={{ marginBottom: 28 }}>
         {METRICS.map(([key, label]) => (
           <div key={key} className="hub-stat">

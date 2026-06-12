@@ -91,6 +91,24 @@ router.get('/metrics', async (req, res) => {
   } catch (err) { console.error('[beaiready/metrics]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// Client-facing metric entry — scoped to the CALLER'S OWN tenant (no newsroom_id
+// in the body; a business enters its own five measures). "No surveillance" by
+// design: aggregate values + baselines/targets, never per-individual tracking.
+router.post('/metrics/mine', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { metric, value, period, note } = req.body || {};
+    const ALLOWED = ['deliverables', 'revenue', 'time_spent', 'ai_hours_saved', 'client_outcomes'];
+    if (!ALLOWED.includes(metric)) return res.status(400).json({ message: 'unknown metric' });
+    const { rows } = await pool.query(
+      `INSERT INTO business_metrics (newsroom_id, metric, value, period, note, entered_by)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [newsroomId, metric, value ?? null, period || null, note || null, req.user?.id || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/metrics/mine]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 router.post('/metrics', requireRole('admin'), async (req, res) => {
   try {
     const { newsroom_id, metric, value, period, note } = req.body || {};

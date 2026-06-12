@@ -76,8 +76,8 @@ export const PILLARS = [
     features: [
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for data safety.' },
-      { name: 'Track employee productivity', status: 'partial',
-        what: 'Five measures only — deliverables, revenue, time spent, AI hours saved, client outcomes — with your own baselines and targets. Never used to police individuals.' },
+      { name: 'Track employee productivity', status: 'live', to: '/dashboard/productivity',
+        what: 'Five measures only — deliverables, revenue, time spent, AI hours saved, client outcomes — entered at the business level with your own baselines. Never used to police individuals. (Client sign-in.)' },
       { name: 'BetterBoss', status: 'building',
         what: 'Capture a manager’s hard-won expertise and turn it into an AI guide that coaches junior staff through their real work.' },
     ],
