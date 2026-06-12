@@ -42,10 +42,12 @@ export default function BeAIReadyLayout() {
             <span style={{ fontSize: 10.5, color: TERRACOTTA, fontWeight: 600 }}>by Develop&nbsp;AI</span>
           </Link>
           <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            <a href="/#pillars" style={linkStyle}>Pillars</a>
-            <a href="/tools/" style={linkStyle}>AI Tools</a>
-            <Link to="/legal/dashboard" style={linkStyle}>Legal Tracker</Link>
-            <a href="/#training" style={linkStyle}>Training</a>
+            {/* The offering itself — every item is a real page on THIS site. */}
+            <Link to="/visibility" style={linkStyle}>Visibility</Link>
+            <Link to="/audit" style={linkStyle}>The Audit</Link>
+            <Link to="/governance" style={linkStyle}>Governance</Link>
+            <Link to="/toolbox" style={linkStyle}>Toolbox</Link>
+            <Link to="/training" style={linkStyle}>Training</Link>
             {user ? (
               <Link to="/dashboard" style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
                 My dashboard

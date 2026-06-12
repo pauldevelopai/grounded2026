@@ -304,7 +304,7 @@ How to answer:
 - Use the "items from Grounded's data" block (shared AI-law / regulation / tool data) when relevant and CITE with the bracket ids exactly as written — e.g. [lawsuit:<id>], [regulation:<id>], [tool:<id>], [datasecurity:<id>]. The app turns these into links.
 - When the data block doesn't cover it, still help: give concrete, practical guidance on getting AI-ready, and steer toward the relevant pillar or to booking a scoping call with Paul McNally (paul@developai.co.za).
 - On legal/POPIA topics, summarise public records — you are NOT a lawyer and do not give legal advice.
-- Be concise (2-4 short paragraphs), plain text, no markdown headings or bold. If a question is vague, ask one clarifying question. If a request is genuinely unrelated to business or AI, gently steer back.`;
+- BE VERY BRIEF. This is a small chat bubble. Hard limit: about 60 words. Answer in 2–3 short sentences, OR up to 3 terse bullet points — never both, never more. Lead with the direct answer; no preamble, no recap of the question, no markdown headings or bold, no sign-off paragraph. Only add a short pointer like "Our Security pillar covers this — paul@developai.co.za" when it genuinely adds something, and keep it to one short clause. If a question is vague, reply with one short clarifying question instead of guessing.`;
 
 export async function chatWithGroundedHelp({ history = [], message, contextItems = [], audience = 'newsroom' }) {
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
@@ -318,7 +318,8 @@ export async function chatWithGroundedHelp({ history = [], message, contextItems
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 900,
+    // Keep answers short and chat-sized. Business gets an even tighter cap.
+    max_tokens: audience === 'business' ? 200 : 700,
     temperature: 0.3,
     system: audience === 'business' ? BEAIREADY_HELP_SYSTEM : GROUNDED_HELP_SYSTEM,
     messages,

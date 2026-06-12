@@ -86,6 +86,11 @@ import BeAIReadyLayout from './pages/beaiready/BeAIReadyLayout.jsx';
 import BeAIReadyHome from './pages/beaiready/BeAIReadyHome.jsx';
 import BeAIReadyRedirect from './pages/beaiready/BeAIReadyRedirect.jsx';
 import BusinessDashboard from './pages/beaiready/BusinessDashboard.jsx';
+import BeAIReadyVisibility from './pages/beaiready/BeAIReadyVisibility.jsx';
+import BeAIReadyAudit from './pages/beaiready/BeAIReadyAudit.jsx';
+import BeAIReadyGovernance from './pages/beaiready/BeAIReadyGovernance.jsx';
+import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
+import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
 import PublicLawsuitDetail from './pages/public/PublicLawsuitDetail.jsx';
 import PublicRegulationsList from './pages/public/PublicRegulationsList.jsx';
@@ -120,7 +125,12 @@ function LazyFallback() {
 // wrap in BeAIReadyLayout and / renders the BE AI READY landing; on every other
 // host (grounded.*) behaviour is byte-for-byte unchanged — PublicShell is just
 // PublicLayout and PublicRootHome is PublicHome.
-const IS_BEAIREADY = typeof window !== 'undefined' && window.location.hostname.startsWith('beaiready');
+// Dev-only escape hatch (stripped from production builds): the headless test
+// browser can't resolve beaiready.localhost, so sessionStorage 'beaiready'='1'
+// forces the BE AI READY door on the dev server.
+const IS_BEAIREADY = typeof window !== 'undefined' &&
+  (window.location.hostname.startsWith('beaiready') ||
+   (import.meta.env.DEV && window.sessionStorage.getItem('beaiready') === '1'));
 const PublicShell = IS_BEAIREADY ? BeAIReadyLayout : PublicLayout;
 const PublicRootHome = IS_BEAIREADY ? BeAIReadyHome : PublicHome;
 
@@ -147,6 +157,17 @@ export default function App() {
           <Route path="/" element={<PublicShell />}>
             <Route index element={<PublicRootHome />} />
           </Route>
+
+          {/* ── BE AI READY public pages — the offering itself (only mounted on
+                the beaiready door; every nav item is a real page on THIS site). ── */}
+          {IS_BEAIREADY && (
+            <Route element={<BeAIReadyLayout />}>
+              <Route path="/visibility" element={<BeAIReadyVisibility />} />
+              <Route path="/audit" element={<BeAIReadyAudit />} />
+              <Route path="/governance" element={<BeAIReadyGovernance />} />
+              <Route path="/toolbox" element={<BeAIReadyToolbox />} />
+            </Route>
+          )}
 
           {/* ── Public AI Legal site (sub-pages) — no auth required ── */}
           <Route path="/legal" element={<PublicShell />}>
@@ -180,9 +201,12 @@ export default function App() {
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicToolsDirectory /></Suspense>} />
           </Route>
 
-          {/* ── Training — videos & materials from published courses ── */}
+          {/* ── Training — host-aware: the BE AI READY door gets the business
+                training offer; Grounded keeps the newsroom course library. ── */}
           <Route path="/training" element={<PublicShell />}>
-            <Route index element={<Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
+            <Route index element={IS_BEAIREADY
+              ? <BeAIReadyTraining />
+              : <Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
           </Route>
 
           {/* ── BE AI READY business authed area (spec Part C). On the beaiready

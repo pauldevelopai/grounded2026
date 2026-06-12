@@ -11,6 +11,23 @@ function safeNext(raw) {
   return raw;
 }
 
+// The BE AI READY door shares this page but wears its own brand, hides
+// self-registration (clients are onboarded by Develop AI), and sends admins
+// across to the main-host admin console after sign-in.
+const IS_BEAIREADY = typeof window !== 'undefined' &&
+  (window.location.hostname.startsWith('beaiready') ||
+   (import.meta.env.DEV && window.sessionStorage.getItem('beaiready') === '1'));
+
+// beaiready.<domain> → grounded.<domain> (and beaiready.localhost → localhost
+// via the dev fallthrough), keeping port + protocol.
+function mainHostUrl(path) {
+  const { protocol, hostname, port } = window.location;
+  const mainHost = hostname.startsWith('beaiready.')
+    ? hostname.replace(/^beaiready\./, hostname === 'beaiready.localhost' ? '' : 'grounded.')
+    : hostname;
+  return `${protocol}//${mainHost}${port ? `:${port}` : ''}${path}`;
+}
+
 export default function Login() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -41,13 +58,17 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // On the BE AI READY door, the only authed surface is the client
-      // dashboard — always land business clients there.
-      const isBeAIReady = window.location.hostname.startsWith('beaiready');
+      // On the BE AI READY door: business clients land on their dashboard;
+      // Develop AI admins are carried to the admin console on the main host.
       if (mode === 'login') {
         const user = await login(email, password);
-        if (isBeAIReady) {
-          navigate('/dashboard');
+        if (IS_BEAIREADY) {
+          if (user.role === 'admin') {
+            try { window.sessionStorage.removeItem('beaiready'); } catch {}
+            window.location.href = mainHostUrl('/admin');
+          } else {
+            navigate('/dashboard');
+          }
         } else if (next) {
           // safeNext already validated this is an in-app path. Use
           // window.location for /aikit/* (Express-served) so the page
@@ -58,8 +79,7 @@ export default function Login() {
         }
       } else {
         await register(name.trim(), email, password);
-        if (isBeAIReady) navigate('/dashboard');
-        else if (next) window.location.href = next;
+        if (next) window.location.href = next;
         else navigate('/lawsuits');
       }
     } catch (err) {
@@ -72,9 +92,13 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>Grounded</h1>
-        <p className="brand-sub">Newsroom-owned AI · by Develop AI</p>
-        <p className="login-instruction">{mode === 'login' ? 'Sign in to continue' : 'Create your account'}</p>
+        <h1>{IS_BEAIREADY ? 'Be AI Ready' : 'Grounded'}</h1>
+        <p className="brand-sub">{IS_BEAIREADY ? 'by Develop AI' : 'Newsroom-owned AI · by Develop AI'}</p>
+        <p className="login-instruction">
+          {IS_BEAIREADY
+            ? (mode === 'login' ? 'Client sign in' : 'Create your account')
+            : (mode === 'login' ? 'Sign in to continue' : 'Create your account')}
+        </p>
 
         {error && <div className="login-error">{error}</div>}
 
@@ -140,6 +164,14 @@ export default function Login() {
           </button>
         </form>
 
+        {/* BE AI READY is invite-only — no self-registration. The same form
+            signs in Develop AI staff, who are routed to the admin console. */}
+        {IS_BEAIREADY ? (
+          <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', color: '#8a8076' }}>
+            Clients and Develop&nbsp;AI staff sign in here.<br />
+            New client? <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready">Talk to Paul</a> to get set up.
+          </div>
+        ) : (
         <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '14px', color: '#666' }}>
           {mode === 'login' ? (
             <>
@@ -173,6 +205,7 @@ export default function Login() {
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   );
