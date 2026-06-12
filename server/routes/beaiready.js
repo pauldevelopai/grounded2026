@@ -9,6 +9,7 @@ import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
 import { callClaude } from '../services/claude.js';
 import { runVisibilityScan } from '../services/visibility-scan.js';
+import { providerStatus, getModelConfig, saveModelConfig, saveProviderSecret, FUNCTIONS, PROVIDERS } from '../lib/models.js';
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -525,6 +526,43 @@ router.post('/admin/clients/:id/users', requireRole('admin'), async (req, res) =
     );
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[beaiready/admin/clients/users/post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Admin · Models (provider config + per-function model choice) ────────────
+router.get('/admin/settings', requireRole('admin'), async (req, res) => {
+  try {
+    res.json({
+      providers: await providerStatus(),     // configured booleans + source, no secrets
+      functions: FUNCTIONS,                   // the configurable functions + defaults
+      config: await getModelConfig(),         // current per-function choices
+    });
+  } catch (err) { console.error('[beaiready/admin/settings]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/admin/settings', requireRole('admin'), async (req, res) => {
+  try {
+    const incoming = req.body?.config || {};
+    const clean = {};
+    for (const f of FUNCTIONS) {
+      if (!(f.key in incoming)) continue;
+      const v = incoming[f.key];
+      if (f.multi) clean[f.key] = (Array.isArray(v) ? v : []).filter((p) => PROVIDERS[p]);
+      else if (PROVIDERS[v]) clean[f.key] = v;
+    }
+    await saveModelConfig({ ...(await getModelConfig()), ...clean }, req.user?.id);
+    res.json(await getModelConfig());
+  } catch (err) { console.error('[beaiready/admin/settings/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Save a provider key / endpoint (write-only — never returned).
+router.put('/admin/provider-key', requireRole('admin'), async (req, res) => {
+  try {
+    const { provider, value } = req.body || {};
+    if (!PROVIDERS[provider]) return res.status(400).json({ message: 'unknown provider' });
+    if (!value || !String(value).trim()) return res.status(400).json({ message: 'value required' });
+    await saveProviderSecret(provider, String(value).trim(), req.user?.id);
+    res.json({ ok: true, provider });
+  } catch (err) { console.error('[beaiready/admin/provider-key]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

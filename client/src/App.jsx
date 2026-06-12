@@ -92,6 +92,7 @@ import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
 import BeAIReadyAdminShell, { AdminStub } from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
+import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
@@ -223,7 +224,7 @@ export default function App() {
                   <Route path="/admin" element={<BeAIReadyAdminUsers />} />
                   <Route path="/admin/pillars" element={<AdminStub title="Pillars" blurb="Assess, load materials and track progress across all six pillars, per client." />} />
                   <Route path="/admin/data" element={<AdminStub title="Data" blurb="Scrape, assess and commit the data that feeds the pillars (reuses Grounded's tracker + tool pipelines)." />} />
-                  <Route path="/admin/models" element={<AdminStub title="Models" blurb="Configure local models and APIs per function — visibility scan, policy, chat, assess. Wire OpenAI/Gemini here for multi-model Visibility." />} />
+                  <Route path="/admin/models" element={<BeAIReadyAdminModels />} />
                 </Route>
               </Route>
             </Route>

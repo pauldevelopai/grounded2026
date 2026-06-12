@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
+import { askModel, providerStatus, getModelConfig, PROVIDERS } from '../lib/models.js';
 
 // The standard probe set — what a real customer would ask an assistant.
 function probeQuestions({ name, sector, location, website }) {
@@ -35,26 +36,42 @@ async function assess({ name, question, answer }) {
   catch { return { present: null, sentiment: 'unknown', accuracy: 'unknown', summary: raw.slice(0, 160), missing: '' }; }
 }
 
-// Run a scan for a tenant. `business` = { name, sector, location, website }.
+const ANSWER_SYSTEM = 'You are a general AI assistant answering a user. Answer naturally and honestly; if you do not know something, say so plainly rather than inventing details.';
+
+// Which assistants to query: the admin's configured visibility_models, filtered
+// to those actually configured (key present). Always at least Anthropic.
+async function scanProviders() {
+  const cfg = await getModelConfig();
+  const status = await providerStatus();
+  const ok = new Set(status.filter((p) => p.configured).map((p) => p.id));
+  const want = (cfg.visibility_models || ['anthropic']).filter((p) => ok.has(p));
+  return want.length ? want : ['anthropic'];
+}
+
+// Run a scan for a tenant across every configured assistant.
+// `business` = { name, sector, location, website }.
 export async function runVisibilityScan(newsroomId, business) {
   const scanId = randomUUID();
-  const model = 'claude';
+  const providers = await scanProviders();
   const questions = probeQuestions(business);
   const checks = [];
-  for (const question of questions) {
-    // 1) what the model actually says (no system steer — we want its honest take)
-    const response = String(await callClaude({
-      system: 'You are a general AI assistant answering a user. Answer naturally and honestly; if you do not know something, say so plainly rather than inventing details.',
-      userContent: question, maxTokens: 500, temperature: 0.2,
-    }));
-    // 2) assess how the business showed up
-    const assessment = await assess({ name: business.name, question, answer: response });
-    const { rows } = await pool.query(
-      `INSERT INTO visibility_checks (newsroom_id, scan_id, model, question, response, assessment)
-       VALUES ($1,$2,$3,$4,$5,$6::jsonb) RETURNING id, question, response, assessment, ran_at`,
-      [newsroomId, scanId, model, question, response, JSON.stringify(assessment)]
-    );
-    checks.push({ ...rows[0], model });
+  for (const provider of providers) {
+    const label = provider === 'anthropic' ? 'claude' : provider; // store a friendly name
+    for (const question of questions) {
+      let response;
+      try {
+        response = String(await askModel({ provider, system: ANSWER_SYSTEM, prompt: question, maxTokens: 500, temperature: 0.2 }));
+      } catch (e) {
+        response = `(could not query ${PROVIDERS[provider]?.label || provider}: ${e.message})`;
+      }
+      const assessment = await assess({ name: business.name, question, answer: response });
+      const { rows } = await pool.query(
+        `INSERT INTO visibility_checks (newsroom_id, scan_id, model, question, response, assessment)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb) RETURNING id, question, response, assessment, ran_at`,
+        [newsroomId, scanId, label, question, response, JSON.stringify(assessment)]
+      );
+      checks.push({ ...rows[0], model: label });
+    }
   }
-  return { scan_id: scanId, model, ran_at: new Date().toISOString(), checks };
+  return { scan_id: scanId, model: checks[0]?.model || 'claude', ran_at: new Date().toISOString(), checks };
 }
