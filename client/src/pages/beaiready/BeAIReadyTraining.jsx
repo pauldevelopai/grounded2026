@@ -3,6 +3,10 @@
 // The strongest entry point for new customers (V2 brochure p.8).
 import { Link } from 'react-router-dom';
 
+const TRAINING_WHATSAPP =
+  'https://wa.me/27722337458?text=' +
+  encodeURIComponent("Hi, I'd like to book a Be AI Ready training day.");
+
 export default function BeAIReadyTraining() {
   return (
     <div className="hub hub-beaiready">
@@ -62,7 +66,7 @@ export default function BeAIReadyTraining() {
       </section>
 
       <div className="hub-hero-cta" style={{ margin: '8px 0 24px' }}>
-        <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready%20training" className="hub-btn hub-btn-solid">
+        <a href={TRAINING_WHATSAPP} target="_blank" rel="noreferrer" className="hub-btn hub-btn-solid">
           Book a training day
         </a>
         <Link to="/audit" className="hub-btn hub-btn-ghost">See the audit</Link>

@@ -2,7 +2,7 @@
 // Honest: each sub-feature shows its real status; "in development" ones say so
 // plainly and don't pretend to work (no fake data).
 import { useParams, Navigate, Link } from 'react-router-dom';
-import { findPillar, STATUS_LABEL } from './pillars.js';
+import { findPillar, STATUS_LABEL, SCOPING_WHATSAPP } from './pillars.js';
 
 const STATUS_STYLE = {
   live: { bg: '#dcfce7', fg: '#166534' },
@@ -46,10 +46,10 @@ export default function BeAIReadyPillar() {
       </section>
 
       <div className="hub-hero-cta" style={{ margin: '8px 0 24px' }}>
-        <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready%20scoping%20call" className="hub-btn hub-btn-solid">
+        <a href={SCOPING_WHATSAPP} target="_blank" rel="noreferrer" className="hub-btn hub-btn-solid">
           Book a scoping call
         </a>
-        <Link to="/" className="hub-btn hub-btn-ghost">All five pillars</Link>
+        <Link to="/" className="hub-btn hub-btn-ghost">All six pillars</Link>
       </div>
     </div>
   );

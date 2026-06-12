@@ -13,6 +13,11 @@ export const STATUS_LABEL = {
   building: 'In development',
 };
 
+// "Book a scoping call" → a WhatsApp chat (not email).
+export const SCOPING_WHATSAPP =
+  'https://wa.me/27722337458?text=' +
+  encodeURIComponent("Hi, I'd like to book a Be AI Ready scoping call.");
+
 export const PILLARS = [
   {
     key: 'visibility',
