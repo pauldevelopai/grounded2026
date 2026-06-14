@@ -90,9 +90,11 @@ import BusinessGovernance from './pages/beaiready/BusinessGovernance.jsx';
 import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
-import BeAIReadyAdminShell, { AdminStub } from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
+import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
+import BeAIReadyAdminPillars from './pages/beaiready/admin/BeAIReadyAdminPillars.jsx';
+import BeAIReadyAdminData from './pages/beaiready/admin/BeAIReadyAdminData.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
@@ -222,8 +224,8 @@ export default function App() {
               <Route element={<AdminRoute />}>
                 <Route element={<BeAIReadyAdminShell />}>
                   <Route path="/admin" element={<BeAIReadyAdminUsers />} />
-                  <Route path="/admin/pillars" element={<AdminStub title="Pillars" blurb="Assess, load materials and track progress across all six pillars, per client." />} />
-                  <Route path="/admin/data" element={<AdminStub title="Data" blurb="Scrape, assess and commit the data that feeds the pillars (reuses Grounded's tracker + tool pipelines)." />} />
+                  <Route path="/admin/pillars" element={<BeAIReadyAdminPillars />} />
+                  <Route path="/admin/data" element={<BeAIReadyAdminData />} />
                   <Route path="/admin/models" element={<BeAIReadyAdminModels />} />
                 </Route>
               </Route>

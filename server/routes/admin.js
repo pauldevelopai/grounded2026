@@ -56,11 +56,11 @@ router.get('/overview', async (req, res) => {
 
     // ── AI Legal tracker ──
     const legal = {
-      lawsuits: await countIfExists('lawsuits'),
-      regulations: await countIfExists('regulations'),
-      use_cases: await countIfExists('usecases'),
+      lawsuits: await countIfExists('ai_lawsuits'),
+      regulations: await countIfExists('ai_regulations'),
+      use_cases: await countIfExists('ai_legal_usecases'),
       sources: await countIfExists('ai_legal_sources'),
-      pending_submissions: await countIfExists('submissions', "WHERE status = 'pending'"),
+      pending_submissions: await countIfExists('ai_legal_user_submissions', "WHERE status = 'pending'"),
     };
 
     res.json({ users, userStats, feedbackRecent, feedbackStats, legal });

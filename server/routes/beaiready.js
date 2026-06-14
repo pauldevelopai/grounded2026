@@ -34,7 +34,8 @@ async function tenantContext(req) {
   };
 }
 
-const PILLARS = ['visibility', 'governance', 'security'];
+// The six pillar keys (match client/src/pages/beaiready/pillars.js).
+const PILLARS = ['visibility', 'governance', 'data-security', 'productivity', 'training', 'strategy'];
 
 // ── Recommendations ────────────────────────────────────────────────────────
 router.get('/recommendations', async (req, res) => {

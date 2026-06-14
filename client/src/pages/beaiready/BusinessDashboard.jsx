@@ -17,7 +17,7 @@ const METRICS = [
   ['client_outcomes', 'Client outcomes'],
 ];
 
-const PILLAR_LABEL = { visibility: 'Visibility', governance: 'Governance', security: 'Security' };
+const PILLAR_LABEL = { visibility: 'Visibility', governance: 'Governance', 'data-security': 'Security' };
 const PRIORITY_STYLE = {
   now: { bg: '#fee2e2', fg: '#991b1b' }, high: { bg: '#ffedd5', fg: '#9a3412' },
   medium: { bg: '#fef3c7', fg: '#92400e' }, low: { bg: '#f1f5f9', fg: '#475569' },
@@ -76,7 +76,7 @@ export default function BusinessDashboard() {
       <div className="hub-section-label" id="pillars">Your three pillars</div>
       <section className="hub-grid" style={{ marginBottom: 28 }}>
         {/* Visibility + Security → their recommendations */}
-        {['visibility', 'governance', 'security'].map((pillar) => {
+        {['visibility', 'governance', 'data-security'].map((pillar) => {
           const list = recsFor(pillar);
           return (
             <div key={pillar} className="hub-card hub-card-section" style={{ '--accent': '#c75b39' }}>
@@ -86,7 +86,7 @@ export default function BusinessDashboard() {
                   <Link to="/dashboard/visibility" style={{ fontWeight: 600 }}>How AI sees your business →</Link>
                 </p>
               )}
-              {pillar === 'security' && (
+              {pillar === 'data-security' && (
                 <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 8px' }}>
                   <Link to="/dashboard/security" style={{ fontWeight: 600 }}>Your AI tools & data exposure →</Link>
                 </p>
