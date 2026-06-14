@@ -90,6 +90,7 @@ import BusinessGovernance from './pages/beaiready/BusinessGovernance.jsx';
 import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
+import BusinessTraining from './pages/beaiready/BusinessTraining.jsx';
 import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
@@ -97,6 +98,8 @@ import BeAIReadyAdminPillars from './pages/beaiready/admin/BeAIReadyAdminPillars
 import BeAIReadyAdminData from './pages/beaiready/admin/BeAIReadyAdminData.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
+import BeAIReadyTracker from './pages/beaiready/BeAIReadyTracker.jsx';
+import BeAIReadyFeature from './pages/beaiready/BeAIReadyFeature.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
 import PublicLawsuitDetail from './pages/public/PublicLawsuitDetail.jsx';
@@ -171,6 +174,8 @@ export default function App() {
             <Route element={<BeAIReadyLayout />}>
               <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
               <Route path="/toolbox" element={<BeAIReadyToolbox />} />
+              <Route path="/tracker" element={<BeAIReadyTracker />} />
+              <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
             </Route>
           )}
 
@@ -240,6 +245,7 @@ export default function App() {
                 <Route path="/dashboard/visibility" element={<BusinessVisibility />} />
                 <Route path="/dashboard/security" element={<BusinessSecurity />} />
                 <Route path="/dashboard/productivity" element={<BusinessProductivity />} />
+                <Route path="/dashboard/training" element={<BusinessTraining />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Route>

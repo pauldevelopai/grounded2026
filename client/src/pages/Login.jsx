@@ -53,9 +53,11 @@ export default function Login() {
       if (mode === 'login') {
         const user = await login(email, password);
         if (IS_BEAIREADY) {
-          // Admins → the BE AI READY admin portal (its own, not Grounded's);
-          // client businesses → their dashboard.
-          navigate(user.role === 'admin' ? '/admin' : '/dashboard');
+          // Admins → the BE AI READY admin portal (its own, not Grounded's).
+          // Client businesses → back to where they were headed (the feature they
+          // clicked), or their dashboard if they came in cold.
+          if (user.role === 'admin') navigate('/admin');
+          else navigate(next || '/dashboard');
         } else if (next) {
           // safeNext already validated this is an in-app path. Use
           // window.location for /aikit/* (Express-served) so the page
@@ -83,7 +85,7 @@ export default function Login() {
         <p className="brand-sub">{IS_BEAIREADY ? 'by Develop AI' : 'Newsroom-owned AI · by Develop AI'}</p>
         <p className="login-instruction">
           {IS_BEAIREADY
-            ? (mode === 'login' ? 'Client sign in' : 'Create your account')
+            ? (mode === 'login' ? (next ? 'Sign in to pick up where you left off' : 'Sign in to your dashboard') : 'Create your account')
             : (mode === 'login' ? 'Sign in to continue' : 'Create your account')}
         </p>
 

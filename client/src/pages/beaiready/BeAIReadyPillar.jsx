@@ -35,12 +35,14 @@ export default function BeAIReadyPillar() {
                 </span>
               </div>
               <p style={{ fontSize: 13.5, color: '#4a443d', margin: 0 }}>{f.what}</p>
-              {f.to && <p style={{ margin: '8px 0 0', color: '#c75b39', fontWeight: 600, fontSize: 13 }}>Open →</p>}
-              {f.href && <p style={{ margin: '8px 0 0', color: '#c75b39', fontWeight: 600, fontSize: 13 }}>Open ↗</p>}
+              {(f.to || f.dash) && <p style={{ margin: '8px 0 0', color: '#c75b39', fontWeight: 600, fontSize: 13 }}>Open →</p>}
+              {!f.to && !f.dash && f.slug && <p style={{ margin: '8px 0 0', color: '#8a8076', fontWeight: 600, fontSize: 13 }}>Learn more →</p>}
             </>
           );
+          // Direct public page (tracker, toolbox, training) → link straight there.
           if (f.to) return <Link key={f.name} to={f.to} className="hub-card" style={{ textDecoration: 'none', color: 'inherit' }}>{inner}</Link>;
-          if (f.href) return <a key={f.name} href={f.href} className="hub-card" style={{ textDecoration: 'none', color: 'inherit' }}>{inner}</a>;
+          // Dashboard tool or in-development feature → the feature gateway.
+          if (f.slug) return <Link key={f.name} to={`/feature/${f.slug}`} className="hub-card" style={{ textDecoration: 'none', color: 'inherit' }}>{inner}</Link>;
           return <div key={f.name} className="hub-card">{inner}</div>;
         })}
       </section>

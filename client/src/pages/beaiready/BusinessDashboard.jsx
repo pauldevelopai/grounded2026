@@ -189,7 +189,7 @@ export default function BusinessDashboard() {
       <div className="hub-section-label">Active AI toolbox</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>
         <p style={{ margin: 0 }}>
-          A growing set of practical AI tools for everyday work. <a href="/tools/">Open the toolbox →</a>
+          A growing set of practical AI tools for everyday work. <Link to="/toolbox">Open the toolbox →</Link>
         </p>
       </section>
 
