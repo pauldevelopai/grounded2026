@@ -118,7 +118,7 @@ async function main() {
 
   console.log('validate-prompts:');
   console.log('  models with keys:', Object.entries(configured).filter(([, v]) => v).map(([m]) => m).join(', ') || 'none');
-  console.log('  promptfoo installed:', pfOk, pfOk ? '' : '(install with: npm install -D promptfoo)');
+  console.log('  promptfoo installed:', pfOk, pfOk ? '' : '(opt-in: cd server && npm install -D promptfoo --legacy-peer-deps)');
   console.log('  fixtures:', fxDir || 'none found');
 
   const { rows: prompts } = await pool.query("SELECT id, title, body, description FROM prompts WHERE validation_status IN ('pending','draft')");

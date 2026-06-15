@@ -29,8 +29,5 @@
     "puppeteer": "^24.42.0",
     "uuid": "^10.0.0",
     "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "promptfoo": "^0.103.0"
   }
 }
