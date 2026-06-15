@@ -6,6 +6,13 @@ import { generateEmbedding, toPgVector } from './embeddings.js';
 import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scraper.js';
 import { startScan, finishScan, updateScan } from './scan-state.js';
 import { runFormsSheetSync } from './forms-sync.js';
+import { generateGovernanceToday } from './governance-today.js';
+
+// Regenerate the "Today" AI-governance digest (web-search-backed) for the tracker.
+export async function runGovernanceTodayDigest() {
+  const v = await generateGovernanceToday();
+  return { result: `Today digest regenerated (${v.headlines?.length || 0} sources)`, itemsProcessed: 1 };
+}
 
 // Helper: create a notification for all admin users (broadcast)
 async function notify(type, title, message, link = null) {
@@ -951,6 +958,7 @@ export const JOB_REGISTRY = {
   tools_triage:               runToolsTriage,
   data_security_triage:       runDataSecurityTriage,
   ethics_triage:              runEthicsTriage,
+  governance_today_digest:    runGovernanceTodayDigest,
 };
 
 // ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──

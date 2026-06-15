@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { chatWithGroundedHelp, callClaude } from '../services/claude.js';
+import { getGovernanceToday } from '../services/governance-today.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
@@ -1135,6 +1136,13 @@ ${entries}
   }
 });
 
+// The "Today" AI-governance digest (cached; refreshed by the governance_today_digest
+// job). Public, no auth — read-only; returns null until first generated.
+router.get('/governance-today', async (req, res) => {
+  try { res.json(await getGovernanceToday()); }
+  catch (err) { console.error('[public/governance-today]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── AI Toolkit (imported from aikit) ─────────────────────────────────────────
 router.get('/toolkit', async (req, res) => {
   try {
@@ -1153,7 +1161,7 @@ router.get('/toolkit', async (req, res) => {
 
     const { rows } = await pool.query(
       `SELECT slug, name, url, primary_category, categories, description,
-              cdi_cost, cdi_difficulty, cdi_invasiveness
+              cdi_cost, cdi_difficulty, cdi_invasiveness, tags
          FROM tools ${whereSql}
         ORDER BY primary_category ASC NULLS LAST, name ASC`,
       params
@@ -1178,12 +1186,26 @@ router.get('/toolkit/:slug', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT slug, name, url, primary_category, categories, description, purpose,
-              cdi_cost, cdi_difficulty, cdi_invasiveness, updated_at
+              cdi_cost, cdi_difficulty, cdi_invasiveness, comments, time_saved,
+              time_reinvestment, tags, similar_tools, sovereign_alternative, updated_at
          FROM tools WHERE slug = $1`,
       [req.params.slug]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
-    res.json(rows[0]);
+    const tool = rows[0];
+    // Resolve alternative slugs → {slug, name} so the UI can link them by name.
+    const slugs = [...(tool.similar_tools || []), tool.sovereign_alternative].filter(Boolean);
+    tool.similar_tools_resolved = [];
+    tool.sovereign_alternative_resolved = null;
+    if (slugs.length) {
+      const { rows: alts } = await pool.query('SELECT slug, name FROM tools WHERE slug = ANY($1)', [slugs]);
+      const bySlug = Object.fromEntries(alts.map((a) => [a.slug, a.name]));
+      tool.similar_tools_resolved = (tool.similar_tools || []).filter((s) => bySlug[s]).map((s) => ({ slug: s, name: bySlug[s] }));
+      if (tool.sovereign_alternative && bySlug[tool.sovereign_alternative]) {
+        tool.sovereign_alternative_resolved = { slug: tool.sovereign_alternative, name: bySlug[tool.sovereign_alternative] };
+      }
+    }
+    res.json(tool);
   } catch (err) {
     console.error('[public/toolkit/:slug]', err);
     res.status(500).json({ message: 'Internal server error' });

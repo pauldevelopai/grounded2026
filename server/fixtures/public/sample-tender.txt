@@ -1,0 +1,16 @@
+PUBLIC SAMPLE — NOT CLIENT DATA. Generic tender notice for prompt validation.
+
+REQUEST FOR QUOTATION
+Reference: SAMPLE/RFQ/2026/007
+Issuing body: Greenfield Municipal Demonstration Authority
+Title: Supply and installation of office air-conditioning (Phase 1)
+Scope: Removal of existing units, supply and install 12 split units across 2 floors,
+       commissioning and a 12-month maintenance plan.
+Closing date & time: 28 August 2026, 11:00 (local).
+Compulsory briefing session: 12 August 2026, 10:00, at the site. Attendance mandatory.
+Estimated value: R 1,250,000 (excl. VAT).
+Submission: Sealed, deposited in the tender box at the main reception, Block A.
+Eligibility: CIDB grade 3 ME or higher; valid tax clearance; B-BBEE certificate.
+Enquiries: Procurement Office, procurement@example-sample.test, +27 11 555 0100.
+Notes: Prices to remain valid for 90 days. The lowest quotation will not necessarily
+       be accepted. Late submissions will not be considered.

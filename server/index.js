@@ -52,6 +52,8 @@ import nodesRoutes from './routes/nodes.js';
 import adminOverviewRoutes from './routes/admin.js';
 import newsroomsRoutes from './routes/newsrooms.js';
 import beaireadyRoutes from './routes/beaiready.js';
+import beaireadyTrainingRoutes from './routes/beaiready-training.js';
+import promptRoutes from './routes/prompts.js';
 import bairAuditsRoutes from './routes/bair-audits.js';
 import bairFindingsRoutes from './routes/bair-findings.js';
 import bairScoreRoutes from './routes/bair-score.js';
@@ -314,6 +316,7 @@ app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
 // Feedback: all authenticated users can submit; admin can view/manage
 app.use('/api/feedback', requireAuth, feedbackRoutes);
 // BE AI READY business dashboard data — reads scoped to the caller's own tenant.
+app.use('/api/beaiready/training', requireAuth, beaireadyTrainingRoutes);
 app.use('/api/beaiready', requireAuth, beaireadyRoutes);
 // Audience questions (outbound): any logged-in user fetches /next + answers;
 // authoring + results endpoints self-guard with requireRole('admin') inside.
@@ -372,6 +375,11 @@ admin.use('/agent-actions',        agentActionRoutes);
 admin.use('/bair/audits',          bairAuditsRoutes);
 admin.use('/bair/findings',        bairFindingsRoutes);
 admin.use('/bair/score',           bairScoreRoutes);
+
+// Prompt library (Productivity) — authed; org-scoped reads + per-user variants/
+// feedback, admin-gated curated writes (inline requireRole). Mounted BEFORE the
+// admin catch-all so /prompts, /me/prompt-variants and /admin/feedback resolve here.
+app.use('/api', requireAuth, promptRoutes);
 
 app.use('/api', admin);
 

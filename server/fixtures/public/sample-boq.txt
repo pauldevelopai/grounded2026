@@ -1,0 +1,12 @@
+PUBLIC SAMPLE — NOT CLIENT DATA. Generic, messy Bill of Quantities extract (NRM2-style)
+for prompt validation. Deliberately unformatted (as if copy-pasted from a PDF).
+
+BILL No 2 - SUBSTRUCTURE
+2.1 Excavate over site to reduce levels avg 600mm   m3   320    42.50    13600
+2.2  Excavate for foundation trenches not exceeding 2.00m deep m3 180 58.00 10440
+item 2.3 Earthwork support to trench sides   m2   240   31.00   7440
+2.4 Disposal of excavated material off site incl cart away m3 500 96.50 48250
+2.5 ...75mm blinding layer of concrete (15MPa) under foundations m2 210 88.00 18480
+2.6 Reinforced concrete 25MPa in foundations   m3   95   1450.00  137750
+2.7 High yield steel reinforcement bars   kg   7800   23.10   180180
+Bill 2 carried to summary ............................... R 424,140
