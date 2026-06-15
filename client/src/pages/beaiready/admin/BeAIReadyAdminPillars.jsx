@@ -1,7 +1,8 @@
-// BeAIReadyAdminPillars — Pillars page of the BE AI READY admin. Pick a client,
-// then work each of the six pillars: record the audit's recommendations and see
-// progress. Reads/writes the client's data via the admin's X-Newsroom-Id
-// override (admins may act in any tenant).
+// BeAIReadyAdminPillars — the BE AI READY admin's Pillars page (the four audit
+// pillars). The per-client, per-pillar recommendations UI is the reusable
+// PillarsWorkspace below, also used by the Training & Strategy page. Pick a
+// client, then for each pillar record the audit's recommendations; they appear
+// in that client's dashboard. Reads/writes via the admin's X-Newsroom-Id override.
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../../hooks/useApi.js';
 import { PILLARS } from '../pillars.js';
@@ -12,7 +13,7 @@ const PRIORITY_STYLE = {
   medium: { bg: '#fef3c7', fg: '#92400e' }, low: { bg: '#f1f5f9', fg: '#475569' },
 };
 
-export default function BeAIReadyAdminPillars() {
+export function PillarsWorkspace({ pillarKeys, heading, blurb }) {
   const [clients, setClients] = useState(null);
   const [clientId, setClientId] = useState('');
   const [recs, setRecs] = useState(null);
@@ -36,11 +37,8 @@ export default function BeAIReadyAdminPillars() {
 
   return (
     <div style={{ maxWidth: 900 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Pillars</h1>
-      <p style={{ color: '#6b6359', marginBottom: 16, maxWidth: '64ch' }}>
-        Work each pillar for a client — record the audit's prioritised recommendations; they appear in
-        that client's dashboard. (Materials upload + deeper progress tracking come next.)
-      </p>
+      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>{heading}</h1>
+      <p style={{ color: '#6b6359', marginBottom: 16, maxWidth: '64ch' }}>{blurb}</p>
       {err && <div style={banner}>{err}</div>}
 
       <div style={{ marginBottom: 20 }}>
@@ -53,7 +51,7 @@ export default function BeAIReadyAdminPillars() {
 
       {client && (
         <div style={{ display: 'grid', gap: 14 }}>
-          {PILLARS.map((p) => (
+          {PILLARS.filter((p) => pillarKeys.includes(p.key)).map((p) => (
             <PillarBlock key={p.key} pillar={p} clientId={clientId}
               recs={(recs || []).filter((r) => r.pillar === p.key)} onChanged={loadRecs} setErr={setErr} />
           ))}
@@ -63,7 +61,18 @@ export default function BeAIReadyAdminPillars() {
   );
 }
 
-function PillarBlock({ pillar, clientId, recs, onChanged, setErr }) {
+// The Pillars page: the four audit pillars (Training + Strategy live on their own page).
+export default function BeAIReadyAdminPillars() {
+  return (
+    <PillarsWorkspace
+      pillarKeys={['visibility', 'governance', 'data-security', 'productivity']}
+      heading="Pillars"
+      blurb="Work each audit pillar for a client — record the audit's prioritised recommendations; they appear in that client's dashboard. (Materials upload + deeper progress tracking come next.)"
+    />
+  );
+}
+
+export function PillarBlock({ pillar, clientId, recs, onChanged, setErr }) {
   const [form, setForm] = useState({ title: '', detail: '', priority: 'medium' });
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);

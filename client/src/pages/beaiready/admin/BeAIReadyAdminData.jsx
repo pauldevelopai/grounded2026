@@ -18,6 +18,7 @@ const SOURCES = [
       ['legal_sources_ingest', 'Ingest sources', 'Pull new items from every due legal source'],
       ['legal_article_scrape', 'Scrape detail', 'Fetch full article content for new items'],
       ['legal_items_triage', 'Triage + commit', 'Classify items with AI and commit to the tracker'],
+      ['governance_today_digest', 'Refresh “Today” digest', 'Regenerate the tracker’s Today summary via a live web search (manual — uses AI credit)'],
     ],
   },
   {

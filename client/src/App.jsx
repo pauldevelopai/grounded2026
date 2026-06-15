@@ -91,6 +91,8 @@ import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
 import BusinessTraining from './pages/beaiready/BusinessTraining.jsx';
+import BeAIReadyPrompts from './pages/beaiready/BeAIReadyPrompts.jsx';
+import BeAIReadyMyPrompts from './pages/beaiready/BeAIReadyMyPrompts.jsx';
 import BairShell from './pages/bair/BairShell.jsx';
 import BairAudits from './pages/bair/BairAudits.jsx';
 import BairAudit from './pages/bair/BairAudit.jsx';
@@ -98,6 +100,8 @@ import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
 import BeAIReadyAdminPillars from './pages/beaiready/admin/BeAIReadyAdminPillars.jsx';
+import BeAIReadyAdminTraining from './pages/beaiready/admin/BeAIReadyAdminTraining.jsx';
+import BeAIReadyAdminPrompts from './pages/beaiready/admin/BeAIReadyAdminPrompts.jsx';
 import BeAIReadyAdminData from './pages/beaiready/admin/BeAIReadyAdminData.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
@@ -176,7 +180,8 @@ export default function App() {
           {IS_BEAIREADY && (
             <Route element={<BeAIReadyLayout />}>
               <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
-              <Route path="/toolbox" element={<BeAIReadyToolbox />} />
+              <Route path="/toolbox" element={<BeAIReadyToolbox mode="list" />} />
+              <Route path="/toolbox/:slug" element={<BeAIReadyToolbox mode="detail" />} />
               <Route path="/tracker" element={<BeAIReadyTracker />} />
               <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
             </Route>
@@ -233,6 +238,8 @@ export default function App() {
                 <Route element={<BeAIReadyAdminShell />}>
                   <Route path="/admin" element={<BeAIReadyAdminUsers />} />
                   <Route path="/admin/pillars" element={<BeAIReadyAdminPillars />} />
+                  <Route path="/admin/training" element={<BeAIReadyAdminTraining />} />
+                  <Route path="/admin/prompts" element={<BeAIReadyAdminPrompts />} />
                   <Route path="/admin/data" element={<BeAIReadyAdminData />} />
                   <Route path="/admin/models" element={<BeAIReadyAdminModels />} />
                 </Route>
@@ -249,6 +256,9 @@ export default function App() {
                 <Route path="/dashboard/security" element={<BusinessSecurity />} />
                 <Route path="/dashboard/productivity" element={<BusinessProductivity />} />
                 <Route path="/dashboard/training" element={<BusinessTraining />} />
+                <Route path="/dashboard/prompts" element={<BeAIReadyPrompts mode="library" />} />
+                <Route path="/dashboard/prompts/:id" element={<BeAIReadyPrompts mode="detail" />} />
+                <Route path="/dashboard/my-prompts" element={<BeAIReadyMyPrompts />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Route>

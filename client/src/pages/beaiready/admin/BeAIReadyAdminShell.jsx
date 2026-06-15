@@ -11,6 +11,8 @@ const TERRACOTTA = '#c75b39';
 const NAV = [
   { to: '/admin', label: 'Users', end: true },
   { to: '/admin/pillars', label: 'Pillars' },
+  { to: '/admin/training', label: 'Training & Strategy' },
+  { to: '/admin/prompts', label: 'Prompt curation' },
   { to: '/admin/data', label: 'Data' },
   { to: '/admin/models', label: 'Models' },
 ];

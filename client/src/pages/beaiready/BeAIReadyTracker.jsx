@@ -18,6 +18,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'n
 export default function BeAIReadyTracker() {
   const [tab, setTab] = useState('lawsuits');
   const [data, setData] = useState({}); // key -> array of items
+  const [today, setToday] = useState(undefined); // undefined=loading, null=none yet
   const active = TABS.find((t) => t.key === tab);
 
   useEffect(() => {
@@ -26,6 +27,10 @@ export default function BeAIReadyTracker() {
       .then((d) => setData((s) => ({ ...s, [tab]: Array.isArray(d) ? d : (d?.items || []) })))
       .catch(() => setData((s) => ({ ...s, [tab]: [] })));
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    publicFetch('/public/governance-today').then((v) => setToday(v || null)).catch(() => setToday(null));
+  }, []);
 
   const items = data[tab];
 
@@ -39,6 +44,29 @@ export default function BeAIReadyTracker() {
           behind your governance: updated daily, the same feed your AI policy is built against.
         </p>
       </section>
+
+      {/* ── Today: a conversational, web-search-backed read on where AI governance
+            stands right now — catches breaking news the lawsuit/regulation tracker
+            doesn't (a model suspension, an enforcement action). Refreshed daily. ── */}
+      {today && today.summary && (
+        <section style={{ background: 'linear-gradient(180deg,#fff,#fbf7f4)', border: '1px solid #eaddd3', borderLeft: '4px solid #c75b39', borderRadius: 12, padding: '18px 20px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#c75b39' }}>Today in AI governance</div>
+            {today.generated_at && <div style={{ fontSize: 11.5, color: '#a89e92' }}>updated {fmtDate(today.generated_at)}</div>}
+          </div>
+          <div style={{ fontSize: 14.5, lineHeight: 1.65, color: '#3a342e', margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>{today.summary}</div>
+          {today.headlines?.length > 0 && (
+            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {today.headlines.map((h, i) => (
+                <a key={i} href={h.url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, color: '#7a4636', background: '#f7ece7', padding: '3px 9px', borderRadius: 999, textDecoration: 'none', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {h.title} ↗
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e4dcd2', marginBottom: 18 }}>
         {TABS.map((t) => (
