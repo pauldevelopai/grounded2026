@@ -85,7 +85,7 @@ export default function BeAIReadyHome() {
       </section>
       <p className="hub-foot-note">
         Every tier includes the full audit across all pillars, the findings report and action plan, and your
-        dashboard with lifetime monitoring. Talk to Paul directly:
+        dashboard with lifetime monitoring. Get in touch:
         &nbsp;<a href="mailto:paul@developai.co.za">paul@developai.co.za</a>
         &nbsp;· <a href="https://developai.co.za" target="_blank" rel="noreferrer">developai.co.za</a>
       </p>

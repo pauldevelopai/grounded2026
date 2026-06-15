@@ -158,7 +158,7 @@ export default function Login() {
         {IS_BEAIREADY ? (
           <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', color: '#8a8076' }}>
             Clients and Develop&nbsp;AI staff sign in here.<br />
-            New client? <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready">Talk to Paul</a> to get set up.
+            New client? <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready">Get in touch</a> to get set up.
           </div>
         ) : (
         <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '14px', color: '#666' }}>

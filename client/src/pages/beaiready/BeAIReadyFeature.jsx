@@ -45,12 +45,12 @@ export default function BeAIReadyFeature() {
           <h2 style={{ marginTop: 0 }}>This lives in your dashboard</h2>
           <p>
             It’s set up per business, so it sits behind your client sign-in. Sign in to open it — you’ll
-            land right back on this tool, ready to use. New to Be AI Ready? Talk to Paul and we’ll get
-            you set up.
+            land right back on this tool, ready to use. New to Be AI Ready? Book a scoping call and
+            we’ll get you set up.
           </p>
           <div className="hub-hero-cta" style={{ margin: '8px 0 0' }}>
             <Link to={`/login?next=${encodeURIComponent(feature.dash)}`} className="hub-btn hub-btn-solid">Sign in to open this</Link>
-            <a href={SCOPING_WHATSAPP} target="_blank" rel="noreferrer" className="hub-btn hub-btn-ghost">Talk to Paul</a>
+            <a href={SCOPING_WHATSAPP} target="_blank" rel="noreferrer" className="hub-btn hub-btn-ghost">Book a scoping call</a>
           </div>
         </section>
       )}
