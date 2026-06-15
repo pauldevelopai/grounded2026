@@ -87,8 +87,6 @@ export const PILLARS = [
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
       { name: 'Track employee productivity', status: 'live', dash: '/dashboard/productivity', slug: 'productivity-tracking',
         what: 'Five measures only — deliverables, revenue, time spent, AI hours saved, client outcomes — entered at the business level with your own baselines. Never used to police individuals.' },
-      { name: 'BetterBoss', status: 'building', slug: 'betterboss',
-        what: 'Capture a manager’s hard-won expertise and turn it into an AI guide that coaches junior staff through their real work.' },
     ],
   },
   {
@@ -103,8 +101,8 @@ export const PILLARS = [
         what: 'A hands-on one-day on-site training + three mentoring sessions (R35k, up to 30 people) — the strongest place to start. See the full offer and book a date.' },
       { name: 'Course materials — past & upcoming', status: 'partial', dash: '/dashboard/training', slug: 'training-materials',
         what: 'Every training and mentoring session you’ve had, and what’s scheduled — with the materials, accessible to your staff at any time.' },
-      { name: 'Staff AI-competency', status: 'partial', dash: '/dashboard/training', slug: 'staff-competency',
-        what: 'A read on where your team stands, drawn from the competency forms they complete — so training targets the real gaps.' },
+      { name: 'BetterBoss', status: 'building', slug: 'betterboss',
+        what: 'Capture a manager’s hard-won expertise and turn it into an AI guide that coaches junior staff through their real work.' },
     ],
   },
   {
@@ -116,10 +114,10 @@ export const PILLARS = [
       'We map your company’s goals and your full workflow end to end, then identify exactly which parts ' +
       'are worth automating with AI — and in what order.',
     features: [
-      { name: 'Goals & workflow map', status: 'building', slug: 'strategy-goals',
-        what: 'A clear map of how your business actually runs — every step, every hand-off — built with your team.' },
-      { name: 'Automation opportunities, prioritised', status: 'building', slug: 'strategy-automation',
-        what: 'Which parts of that workflow AI should take on first, sized by effort and payoff — your practical automation roadmap.' },
+      { name: 'Goals, workflow & automation roadmap', status: 'building', slug: 'strategy-roadmap',
+        what: 'A clear map of how your business runs — every step and hand-off — and which parts AI should take on first, sized by effort and payoff: your practical automation roadmap, built with your team.' },
+      { name: 'Staff AI Needs', status: 'partial', dash: '/dashboard/training', slug: 'staff-needs',
+        what: 'A read on where your team stands and what they need, drawn from the competency forms they complete — so your AI strategy targets the real gaps.' },
     ],
   },
 ];

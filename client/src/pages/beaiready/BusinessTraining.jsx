@@ -129,8 +129,8 @@ export default function BusinessTraining() {
         )}
       </section>
 
-      {/* ── Staff AI-competency (from connected forms) ── */}
-      <div className="hub-section-label">Staff AI-competency</div>
+      {/* ── Staff AI Needs (from connected competency forms; feeds strategy) ── */}
+      <div className="hub-section-label">Staff AI Needs</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>
         {intake == null ? (
           <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
