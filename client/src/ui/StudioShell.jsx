@@ -40,6 +40,7 @@ const STUDIO_NAV = [
   { to: '/knowledge',            label: 'Knowledge',         group: 'AI tools' },
   { to: '/database',             label: 'Database',          group: 'Data' },
   { to: '/learning',             label: 'Learning journeys', group: 'Data' },
+  { to: '/bair',                 label: 'AI-readiness audits', group: 'BAIR' },
   { to: '/settings/sectors',     label: 'Sectors',           group: 'Settings' },
   { to: '/settings/gmail',       label: 'Gmail',             group: 'Settings' },
 ];

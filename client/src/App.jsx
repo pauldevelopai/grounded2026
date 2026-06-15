@@ -91,6 +91,9 @@ import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
 import BusinessTraining from './pages/beaiready/BusinessTraining.jsx';
+import BairShell from './pages/bair/BairShell.jsx';
+import BairAudits from './pages/bair/BairAudits.jsx';
+import BairAudit from './pages/bair/BairAudit.jsx';
 import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
@@ -361,6 +364,17 @@ export default function App() {
                 <Route path="/learning/:contactId" element={<JourneyDetail />} />
                 <Route path="/settings/sectors" element={<SectorSettings />} />
                 <Route path="/settings/gmail" element={<GmailSettings />} />
+              </Route>
+            </Route>
+          </Route>
+
+          {/* ── BAIR — AI-readiness audit area. Its OWN shell (sibling to Studio,
+                not nested in it), admin-gated, grounded host only. ── */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AdminRoute />}>
+              <Route element={<BairShell />}>
+                <Route path="/bair" element={<BairAudits />} />
+                <Route path="/bair/:id" element={<BairAudit />} />
               </Route>
             </Route>
           </Route>

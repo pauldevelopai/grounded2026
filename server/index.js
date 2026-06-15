@@ -52,6 +52,10 @@ import nodesRoutes from './routes/nodes.js';
 import adminOverviewRoutes from './routes/admin.js';
 import newsroomsRoutes from './routes/newsrooms.js';
 import beaireadyRoutes from './routes/beaiready.js';
+import bairAuditsRoutes from './routes/bair-audits.js';
+import bairFindingsRoutes from './routes/bair-findings.js';
+import bairScoreRoutes from './routes/bair-score.js';
+import bairIntakeRoutes from './routes/bair-intake.js';
 import pulseRoutes from './routes/pulse.js';
 import pulsePublicRoutes from './routes/pulse-public.js';
 import { requirePulse } from './middleware/pulse-flag.js';
@@ -285,6 +289,9 @@ app.get('/api/v1', (req, res) => {
 });
 // Participant portal: public, token-authenticated
 app.use('/api/portal', participantPortalRoutes);
+// BAIR self-serve intake: public, participant-token-scoped (must be mounted
+// BEFORE the admin router so its requireAuth doesn't intercept these routes).
+app.use('/api/bair/intake', bairIntakeRoutes);
 // GROUNDED Nodes: POST /api/nodes/beacon is public (opt-in local-install
 // heartbeat); GET /api/nodes/admin/overview self-guards with requireAuth +
 // requireRole('admin') inside the router.
@@ -361,6 +368,10 @@ admin.use('/learning-journeys',    sectorFilter, learningJourneyRoutes);
 admin.use('/participant-tokens',   participantTokenRoutes);
 admin.use('/agent-conversations',  agentConversationRoutes);
 admin.use('/agent-actions',        agentActionRoutes);
+// BAIR (AI-readiness audit corpus) — admin-only; bair.* schema, consent-firewalled.
+admin.use('/bair/audits',          bairAuditsRoutes);
+admin.use('/bair/findings',        bairFindingsRoutes);
+admin.use('/bair/score',           bairScoreRoutes);
 
 app.use('/api', admin);
 
