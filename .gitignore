@@ -12,3 +12,8 @@ logs/
 /holly.sql
 /*.dump
 /*.sql.gz
+
+# Prompt-validation fixtures: real client documents are PRIVATE — never commit.
+# (Keep the folder + its README; ignore everything else inside.)
+server/fixtures/real/*
+!server/fixtures/real/README.md

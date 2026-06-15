@@ -11,7 +11,9 @@
     "build": "cd client && npm run build",
     "orchestrate": "cd server && node db/scripts/orchestrate.js",
     "scrape": "cd server && node db/scripts/scrape-only.js",
-    "triage": "cd server && node db/scripts/triage-nightly.js"
+    "triage": "cd server && node db/scripts/triage-nightly.js",
+    "seed:prompts": "node server/db/seeds/prompts.mjs",
+    "validate-prompts": "cd server && node scripts/validate-prompts.mjs"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
