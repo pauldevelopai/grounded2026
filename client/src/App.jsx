@@ -91,6 +91,7 @@ import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
 import BusinessTraining from './pages/beaiready/BusinessTraining.jsx';
+import BusinessStrategy from './pages/beaiready/BusinessStrategy.jsx';
 import BeAIReadyPrompts from './pages/beaiready/BeAIReadyPrompts.jsx';
 import BeAIReadyMyPrompts from './pages/beaiready/BeAIReadyMyPrompts.jsx';
 import BairShell from './pages/bair/BairShell.jsx';
@@ -100,11 +101,18 @@ import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
 import BeAIReadyAdminPillars from './pages/beaiready/admin/BeAIReadyAdminPillars.jsx';
+import BeAIReadyAdminTools from './pages/beaiready/admin/BeAIReadyAdminTools.jsx';
 import BeAIReadyAdminTraining from './pages/beaiready/admin/BeAIReadyAdminTraining.jsx';
 import BeAIReadyAdminPrompts from './pages/beaiready/admin/BeAIReadyAdminPrompts.jsx';
 import BeAIReadyAdminData from './pages/beaiready/admin/BeAIReadyAdminData.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
+import BeAIReadyToolboxFinder from './pages/beaiready/BeAIReadyToolboxFinder.jsx';
+import BeAIReadyToolboxExplorer from './pages/beaiready/BeAIReadyToolboxExplorer.jsx';
+import BeAIReadyToolboxAsk from './pages/beaiready/BeAIReadyToolboxAsk.jsx';
+import BeAIReadyToolboxForYou from './pages/beaiready/BeAIReadyToolboxForYou.jsx';
+import BeAIReadyToolboxSuggest from './pages/beaiready/BeAIReadyToolboxSuggest.jsx';
+import BeAIReadyToolboxCategory from './pages/beaiready/BeAIReadyToolboxCategory.jsx';
 import BeAIReadyTracker from './pages/beaiready/BeAIReadyTracker.jsx';
 import BeAIReadyFeature from './pages/beaiready/BeAIReadyFeature.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
@@ -181,6 +189,12 @@ export default function App() {
             <Route element={<BeAIReadyLayout />}>
               <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
               <Route path="/toolbox" element={<BeAIReadyToolbox mode="list" />} />
+              <Route path="/toolbox/finder" element={<BeAIReadyToolboxFinder />} />
+              <Route path="/toolbox/explore" element={<BeAIReadyToolboxExplorer />} />
+              <Route path="/toolbox/ask" element={<BeAIReadyToolboxAsk />} />
+              <Route path="/toolbox/for-you" element={<BeAIReadyToolboxForYou />} />
+              <Route path="/toolbox/suggest" element={<BeAIReadyToolboxSuggest />} />
+              <Route path="/toolbox/category/:name" element={<BeAIReadyToolboxCategory />} />
               <Route path="/toolbox/:slug" element={<BeAIReadyToolbox mode="detail" />} />
               <Route path="/tracker" element={<BeAIReadyTracker />} />
               <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
@@ -238,6 +252,7 @@ export default function App() {
                 <Route element={<BeAIReadyAdminShell />}>
                   <Route path="/admin" element={<BeAIReadyAdminUsers />} />
                   <Route path="/admin/pillars" element={<BeAIReadyAdminPillars />} />
+                  <Route path="/admin/tools" element={<BeAIReadyAdminTools />} />
                   <Route path="/admin/training" element={<BeAIReadyAdminTraining />} />
                   <Route path="/admin/prompts" element={<BeAIReadyAdminPrompts />} />
                   <Route path="/admin/data" element={<BeAIReadyAdminData />} />
@@ -256,6 +271,7 @@ export default function App() {
                 <Route path="/dashboard/security" element={<BusinessSecurity />} />
                 <Route path="/dashboard/productivity" element={<BusinessProductivity />} />
                 <Route path="/dashboard/training" element={<BusinessTraining />} />
+                <Route path="/dashboard/strategy" element={<BusinessStrategy />} />
                 <Route path="/dashboard/prompts" element={<BeAIReadyPrompts mode="library" />} />
                 <Route path="/dashboard/prompts/:id" element={<BeAIReadyPrompts mode="detail" />} />
                 <Route path="/dashboard/my-prompts" element={<BeAIReadyMyPrompts />} />

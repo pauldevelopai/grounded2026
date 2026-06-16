@@ -1212,6 +1212,51 @@ router.get('/toolkit/:slug', async (req, res) => {
   }
 });
 
+// Public reviews for a tool: aggregate stats + visible reviews (most-helpful
+// first). No auth — the toolbox is public; writing a review needs a login
+// (POST /api/toolkit/:slug/reviews).
+router.get('/toolkit/:slug/reviews', async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    const statsQ = await pool.query(
+      `SELECT COUNT(*)::int AS count,
+              COALESCE(ROUND(AVG(rating)::numeric, 1), 0)::float AS avg,
+              COUNT(*) FILTER (WHERE rating = 5)::int AS r5,
+              COUNT(*) FILTER (WHERE rating = 4)::int AS r4,
+              COUNT(*) FILTER (WHERE rating = 3)::int AS r3,
+              COUNT(*) FILTER (WHERE rating = 2)::int AS r2,
+              COUNT(*) FILTER (WHERE rating = 1)::int AS r1
+         FROM tool_reviews WHERE tool_slug = $1 AND is_hidden = FALSE`,
+      [slug]
+    );
+    const { rows } = await pool.query(
+      `SELECT r.id, r.rating, r.comment, r.use_case, r.created_at, tm.name AS author_name,
+              (SELECT COUNT(*)::int FROM review_votes v WHERE v.review_id = r.id AND v.is_helpful) AS helpful_count
+         FROM tool_reviews r JOIN team_members tm ON tm.id = r.user_id
+        WHERE r.tool_slug = $1 AND r.is_hidden = FALSE
+        ORDER BY helpful_count DESC, r.created_at DESC`,
+      [slug]
+    );
+    const s = statsQ.rows[0];
+    res.json({
+      stats: { count: s.count, avg: s.avg, dist: { 5: s.r5, 4: s.r4, 3: s.r3, 2: s.r2, 1: s.r1 } },
+      reviews: rows,
+    });
+  } catch (err) { console.error('[public/toolkit/reviews]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Published playbook for a tool (null if there isn't one yet).
+router.get('/toolkit/:slug/playbook', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT tool_slug, best_use_cases, implementation_steps, common_mistakes, privacy_notes, key_features, updated_at
+         FROM tool_playbooks WHERE tool_slug = $1 AND status = 'published'`,
+      [req.params.slug]
+    );
+    res.json(rows[0] || null);
+  } catch (err) { console.error('[public/toolkit/playbook]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // Public catalogue of the workflow *blocks* — the operations tools + journalism
 // agents (the old "Tools & Agents" page), now folded into the Nodes front door.
 // Metadata only (registry.list strips run()); *running* one still needs sign-in

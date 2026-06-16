@@ -53,6 +53,8 @@ import adminOverviewRoutes from './routes/admin.js';
 import newsroomsRoutes from './routes/newsrooms.js';
 import beaireadyRoutes from './routes/beaiready.js';
 import beaireadyTrainingRoutes from './routes/beaiready-training.js';
+import toolkitAdminRoutes from './routes/toolkit-admin.js';
+import toolkitSocialRoutes from './routes/toolkit-social.js';
 import promptRoutes from './routes/prompts.js';
 import bairAuditsRoutes from './routes/bair-audits.js';
 import bairFindingsRoutes from './routes/bair-findings.js';
@@ -318,6 +320,11 @@ app.use('/api/feedback', requireAuth, feedbackRoutes);
 // BE AI READY business dashboard data — reads scoped to the caller's own tenant.
 app.use('/api/beaiready/training', requireAuth, beaireadyTrainingRoutes);
 app.use('/api/beaiready', requireAuth, beaireadyRoutes);
+// Toolbox catalogue management (the `tools` table behind /toolbox). Admin-only;
+// mounted before the generic /api admin router so this exact prefix is handled here.
+app.use('/api/toolkit-admin', requireAuth, requireRole('admin'), toolkitAdminRoutes);
+// Toolbox member actions: write reviews, vote/flag, suggest a tool. Any logged-in user.
+app.use('/api/toolkit', requireAuth, toolkitSocialRoutes);
 // Audience questions (outbound): any logged-in user fetches /next + answers;
 // authoring + results endpoints self-guard with requireRole('admin') inside.
 app.use('/api/user-questions', requireAuth, userQuestionsRoutes);

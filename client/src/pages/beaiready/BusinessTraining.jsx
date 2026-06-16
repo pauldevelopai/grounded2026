@@ -1,8 +1,8 @@
 // BusinessTraining — /dashboard/training. A client's living training record:
-// upcoming + past trainings (from the CRM, scoped to their organisation), the
-// materials from each, and their staff AI-competency intake. Real data only,
-// honest empty states. Wrapped in BeAIReadyLayout; scoped server-side to the
-// caller's own tenant.
+// upcoming + past trainings (from the CRM, scoped to their organisation) with
+// their agenda + materials. Goals, the automation roadmap and Staff AI Needs now
+// live on /dashboard/strategy. Real data only, honest empty states. Wrapped in
+// BeAIReadyLayout; scoped server-side to the caller's own tenant.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
@@ -14,20 +14,16 @@ const TRAINING_WHATSAPP =
 export default function BusinessTraining() {
   const [trainings, setTrainings] = useState(null);
   const [materials, setMaterials] = useState(null);
-  const [intake, setIntake] = useState(null);
   const [agendas, setAgendas] = useState(null);
   const [myMaterials, setMyMaterials] = useState(null);
-  const [outcomes, setOutcomes] = useState(null);
 
   useEffect(() => {
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
     apiFetch('/beaiready/materials').then(setMaterials).catch(() => setMaterials([]));
-    apiFetch('/beaiready/intake').then(setIntake).catch(() => setIntake([]));
     // Per-tenant training data (the consultant's work for this company). The server
-    // returns only published agendas / published materials / final outcomes to a member.
+    // returns only published agendas / published materials to a member.
     apiFetch('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
-    apiFetch('/beaiready/training/outcomes').then(setOutcomes).catch(() => setOutcomes([]));
   }, []);
 
   return (
@@ -35,8 +31,9 @@ export default function BusinessTraining() {
       <div className="hub-eyebrow">Be AI Ready · training</div>
       <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>Your training</h1>
       <p style={{ color: '#6b6359', marginBottom: 24, maxWidth: '64ch' }}>
-        Your trainings and mentoring — past and upcoming — with their materials, and where your team
-        stands on AI competency. <Link to="/dashboard">← Back to your dashboard</Link>
+        Your trainings and mentoring — past and upcoming — with their agenda and materials.
+        Your goals, automation roadmap and Staff AI Needs live on your <Link to="/dashboard/strategy">strategy page</Link>.
+        {' '}<Link to="/dashboard">← Back to your dashboard</Link>
       </p>
 
       {/* ── Your training agenda (per-tenant; published only) ── */}
@@ -60,7 +57,14 @@ export default function BusinessTraining() {
                       </li>
                     ))}
                   </ul>
-                ) : <p style={{ color: '#8a8076', fontSize: 13, margin: 0 }}>Agenda details coming soon.</p>}
+                ) : !a.doc_kind && <p style={{ color: '#8a8076', fontSize: 13, margin: 0 }}>Agenda details coming soon.</p>}
+                {a.doc_kind && (
+                  <p style={{ margin: a.items?.length > 0 ? '8px 0 0' : 0 }}>
+                    <a href={`/api/beaiready/training/agendas/${a.id}/doc/download`} target="_blank" rel="noreferrer">
+                      {a.doc_kind === 'pdf' ? 'Download the agenda (PDF) ↗' : 'Open the agenda document ↗'}
+                    </a>
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -129,46 +133,14 @@ export default function BusinessTraining() {
         )}
       </section>
 
-      {/* ── Staff AI Needs (from connected competency forms; feeds strategy) ── */}
-      <div className="hub-section-label">Staff AI Needs</div>
-      <section className="hub-band" style={{ marginBottom: 24 }}>
-        {intake == null ? (
-          <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
-        ) : intake.length === 0 ? (
-          <p style={{ margin: 0 }}>
-            No competency forms connected yet. Your team’s form responses feed a read on where they stand,
-            so training targets the real gaps.
-          </p>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {intake.map((f) => (
-              <li key={f.form_name} style={{ fontSize: 13.5 }}>
-                <strong>{f.form_name}</strong> — {f.response_count} response{f.response_count === 1 ? '' : 's'}
-                {f.last_synced_at && <span style={{ color: '#8a8076' }}> · synced {new Date(f.last_synced_at).toLocaleDateString()}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Your AI strategy (the outcome document, when final) ── */}
-      <div className="hub-section-label">Your AI strategy</div>
-      <section style={{ marginBottom: 24 }}>
-        {outcomes == null ? (
-          <p style={{ color: '#8a8076' }}>Loading…</p>
-        ) : outcomes.length === 0 ? (
-          <p className="hub-band" style={{ margin: 0 }}>Your AI-strategy outcome document will appear here once finalised after your audit and training.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: 14 }}>
-            {outcomes.map((o) => (
-              <div key={o.id} className="hub-card">
-                <div className="hub-card-kicker">{o.title}</div>
-                {o.content && <div style={{ fontSize: 13.5, color: '#3a342e', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{o.content}</div>}
-                {o.file_url && <p style={{ margin: '8px 0 0' }}><a href={o.file_url} target="_blank" rel="noreferrer">Download the document ↗</a></p>}
-              </div>
-            ))}
-          </div>
-        )}
+      {/* ── BetterBoss (on the training roadmap) ── */}
+      <div className="hub-section-label">On the roadmap</div>
+      <section className="hub-band" style={{ background: '#f4f1ec', marginBottom: 24 }}>
+        <p style={{ margin: 0 }}>
+          <strong>BetterBoss</strong> — capture a manager's hard-won expertise and turn it into an AI guide
+          that coaches junior staff through their real work.
+          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#8a8076' }}>In development</span>
+        </p>
       </section>
 
       <div className="hub-hero-cta" style={{ margin: '8px 0 24px' }}>

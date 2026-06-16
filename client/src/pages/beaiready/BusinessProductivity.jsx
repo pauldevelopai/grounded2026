@@ -1,6 +1,6 @@
 // BusinessProductivity — the authed Productivity workspace (/dashboard/productivity).
-// The five measures (no surveillance — aggregate, entered by the business), the
-// live AI toolbox link, and BetterBoss as roadmap. Scoped to the tenant.
+// The five measures (no surveillance — aggregate, entered by the business) and the
+// live AI toolbox link. Scoped to the tenant. (BetterBoss lives on the Training tab.)
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
@@ -85,13 +85,6 @@ export default function BusinessProductivity() {
         <h2>Your active AI toolbox</h2>
         <p style={{ margin: 0 }}>
           The best AI tools for each function, scored for data safety. <Link to="/toolbox">Open the toolbox →</Link>
-        </p>
-      </section>
-
-      <section className="hub-band" style={{ background: '#f4f1ec' }}>
-        <p style={{ margin: 0 }}>
-          <strong>BetterBoss</strong> — capture a manager's expertise into an AI guide that coaches your team.
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#8a8076' }}>In development</span>
         </p>
       </section>
     </div>

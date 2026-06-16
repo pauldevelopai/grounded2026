@@ -15,6 +15,20 @@ const TABS = [
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
 
+// Relative age, anchored to *now*, so an old event reads plainly as past (not
+// "future") and the freshness of the feed is honest at a glance.
+const relAge = (d) => {
+  if (!d) return '';
+  const days = Math.round((Date.now() - new Date(d).getTime()) / 86400000);
+  if (days < 0) return 'upcoming';
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) { const w = Math.round(days / 7); return `${w} week${w === 1 ? '' : 's'} ago`; }
+  if (days < 365) { const m = Math.round(days / 30); return `${m} month${m === 1 ? '' : 's'} ago`; }
+  const y = Math.round(days / 365); return `${y} year${y === 1 ? '' : 's'} ago`;
+};
+
 export default function BeAIReadyTracker() {
   const [tab, setTab] = useState('lawsuits');
   const [data, setData] = useState({}); // key -> array of items
@@ -81,6 +95,17 @@ export default function BeAIReadyTracker() {
         ))}
       </div>
 
+      {items != null && items.length > 0 && (
+        <div style={{ fontSize: 11.5, color: '#a89e92', margin: '-6px 0 12px' }}>
+          Newest first · as of {fmtDate(new Date())}
+          {(() => {
+            const newest = items[0]?.latest_event_date || items[0]?.updated_at;
+            const a = relAge(newest);
+            return newest ? ` · latest entry ${a}` : '';
+          })()}
+        </div>
+      )}
+
       {items == null ? (
         <p style={{ color: '#8a8076' }}>Loading…</p>
       ) : items.length === 0 ? (
@@ -94,6 +119,7 @@ export default function BeAIReadyTracker() {
                   <span style={{ fontWeight: 700, fontSize: 15.5 }}>{it[active.name]}</span>
                   <span style={{ fontSize: 12, color: '#8a8076', whiteSpace: 'nowrap' }}>
                     {fmtDate(it.latest_event_date || it.updated_at)}
+                    {(() => { const a = relAge(it.latest_event_date || it.updated_at); return a ? ` · ${a}` : ''; })()}
                     {it.status ? ` · ${String(it.status).replace(/_/g, ' ')}` : ''}
                   </span>
                 </div>

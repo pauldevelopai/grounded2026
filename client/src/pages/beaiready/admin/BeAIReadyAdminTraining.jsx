@@ -1,9 +1,10 @@
 // BeAIReadyAdminTraining — the BE AI READY admin's Training & Strategy workspace.
 // Pick a client, then: import/sync their Google form (Intake), build the training
-// Agenda, add Materials (RAG-ingested), upload+edit the Outcome doc (linked to
-// strategy), and record Training/Strategy recommendations. Everything writes to
-// the selected client's tenant via the X-Newsroom-Id override and shows in that
-// client's own portal. All real data — honest empty states.
+// Agenda (with an optional Google-Doc or PDF attachment), add Materials (RAG-ingested),
+// set the AI Strategy as goals + an automation roadmap, and record Training/Strategy
+// recommendations. Everything writes to the selected client's tenant via the
+// X-Newsroom-Id override and shows in that client's own portal. All real data —
+// honest empty states.
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../../../hooks/useApi.js';
 import { findPillar } from '../pillars.js';
@@ -41,7 +42,7 @@ export default function BeAIReadyAdminTraining() {
           <IntakeSection clientId={clientId} setErr={setErr} />
           <AgendaSection clientId={clientId} setErr={setErr} />
           <MaterialsSection clientId={clientId} setErr={setErr} />
-          <OutcomeSection clientId={clientId} setErr={setErr} />
+          <StrategySection clientId={clientId} setErr={setErr} />
           <RecommendationsSection clientId={clientId} setErr={setErr} />
         </div>
       )}
@@ -71,31 +72,62 @@ function IntakeSection({ clientId, setErr }) {
   const [responses, setResponses] = useState(null);
   const [draft, setDraft] = useState({ form_name: '', csv_url: '' });
   const [busy, setBusy] = useState('');
+  const [note, setNote] = useState(null);   // { kind: 'ok'|'warn', text }
 
   const load = useCallback(() => {
     api('/beaiready/intake').then(setForms).catch((e) => setErr(e.message));
     api('/beaiready/training/intake-responses').then(setResponses).catch(() => setResponses([]));
   }, [api, setErr]);
-  useEffect(() => { setForms(null); setResponses(null); load(); }, [load]);
+  useEffect(() => { setForms(null); setResponses(null); setNote(null); load(); }, [load]);
+
+  // Turn a sync result into one honest line the admin can read.
+  const describe = (r) => r.error
+    ? `${r.form}: ${r.error}`
+    : `${r.form}: ${r.inserted} new · ${r.total} total response${r.total === 1 ? '' : 's'}`;
 
   const register = async (e) => {
     e.preventDefault();
     if (!draft.form_name.trim() || !draft.csv_url.trim()) return;
-    setBusy('register'); setErr('');
-    try { await api('/beaiready/training/intake-forms', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) }); setDraft({ form_name: '', csv_url: '' }); load(); }
-    catch (e) { setErr(e.message); }
+    setBusy('register'); setErr(''); setNote(null);
+    try {
+      const r = await api('/beaiready/training/intake-forms', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) });
+      setDraft({ form_name: '', csv_url: '' });
+      if (r?.sync) setNote({ kind: r.sync.error ? 'warn' : 'ok', text: describe(r.sync) });
+      load();
+    } catch (e) { setErr(e.message); }
     setBusy('');
   };
-  const sync = async () => { setBusy('sync'); setErr(''); try { await api('/beaiready/training/intake-forms/sync', { method: 'POST' }); load(); } catch (e) { setErr(e.message); } setBusy(''); };
+  const sync = async () => {
+    setBusy('sync'); setErr(''); setNote(null);
+    try {
+      const r = await api('/beaiready/training/intake-forms/sync', { method: 'POST' });
+      const results = r?.results || [];
+      if (results.length === 0) setNote({ kind: 'warn', text: 'No form connected to sync yet.' });
+      else setNote({ kind: results.some((x) => x.error) ? 'warn' : 'ok', text: results.map(describe).join(' · ') });
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy('');
+  };
 
   return (
     <Section title="Intake" hint="Import what the client told you via their Google form">
-      <form onSubmit={register} style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
+      <form onSubmit={register} style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 6 }}>
         <Field label="Form name"><input value={draft.form_name} onChange={(e) => setDraft({ ...draft, form_name: e.target.value })} placeholder="AI readiness intake" style={inp} /></Field>
-        <Field label="Published CSV URL"><input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Google Sheet → Publish to web → CSV" style={{ ...inp, minWidth: 280 }} /></Field>
-        <button type="submit" disabled={busy === 'register'} style={btn}>Connect form</button>
+        <Field label="Response sheet link"><input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Paste the responses Google Sheet link" style={{ ...inp, minWidth: 280 }} /></Field>
+        <button type="submit" disabled={busy === 'register'} style={btn}>{busy === 'register' ? 'Connecting…' : 'Connect form'}</button>
         <button type="button" onClick={sync} disabled={busy === 'sync'} style={btnGhost}>{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>
       </form>
+      <p style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+        Paste the response Sheet's normal link (set it to “anyone with the link can view”), or use File → Share → Publish to web → CSV. Responses pull in automatically on connect, and hourly after that.
+      </p>
+      {note && (
+        <div style={{ ...card, padding: '8px 12px', marginBottom: 10, fontSize: 13,
+          background: note.kind === 'ok' ? '#f0fdf4' : '#fffbeb',
+          borderColor: note.kind === 'ok' ? '#bbf7d0' : '#fde68a',
+          color: note.kind === 'ok' ? '#166534' : '#92400e' }}>
+          {note.text}
+        </div>
+      )}
       {forms == null ? <p style={muted}>Loading…</p> : forms.length === 0 ? <p style={muted}>No form connected yet.</p> : (
         <ul style={list}>
           {forms.map((f) => (
@@ -156,7 +188,7 @@ function AgendaSection({ clientId, setErr }) {
     <Section title="Training agenda" hint="Items show in the client's portal when published">
       <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
         {agendas == null ? <p style={muted}>Loading…</p> : agendas.length === 0 ? <p style={muted}>No agenda yet.</p> :
-          agendas.map((a) => <AgendaCard key={a.id} agenda={a} api={api} onChanged={load} setErr={setErr} />)}
+          agendas.map((a) => <AgendaCard key={a.id} agenda={a} api={api} clientId={clientId} onChanged={load} setErr={setErr} />)}
       </div>
       <form onSubmit={create} style={{ ...card, display: 'grid', gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 13 }}>New agenda</div>
@@ -172,12 +204,31 @@ function AgendaSection({ clientId, setErr }) {
   );
 }
 
-function AgendaCard({ agenda, api, onChanged, setErr }) {
+function AgendaCard({ agenda, api, clientId, onChanged, setErr }) {
   const [edit, setEdit] = useState(false);
   const [f, setF] = useState({ title: agenda.title, scheduled_for: agenda.scheduled_for || '', location: agenda.location || '', status: agenda.status, items: itemsToText(agenda.items) });
+  const [gdoc, setGdoc] = useState('');
+  const [docBusy, setDocBusy] = useState('');
   const save = async () => { setErr(''); try { await api(`/beaiready/training/agendas/${agenda.id}`, { method: 'PUT', body: JSON.stringify({ ...f, scheduled_for: f.scheduled_for || null, items: textToItems(f.items) }) }); setEdit(false); onChanged(); } catch (e) { setErr(e.message); } };
   const del = async () => { setErr(''); try { await api(`/beaiready/training/agendas/${agenda.id}`, { method: 'DELETE' }); onChanged(); } catch (e) { setErr(e.message); } };
   const togglePub = async () => { setErr(''); try { await api(`/beaiready/training/agendas/${agenda.id}`, { method: 'PUT', body: JSON.stringify({ status: agenda.status === 'published' ? 'draft' : 'published' }) }); onChanged(); } catch (e) { setErr(e.message); } };
+  // Document attachment (Google Doc — re-syncable — or an uploaded PDF).
+  const attachGoogle = async () => { if (!gdoc.trim()) return; setErr(''); setDocBusy('gdoc'); try { await api(`/beaiready/training/agendas/${agenda.id}/doc/google`, { method: 'POST', body: JSON.stringify({ doc_url: gdoc.trim() }) }); setGdoc(''); onChanged(); } catch (e) { setErr(e.message); } setDocBusy(''); };
+  const syncDoc = async () => { setErr(''); setDocBusy('sync'); try { await api(`/beaiready/training/agendas/${agenda.id}/doc/sync`, { method: 'POST' }); onChanged(); } catch (e) { setErr(e.message); } setDocBusy(''); };
+  const removeDoc = async () => { setErr(''); try { await api(`/beaiready/training/agendas/${agenda.id}/doc`, { method: 'DELETE' }); onChanged(); } catch (e) { setErr(e.message); } };
+  const uploadPdf = async (file) => {
+    if (!file) return; setErr(''); setDocBusy('upload');
+    try {
+      const fd = new FormData();
+      fd.append('entity_type', 'training_agenda');   // must precede the file (multer reads fields in order)
+      fd.append('file', file);
+      const res = await fetch(`/api/beaiready/training/agendas/${agenda.id}/doc/upload`, {
+        method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Upload failed'); }
+      onChanged();
+    } catch (e) { setErr(e.message); }
+    setDocBusy('');
+  };
 
   return (
     <div style={card}>
@@ -192,6 +243,38 @@ function AgendaCard({ agenda, api, onChanged, setErr }) {
       </div>
       {!edit && agenda.items?.length > 0 && (
         <ul style={{ ...list, marginTop: 8 }}>{agenda.items.map((i) => <li key={i.id} style={{ fontSize: 13 }}><strong>{i.time_label ? `${i.time_label} · ` : ''}{i.topic}</strong>{i.detail ? ` — ${i.detail}` : ''}</li>)}</ul>
+      )}
+      {/* Document: a Google Doc you can re-sync, or an uploaded PDF. Shows in the client's portal. */}
+      {!edit && (
+        <div style={{ marginTop: 10, borderTop: '1px solid #f0ebe3', paddingTop: 10 }}>
+          {agenda.doc_kind === 'gdoc' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+              <span>📄 Google Doc</span>
+              <a href={agenda.doc_url} target="_blank" rel="noreferrer" style={{ color: '#c75b39' }}>Open ↗</a>
+              <span style={muted}>{agenda.doc_synced ? `synced ${agenda.doc_synced_at ? new Date(agenda.doc_synced_at).toLocaleString() : ''}` : 'not synced yet'}</span>
+              <button onClick={syncDoc} disabled={docBusy === 'sync'} style={tag}>{docBusy === 'sync' ? 'Syncing…' : 'Re-sync'}</button>
+              <button onClick={removeDoc} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+            </div>
+          ) : agenda.doc_kind === 'pdf' ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+              <span>📎 {agenda.doc_name || 'PDF'}</span>
+              <a href={`/api/uploads/${agenda.doc_file_id}/download`} target="_blank" rel="noreferrer" style={{ color: '#c75b39' }}>Open ↗</a>
+              <button onClick={removeDoc} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>Attach a document (optional) — shown in the client's portal</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input value={gdoc} onChange={(e) => setGdoc(e.target.value)} placeholder="Google Doc link (set to ‘anyone with the link’)" style={{ ...inp, minWidth: 260 }} />
+                <button onClick={attachGoogle} disabled={docBusy === 'gdoc' || !gdoc.trim()} style={tag}>{docBusy === 'gdoc' ? 'Attaching…' : 'Attach & sync'}</button>
+                <label style={{ ...tag, cursor: 'pointer' }}>
+                  {docBusy === 'upload' ? 'Uploading…' : 'Upload PDF'}
+                  <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={(e) => uploadPdf(e.target.files?.[0])} />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
       )}
       {edit && (
         <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
@@ -278,66 +361,115 @@ function MaterialCard({ m, api, onChanged, setErr }) {
   );
 }
 
-// ── Outcome document (linked to strategy) ───────────────────────────────────────
-function OutcomeSection({ clientId, setErr }) {
+// ── Strategy (goals + automation roadmap) ────────────────────────────────────────
+// A set of structured items, not a document. Two lists: Goals (what the business
+// wants from AI) and an Automation roadmap (what to automate, sized by effort/payoff).
+// Clients see PUBLISHED items in their dashboard.
+const SIZE_OPTS = ['', 'low', 'medium', 'high'];
+function StrategySection({ clientId, setErr }) {
   const api = useApi(clientId);
-  const [rows, setRows] = useState(null);
-  const [draft, setDraft] = useState({ title: '', content: '', file_url: '', rag_shareable: true });
-  const load = useCallback(() => { api('/beaiready/training/outcomes').then(setRows).catch((e) => setErr(e.message)); }, [api, setErr]);
-  useEffect(() => { setRows(null); load(); }, [load]);
-  const create = async (e) => { e.preventDefault(); if (!draft.title.trim()) return; setErr(''); try { await api('/beaiready/training/outcomes', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) }); setDraft({ title: '', content: '', file_url: '', rag_shareable: true }); load(); } catch (e) { setErr(e.message); } };
+  const [items, setItems] = useState(null);
+  const load = useCallback(() => { api('/beaiready/training/strategy').then(setItems).catch((e) => setErr(e.message)); }, [api, setErr]);
+  useEffect(() => { setItems(null); load(); }, [load]);
+  const goals = (items || []).filter((i) => i.kind === 'goal');
+  const autos = (items || []).filter((i) => i.kind === 'automation');
   return (
-    <Section title="AI-strategy outcome document" hint="The client sees this once marked final; linked to their strategy">
-      <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-        {rows == null ? <p style={muted}>Loading…</p> : rows.length === 0 ? <p style={muted}>No outcome document yet.</p> :
-          rows.map((o) => <OutcomeCard key={o.id} o={o} api={api} onChanged={load} setErr={setErr} />)}
-      </div>
-      <form onSubmit={create} style={{ ...card, display: 'grid', gap: 8 }}>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>New outcome document</div>
-        <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Title (e.g. AI strategy & roadmap)" style={inp} />
-        <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} placeholder="Document body (markdown) — goals, what to automate, in what order…" style={{ ...inp, minHeight: 120 }} />
-        <input value={draft.file_url} onChange={(e) => setDraft({ ...draft, file_url: e.target.value })} placeholder="Uploaded file link (optional)" style={inp} />
-        <label style={chk}><input type="checkbox" checked={draft.rag_shareable} onChange={(e) => setDraft({ ...draft, rag_shareable: e.target.checked })} /> Share with the knowledge base when final</label>
-        <button type="submit" style={{ ...btn, justifySelf: 'start' }}>Create draft</button>
-      </form>
+    <Section title="Strategy" hint="Goals + automation roadmap — published items show in the client's dashboard">
+      {items == null ? <p style={muted}>Loading…</p> : (
+        <div style={{ display: 'grid', gap: 18 }}>
+          <StrategyGroup kind="goal" label="Goals" hint="What the business wants from AI"
+            rows={goals} api={api} clientId={clientId} onChanged={load} setErr={setErr} />
+          <StrategyGroup kind="automation" label="Automation roadmap" hint="What to automate — sized by effort & payoff"
+            rows={autos} api={api} clientId={clientId} onChanged={load} setErr={setErr} />
+        </div>
+      )}
     </Section>
   );
 }
 
-function OutcomeCard({ o, api, onChanged, setErr }) {
+function StrategyGroup({ kind, label, hint, rows, api, clientId, onChanged, setErr }) {
+  const auto = kind === 'automation';
+  const [draft, setDraft] = useState({ title: '', detail: '', effort: '', payoff: '' });
+  const add = async (e) => {
+    e.preventDefault(); if (!draft.title.trim()) return; setErr('');
+    try {
+      await api('/beaiready/training/strategy', { method: 'POST', body: JSON.stringify({
+        newsroom_id: clientId, kind, title: draft.title, detail: draft.detail || null,
+        effort: auto ? (draft.effort || null) : null, payoff: auto ? (draft.payoff || null) : null }) });
+      setDraft({ title: '', detail: '', effort: '', payoff: '' }); onChanged();
+    } catch (e) { setErr(e.message); }
+  };
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+        <strong style={{ fontSize: 14 }}>{label}</strong><span style={{ fontSize: 12, color: '#8a8076' }}>{hint}</span>
+      </div>
+      <div style={{ display: 'grid', gap: 8, marginBottom: 8 }}>
+        {rows.length === 0 ? <p style={muted}>None yet.</p> :
+          rows.map((it) => <StrategyItemCard key={it.id} it={it} auto={auto} api={api} onChanged={onChanged} setErr={setErr} />)}
+      </div>
+      <form onSubmit={add} style={{ ...card, display: 'grid', gap: 8 }}>
+        <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder={auto ? 'What to automate (e.g. Draft monthly client report)' : 'Goal (e.g. Cut report turnaround in half)'} style={inp} />
+        <input value={draft.detail} onChange={(e) => setDraft({ ...draft, detail: e.target.value })} placeholder="Detail (optional)" style={inp} />
+        {auto && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <SizeSelect label="Effort" value={draft.effort} onChange={(v) => setDraft({ ...draft, effort: v })} />
+            <SizeSelect label="Payoff" value={draft.payoff} onChange={(v) => setDraft({ ...draft, payoff: v })} />
+          </div>
+        )}
+        <button type="submit" style={{ ...btn, justifySelf: 'start' }}>Add {auto ? 'item' : 'goal'}</button>
+      </form>
+    </div>
+  );
+}
+
+function StrategyItemCard({ it, auto, api, onChanged, setErr }) {
   const [edit, setEdit] = useState(false);
-  const [f, setF] = useState({ title: o.title, content: o.content || '', file_url: o.file_url || '', status: o.status, linked_to_strategy: o.linked_to_strategy, rag_shareable: o.rag_shareable });
-  const save = async () => { setErr(''); try { await api(`/beaiready/training/outcomes/${o.id}`, { method: 'PUT', body: JSON.stringify(f) }); setEdit(false); onChanged(); } catch (e) { setErr(e.message); } };
-  const del = async () => { setErr(''); try { await api(`/beaiready/training/outcomes/${o.id}`, { method: 'DELETE' }); onChanged(); } catch (e) { setErr(e.message); } };
-  const toggleFinal = async () => { setErr(''); try { await api(`/beaiready/training/outcomes/${o.id}`, { method: 'PUT', body: JSON.stringify({ status: o.status === 'final' ? 'draft' : 'final' }) }); onChanged(); } catch (e) { setErr(e.message); } };
+  const [f, setF] = useState({ title: it.title, detail: it.detail || '', effort: it.effort || '', payoff: it.payoff || '' });
+  const save = async () => { setErr(''); try { await api(`/beaiready/training/strategy/${it.id}`, { method: 'PUT', body: JSON.stringify({ title: f.title, detail: f.detail, effort: auto ? (f.effort || null) : null, payoff: auto ? (f.payoff || null) : null }) }); setEdit(false); onChanged(); } catch (e) { setErr(e.message); } };
+  const del = async () => { setErr(''); try { await api(`/beaiready/training/strategy/${it.id}`, { method: 'DELETE' }); onChanged(); } catch (e) { setErr(e.message); } };
+  const togglePub = async () => { setErr(''); try { await api(`/beaiready/training/strategy/${it.id}`, { method: 'PUT', body: JSON.stringify({ status: it.status === 'published' ? 'draft' : 'published' }) }); onChanged(); } catch (e) { setErr(e.message); } };
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div><strong>{o.title}</strong>
-          <span style={{ ...pill, ...(o.status === 'final' ? pubOn : pubOff), marginLeft: 6 }}>{o.status}</span>
-          {o.linked_to_strategy && <span style={{ ...pill, background: '#ede9fe', color: '#5b21b6', marginLeft: 6 }}>strategy</span>}
-          {o.rag_synced && <span style={{ ...pill, background: '#dcfce7', color: '#166534', marginLeft: 6 }}>in knowledge base</span>}</div>
+        <div>
+          <strong>{it.title}</strong>
+          <span style={{ ...pill, ...(it.status === 'published' ? pubOn : pubOff), marginLeft: 6 }}>{it.status}</span>
+          {auto && it.effort && <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359', marginLeft: 6 }}>effort: {it.effort}</span>}
+          {auto && it.payoff && <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359', marginLeft: 6 }}>payoff: {it.payoff}</span>}
+        </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={toggleFinal} style={tag}>{o.status === 'final' ? 'Revert to draft' : 'Mark final'}</button>
+          <button onClick={togglePub} style={tag}>{it.status === 'published' ? 'Unpublish' : 'Publish'}</button>
           <button onClick={() => setEdit(!edit)} style={tag}>{edit ? 'Cancel' : 'Edit'}</button>
           <button onClick={del} style={{ ...tag, color: '#b91c1c' }}>Delete</button>
         </div>
       </div>
-      {!edit && o.content && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{o.content.slice(0, 280)}{o.content.length > 280 ? '…' : ''}</p>}
-      {!edit && o.file_url && <a href={o.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: '#c75b39' }}>{o.file_url} ↗</a>}
+      {!edit && it.detail && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0' }}>{it.detail}</p>}
       {edit && (
         <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
           <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} style={inp} />
-          <textarea value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} style={{ ...inp, minHeight: 140 }} />
-          <input value={f.file_url} onChange={(e) => setF({ ...f, file_url: e.target.value })} placeholder="Uploaded file link" style={inp} />
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <label style={chk}><input type="checkbox" checked={f.linked_to_strategy} onChange={(e) => setF({ ...f, linked_to_strategy: e.target.checked })} /> Linked to strategy</label>
-            <label style={chk}><input type="checkbox" checked={f.rag_shareable} onChange={(e) => setF({ ...f, rag_shareable: e.target.checked })} /> Share with knowledge base</label>
-          </div>
+          <input value={f.detail} onChange={(e) => setF({ ...f, detail: e.target.value })} placeholder="Detail" style={inp} />
+          {auto && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <SizeSelect label="Effort" value={f.effort} onChange={(v) => setF({ ...f, effort: v })} />
+              <SizeSelect label="Payoff" value={f.payoff} onChange={(v) => setF({ ...f, payoff: v })} />
+            </div>
+          )}
           <button onClick={save} style={{ ...btn, justifySelf: 'start' }}>Save</button>
         </div>
       )}
     </div>
+  );
+}
+
+function SizeSelect({ label, value, onChange }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5b6b63' }}>
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={inp}>
+        {SIZE_OPTS.map((s) => <option key={s} value={s}>{s || '—'}</option>)}
+      </select>
+    </label>
   );
 }
 

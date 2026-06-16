@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
+import { apiFetch } from '../../hooks/useApi.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 const ACCENT = '#c75b39';
 const THRESHOLDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -136,10 +138,139 @@ function ToolDetail({ slug, onBack }) {
             </div>
           </Section>
         )}
+        <ToolPlaybook slug={tool.slug} />
+        <ToolReviews slug={tool.slug} />
         <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #eee5da', fontSize: 11, color: '#a89e92' }}>
           From the Develop&nbsp;AI toolkit · scored for cost, difficulty and data exposure.
         </div>
       </div>
+    </div>
+  );
+}
+
+function Stars({ value, onPick, size = 18 }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 1 }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span key={n} onClick={onPick ? () => onPick(n) : undefined}
+          style={{ cursor: onPick ? 'pointer' : 'default', color: n <= value ? '#e0a52e' : '#d8cfc4', fontSize: size, lineHeight: 1 }}>★</span>
+      ))}
+    </span>
+  );
+}
+
+// Published playbook for a tool (null → renders nothing).
+function ToolPlaybook({ slug }) {
+  const [pb, setPb] = useState(null);
+  useEffect(() => { publicFetch(`/public/toolkit/${slug}/playbook`).then(setPb).catch(() => setPb(null)); }, [slug]);
+  if (!pb) return null;
+  const Row = ({ label, text }) => (!text ? null : (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontWeight: 700, fontSize: 13, color: '#3a342e' }}>{label}</div>
+      <div style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, color: '#3a342e', lineHeight: 1.6 }}>{text}</div>
+    </div>
+  ));
+  return (
+    <div style={{ marginTop: 20, background: '#faf6f3', border: '1px solid #eee5da', borderRadius: 10, padding: '16px 18px' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: ACCENT, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Playbook · getting value fast</div>
+      {Array.isArray(pb.key_features) && pb.key_features.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          {pb.key_features.map((f, i) => <span key={i} style={{ fontSize: 11.5, color: '#7a4636', background: '#f7ece7', padding: '2px 9px', borderRadius: 999 }}>{f}</span>)}
+        </div>
+      )}
+      <Row label="Best uses" text={pb.best_use_cases} />
+      <Row label="How to start" text={pb.implementation_steps} />
+      <Row label="Common mistakes" text={pb.common_mistakes} />
+      <Row label="Privacy notes" text={pb.privacy_notes} />
+    </div>
+  );
+}
+
+// Reviews block: public stats + list, plus a write/vote/flag UI for signed-in users.
+function ToolReviews({ slug }) {
+  const { user } = useAuth();
+  const [data, setData] = useState(null);   // { stats, reviews }
+  const [mine, setMine] = useState(undefined);
+  const [form, setForm] = useState({ rating: 0, comment: '', use_case: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const loadPublic = () => publicFetch(`/public/toolkit/${slug}/reviews`).then(setData).catch(() => setData({ stats: { count: 0, avg: 0, dist: {} }, reviews: [] }));
+  useEffect(() => { loadPublic(); }, [slug]);
+  useEffect(() => {
+    if (!user) { setMine(null); return; }
+    apiFetch(`/toolkit/${slug}/reviews/mine`).then((m) => { setMine(m); if (m) setForm({ rating: m.rating, comment: m.comment || '', use_case: m.use_case || '' }); }).catch(() => setMine(null));
+  }, [slug, user]);
+
+  const submit = async () => {
+    if (!form.rating) { setErr('Pick a star rating first.'); return; }
+    setBusy(true); setErr(null);
+    try { await apiFetch(`/toolkit/${slug}/reviews`, { method: 'POST', body: JSON.stringify(form) }); await loadPublic(); setMine(await apiFetch(`/toolkit/${slug}/reviews/mine`)); }
+    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const del = async () => { if (!window.confirm('Delete your review?')) return; try { await apiFetch(`/toolkit/${slug}/reviews`, { method: 'DELETE' }); setMine(null); setForm({ rating: 0, comment: '', use_case: '' }); loadPublic(); } catch (e) { setErr(e.message); } };
+  const vote = async (id) => { try { await apiFetch(`/toolkit/reviews/${id}/vote`, { method: 'POST', body: JSON.stringify({ is_helpful: true }) }); loadPublic(); } catch (e) { setErr(e.message); } };
+  const flag = async (id) => { const reason = window.prompt('Why are you flagging this review? (optional)'); if (reason === null) return; try { await apiFetch(`/toolkit/reviews/${id}/flag`, { method: 'POST', body: JSON.stringify({ reason }) }); window.alert('Thanks — flagged for review.'); } catch (e) { setErr(e.message); } };
+
+  if (!data) return null;
+  const { stats, reviews } = data;
+
+  return (
+    <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid #eee5da' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#8a8076', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reviews</div>
+        {stats.count > 0 ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Stars value={Math.round(stats.avg)} /> <strong style={{ fontSize: 14 }}>{stats.avg}</strong> <span style={{ fontSize: 12.5, color: '#8a8076' }}>· {stats.count} review{stats.count === 1 ? '' : 's'}</span></span>
+        ) : <span style={{ fontSize: 12.5, color: '#8a8076' }}>No reviews yet — be the first.</span>}
+      </div>
+
+      {err && <div style={{ color: '#991B1B', fontSize: 13, marginTop: 8 }}>{err}</div>}
+
+      {/* write / edit */}
+      {user ? (
+        <div style={{ marginTop: 12, background: '#fff', border: '1px solid #eee5da', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{mine ? 'Your review' : 'Rate this tool'}</span>
+            <Stars value={form.rating} onPick={(n) => setForm((f) => ({ ...f, rating: n }))} size={20} />
+          </div>
+          <input value={form.use_case} onChange={(e) => setForm((f) => ({ ...f, use_case: e.target.value }))} placeholder="What did you use it for? (optional)" style={{ ...INP, width: '100%', marginTop: 8 }} />
+          <textarea value={form.comment} onChange={(e) => setForm((f) => ({ ...f, comment: e.target.value }))} placeholder="Your experience (optional)" style={{ ...INP, width: '100%', marginTop: 8, minHeight: 56, resize: 'vertical' }} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button onClick={submit} disabled={busy} className="hub-btn hub-btn-solid" style={{ padding: '7px 14px', fontSize: 13 }}>{busy ? 'Saving…' : mine ? 'Update review' : 'Post review'}</button>
+            {mine && <button onClick={del} style={{ background: 'none', border: '1px solid #f0c9c9', color: '#b91c1c', borderRadius: 8, padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}>Delete</button>}
+          </div>
+        </div>
+      ) : (
+        <p style={{ fontSize: 13, color: '#6b6359', marginTop: 8 }}><a href="/login" style={{ color: ACCENT }}>Sign in</a> to rate this tool and read your team's reviews.</p>
+      )}
+
+      {/* list */}
+      {reviews.length > 0 && (
+        <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+          {reviews.map((r) => (
+            <div key={r.id} style={{ background: '#fff', border: '1px solid #f1ece5', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Stars value={r.rating} size={14} />
+                  <strong style={{ fontSize: 13 }}>{r.author_name || 'A user'}</strong>
+                  {r.use_case && <span style={{ fontSize: 11, color: '#7a4636', background: '#f7ece7', padding: '1px 7px', borderRadius: 999 }}>{r.use_case}</span>}
+                </span>
+                <span style={{ fontSize: 11.5, color: '#a89e92' }}>{new Date(r.created_at).toLocaleDateString()}</span>
+              </div>
+              {r.comment && <p style={{ fontSize: 13.5, color: '#3a342e', margin: '6px 0 0', lineHeight: 1.55 }}>{r.comment}</p>}
+              <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12, color: '#8a8076' }}>
+                <span>{r.helpful_count > 0 ? `${r.helpful_count} found this helpful` : ''}</span>
+                {user && mine?.id !== r.id && (
+                  <span style={{ display: 'flex', gap: 12 }}>
+                    <button onClick={() => vote(r.id)} style={{ background: 'none', border: 'none', color: ACCENT, cursor: 'pointer', fontSize: 12, padding: 0 }}>Helpful</button>
+                    <button onClick={() => flag(r.id)} style={{ background: 'none', border: 'none', color: '#a89e92', cursor: 'pointer', fontSize: 12, padding: 0 }}>Flag</button>
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -181,11 +312,33 @@ export default function BeAIReadyToolbox({ mode = 'list' }) {
         <div className="hub-eyebrow">The active AI toolbox</div>
         <h1>The right tool — scored for cost, effort and data safety.</h1>
         <p className="hub-lede">
-          The comprehensive AI toolbox we maintain in Grounded, in one place: every tool rated on Cost,
-          Difficulty and Data exposure (0–10, lower is better). Filter to what fits your budget, your team's
-          skill, and how much data you're willing to expose. Audit clients get this mapped to their own functions.
+          Every AI tool worth knowing, in one place — each rated on Cost, Difficulty and Data exposure
+          (0–10, lower is better). Filter to what fits your budget, your team's skill, and how much data
+          you're willing to expose. Audit clients get this mapped to their own business functions.
         </p>
+        <div className="hub-hero-cta" style={{ marginTop: 14, flexWrap: 'wrap' }}>
+          <Link to="/toolbox/finder" className="hub-btn hub-btn-solid">Not sure where to start? Find your tool →</Link>
+          <Link to="/toolbox/ask" className="hub-btn hub-btn-ghost">Ask the toolbox →</Link>
+          <Link to="/toolbox/explore" className="hub-btn hub-btn-ghost">Explore the trade-offs →</Link>
+          <Link to="/toolbox/for-you" className="hub-btn hub-btn-ghost">For you →</Link>
+        </div>
       </section>
+
+      {/* Browse by need — the business categories, each a guided landing. */}
+      {categories.length > 0 && (
+        <section style={{ marginBottom: 22 }}>
+          <div className="hub-section-label">Browse by need</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))', gap: 10 }}>
+            {categories.map((c) => (
+              <Link key={c.name} to={`/toolbox/category/${encodeURIComponent(c.name)}`}
+                style={{ textDecoration: 'none', color: 'inherit', background: '#fff', border: '1px solid #eee5da', borderLeft: `3px solid ${ACCENT}`, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#3a342e' }}>{c.name}</div>
+                <div style={{ fontSize: 12, color: '#8a8076', marginTop: 2 }}>{c.count} tool{c.count === 1 ? '' : 's'} →</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, fontWeight: 600, color: '#8a8076', flex: '1 1 220px' }}>
@@ -204,7 +357,10 @@ export default function BeAIReadyToolbox({ mode = 'list' }) {
         <ThreshSelect label="Max data exposure" value={maxExp} onChange={setMaxExp} />
         {anyFilter && <button onClick={clear} style={{ ...INP, cursor: 'pointer', color: ACCENT, fontWeight: 700 }}>Clear</button>}
       </div>
-      <div style={{ marginBottom: 14, fontSize: 12, color: '#8a8076' }}>{visible.length} of {all.length} tools</div>
+      <div style={{ marginBottom: 14, fontSize: 12, color: '#8a8076', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <span>{visible.length} of {all.length} tools</span>
+        <Link to="/toolbox/suggest" style={{ color: ACCENT, fontWeight: 600 }}>Know a tool we're missing? Suggest it →</Link>
+      </div>
 
       {items == null && <div style={{ color: '#8a8076' }}>Loading the toolbox…</div>}
       {error && <div style={{ color: '#991B1B' }}>{error}</div>}

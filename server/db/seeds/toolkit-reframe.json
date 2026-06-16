@@ -1,0 +1,370 @@
+[
+  {
+    "slug": "adobe-firefly",
+    "primary_category": "Audio, Video & Marketing",
+    "description": "Adobe's generative image AI built into Photoshop and Illustrator. It can extend backgrounds, add or remove objects, and turn a rough sketch into a finished layout, with the new content matched to the existing lighting and perspective.",
+    "purpose": "When a business needs to edit or create marketing visuals quickly without advanced design skills, for example reshaping a product photo to fit a web banner or ad slot.",
+    "comments": "Firefly is trained on Adobe Stock rather than scraped web images, which makes its output safer to use commercially. Beginner-friendly inside Adobe's apps but requires an Adobe subscription. Now includes a video model.",
+    "tags": ["image-generation", "design", "marketing", "beginner-friendly", "commercially-safe"]
+  },
+  {
+    "slug": "aleph-occrp",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A free, open-access database that lets you search public records, leaked datasets, and corporate ownership information from around the world. Built and run by the non-profit OCCRP.",
+    "purpose": "When a business needs to vet a partner, supplier, customer, or counterparty, check who really owns a company, or trace connections between entities across borders before signing a deal.",
+    "comments": "Free to use and privacy-friendly. It is a strong lead-generation tool for due diligence, but results still need confirming against primary sources such as official registry documents before you rely on them. The interface can take some learning.",
+    "tags": ["free", "due-diligence", "background-checks", "company-ownership", "privacy-friendly"]
+  },
+  {
+    "slug": "apify",
+    "primary_category": "Automation & AI Agents",
+    "description": "A platform for automatically collecting data from websites and watching pages for changes. It runs ready-made or custom 'actors' that scrape and monitor sites on a schedule.",
+    "purpose": "When a business wants to track sources that change unpredictably, such as competitor pricing pages, procurement and tender portals, supplier catalogues, regulatory notices, or policy pages, and be alerted early rather than checking by hand.",
+    "comments": "Easier to set up than full agent frameworks and does not require deep engineering skills. Be clear on the legal and ethical limits of scraping a given site and check its terms of use. Best paired with a human review step rather than fully automatic action on the data.",
+    "tags": ["automation", "web-scraping", "monitoring", "data-collection"]
+  },
+  {
+    "slug": "autogen",
+    "primary_category": "Automation & AI Agents",
+    "description": "An open-source framework from Microsoft for building systems where several AI agents work together on a task, each playing a different role and checking each other's work.",
+    "purpose": "When a business wants to automate a multi-step analytical job and have AI surface contradictions, gaps, and follow-up questions in a first pass before a person reviews them.",
+    "comments": "Powerful but advanced; it is aimed at developers and takes real technical skill to set up. Open-source and can run privately. Treat agreement between agents with caution: agents can reinforce each other's mistakes and look more confident rather than more correct, so keep a human in the loop.",
+    "tags": ["open-source", "advanced", "automation", "ai-agents", "privacy-friendly"]
+  },
+  {
+    "slug": "bellingcat-online-investigation-toolkit",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A curated, regularly updated directory of free open-source research and verification tools, organised by task such as locating where a photo was taken, checking imagery, and archiving web content.",
+    "purpose": "When a business needs a starting map of credible, mostly free tools for fact-checking, verifying images and locations, or doing open-source background research, without buying expensive commercial software.",
+    "comments": "It is a collection of links and methods rather than a single app, so it points you to other tools rather than doing the work itself. Free and privacy-friendly, but using it well takes time and a methodical approach.",
+    "tags": ["free", "open-source", "verification", "research", "advanced", "privacy-friendly"]
+  },
+  {
+    "slug": "bitwarden",
+    "primary_category": "Security & Privacy",
+    "description": "An open-source password manager that stores all your account passwords in an encrypted vault, generates strong unique passwords, and fills them in for you. Its zero-knowledge encryption means even Bitwarden cannot read your stored passwords.",
+    "purpose": "When a business wants to stop staff reusing weak passwords across email, banking, cloud, and social accounts, which is one of the most common ways accounts get compromised.",
+    "comments": "Beginner-friendly, free for individuals, with low-cost paid tiers for teams. Open-source and has passed independent security audits. One of the simplest, highest-impact security steps a small business can take.",
+    "tags": ["free", "open-source", "password-manager", "beginner-friendly", "privacy-friendly"]
+  },
+  {
+    "slug": "buffer-ai-assistant",
+    "primary_category": "Audio, Video & Marketing",
+    "description": "The AI helper built into Buffer, a social media scheduling platform. It drafts and rewrites posts for different networks, generates post ideas, and helps you plan and schedule content across multiple channels.",
+    "purpose": "When a business wants to keep up a consistent social media presence across several platforms without writing every post from scratch, for example reshaping one announcement for LinkedIn, X, and Instagram.",
+    "comments": "Beginner-friendly and tuned for social media best practice; it uses OpenAI's models under the hood. It speeds up drafting variations, freeing time to study when your audience is active and what they actually engage with. Keep editorial control over tone and timing.",
+    "tags": ["social-media", "content-scheduling", "marketing", "beginner-friendly"]
+  },
+  {
+    "slug": "changedetectionio",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A self-hosted, open-source tool that watches web pages and alerts you when their content changes, such as when wording is edited or a document is quietly removed.",
+    "purpose": "When a business wants to monitor pages privately, for example a supplier's terms, a competitor's pricing, or a regulator's guidance, without a third-party service seeing which pages you track or limiting how often you check.",
+    "comments": "Free and runs under your own control, so there are no monthly fees and no external company logging your monitoring activity. Unlimited checks. Requires some technical setup to self-host. Good for documenting exactly what changed and when.",
+    "tags": ["free", "open-source", "self-hosted", "web-monitoring", "privacy-friendly"]
+  },
+  {
+    "slug": "chatgpt-atlas",
+    "primary_category": "Automation & AI Agents",
+    "description": "OpenAI's agentic browsing tool that can navigate websites and gather information on your behalf, handling multi-step web tasks inside the browser automatically.",
+    "purpose": "When a business needs to pull information together from several websites at once, such as tracking regulatory updates, locating public records across multiple sites, comparing disclosures, or gathering background that would otherwise mean repetitive manual browsing.",
+    "comments": "Runs inside the OpenAI ecosystem and acts in the browser as you. Use it only with publicly accessible information and non-sensitive accounts. You stay responsible for checking what it produces and for respecting each site's terms of use. Beginner-friendly to start with.",
+    "tags": ["automation", "ai-agents", "web-research", "beginner-friendly"]
+  },
+  {
+    "slug": "chatgpt-team-plan",
+    "primary_category": "Writing & Content",
+    "description": "The team tier of ChatGPT, offering shared workspaces for colleagues plus stronger data-privacy controls than the consumer version. It sits between the individual Plus plan and the Enterprise plan.",
+    "purpose": "When a team wants to collaborate on writing, analysis, and spreadsheet work in one place, for example cleaning messy spreadsheets, generating charts, or working out formulas, with better assurances about how data is handled.",
+    "comments": "Beginner-friendly and one of the safer cloud AI options because your data is not used to train the models by default. It is still a cloud service, so avoid pasting in your most sensitive material. Best for internal analysis and planning, with a person interpreting what the data actually shows.",
+    "tags": ["llm", "writing", "data-analysis", "collaboration", "beginner-friendly"]
+  },
+  {
+    "slug": "claude",
+    "primary_category": "Writing & Content",
+    "description": "A family of large language models from Anthropic, strong at working through long documents, careful reasoning, drafting, and coding. It can take very large documents as input at once.",
+    "purpose": "When a business needs an assistant to draft and edit text, summarise long reports or contracts, or help write code, especially where a measured, nuanced tone matters.",
+    "comments": "Often produces a less robotic tone than some rivals and is built with a safety-first approach, making it less likely to simply agree with a flawed premise. As with any AI, assume it can occasionally state something incorrect, so check names, dates, and figures before relying on them.",
+    "tags": ["llm", "writing", "editing", "coding", "long-documents"]
+  },
+  {
+    "slug": "cursor",
+    "primary_category": "Build Your Own Tools",
+    "description": "An AI-powered code editor that lets you build and change software by describing what you want in plain language. It reads all the files in a project so it understands the full context when making changes.",
+    "purpose": "When a business wants to build or adapt its own small tools rather than wait for a developer, and to keep maintaining them as websites or data sources change.",
+    "comments": "Free tier available with a paid Pro subscription. Requires installing a code editor and some willingness to learn. It can work with different AI models and offers a Privacy Mode that keeps your code off its servers, useful for sensitive work. You can also ask it to explain what your tool does, so the software is not a black box.",
+    "tags": ["coding", "build-tools", "ai-coding", "privacy-friendly"]
+  },
+  {
+    "slug": "custom-gpts",
+    "primary_category": "Build Your Own Tools",
+    "description": "Tailored versions of ChatGPT that you set up once with your own instructions, context, and reference documents, so they behave consistently every time without re-explaining the task.",
+    "purpose": "When a team needs repeatable, consistent AI support for a recurring job, such as searching an internal archive, comparing policies or documents, or keeping output to a fixed style or format.",
+    "comments": "Beginner-friendly to create. Everything runs inside the OpenAI platform, so pair it with clear internal rules about which documents and notes may be uploaded. Removes the need to keep restating context for the same task.",
+    "tags": ["build-tools", "ai-assistant", "no-code", "beginner-friendly"]
+  },
+  {
+    "slug": "dangerzone-security-challenges",
+    "primary_category": "Security & Privacy",
+    "description": "A free tool that opens potentially dangerous documents, such as PDFs, Word files, or images from unknown senders, inside an isolated sandbox and rebuilds them as safe, inert PDFs.",
+    "purpose": "When a business regularly receives files from outside parties and wants to neutralise any hidden malware before opening them, closing one of the most common ways attackers get in.",
+    "comments": "Free, runs locally on your own machine, and built by the Freedom of the Press Foundation. It assumes every incoming document could be hostile until proven otherwise. The trade-off is that the cleaned file becomes an image-based PDF, so editable text and formatting are lost.",
+    "tags": ["free", "local-processing", "document-security", "malware-protection", "privacy-friendly"]
+  },
+  {
+    "slug": "dangerzone",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A local document sanitisation tool that takes untrusted PDFs, office files, or images and converts them into safe, non-executable PDFs by opening them in an isolated sandbox and reconstructing them from raw pixels.",
+    "purpose": "When a business needs to safely open files received from external or unknown sources before reading, sharing, or analysing them, removing any malware hidden inside.",
+    "comments": "Free and runs entirely on your own computer, built by the Freedom of the Press Foundation. Sanitise documents first, then work with them. Note the cleaned output is an image-based PDF, so searchable text and original formatting are not preserved.",
+    "tags": ["free", "local-processing", "document-security", "malware-protection", "privacy-friendly"]
+  },
+  {
+    "slug": "deepl-pro",
+    "primary_category": "Meetings, Transcription & Translation",
+    "description": "A high-accuracy machine translation service that handles text, whole documents (keeping the original formatting), and an API for other software. Its DeepL Write feature also polishes style and tone like an AI copy editor.",
+    "purpose": "When a business works across languages and needs fast, natural translations of articles, contracts, or correspondence, or wants help writing professionally in a non-native language.",
+    "comments": "Widely regarded as more nuanced than free alternatives, and it preserves formal-versus-informal distinctions that matter in many languages. Based in Germany under EU (GDPR) data-protection rules. Importantly, the Pro version deletes your text after processing, while the free version may use it for training, so use Pro for anything sensitive. Verify key names, terms, and quotes against the original.",
+    "tags": ["translation", "writing", "documents", "beginner-friendly", "gdpr"]
+  },
+  {
+    "slug": "descript",
+    "primary_category": "Audio, Video & Marketing",
+    "description": "An audio and video editor that works like a word processor: it transcribes your recording, and when you edit the text, the audio and video are cut to match automatically.",
+    "purpose": "When a business wants to produce podcasts, interview clips, or explainer videos quickly without learning complex timeline-based editing software.",
+    "comments": "Very fast and intuitive for dialogue-heavy editing and lowers the skill barrier for polished audio and video. It can be sluggish on very large projects, and the text-first approach is less precise than a professional editor for frame-perfect visual cuts. Paid subscription.",
+    "tags": ["video-editing", "audio-editing", "podcasting", "transcription-based-editing"]
+  },
+  {
+    "slug": "elevenlabs",
+    "primary_category": "Audio, Video & Marketing",
+    "description": "An AI voice platform that turns text into highly realistic speech, can design custom voices, clone a voice from a short sample, and dub video into other languages while keeping the original speaker's voice. Supports dozens of languages.",
+    "purpose": "When a business wants to create voiceovers, audio versions of written content, or multilingual narration without hiring a voice actor or booking a studio.",
+    "comments": "The leading tool for quality AI voice, but voice cloning raises real ethical and consent issues, so only clone voices you have permission to use. Writing for the ear differs from writing for the page, so adapt scripts with shorter, more active sentences. Paid service.",
+    "tags": ["text-to-speech", "voice-cloning", "audio", "multilingual", "dubbing"]
+  },
+  {
+    "slug": "gemini",
+    "primary_category": "Writing & Content",
+    "description": "Google's AI model built into Google Docs, Drive, Gmail, and YouTube. It works directly with content already in your Google account, so you can summarise documents, analyse emails, or build timelines without exporting files.",
+    "purpose": "When a business already lives in Google Workspace and wants to summarise long documents, make sense of large collections of files, or draft and analyse content in place.",
+    "comments": "Beginner-friendly and convenient because of its deep Google integration, but that same integration means a strong dependency on Google's infrastructure. Avoid it for confidential or sensitive material where data control matters. Good for background research and desk work.",
+    "tags": ["llm", "writing", "google-workspace", "document-analysis", "beginner-friendly"]
+  },
+  {
+    "slug": "google-colab",
+    "primary_category": "Build Your Own Tools",
+    "description": "A free, browser-based environment for writing and running Python code, including for data analysis and charts, with free access to powerful computing resources. It has a built-in AI code assistant.",
+    "purpose": "When a business wants to analyse or visualise a dataset with code, for example turning a messy spreadsheet into a chart, without installing anything or setting up a server.",
+    "comments": "Free with no setup, and the AI assistant can write the code for you from a plain-language request. The session disconnects when you close the browser, so it is not for long-running production jobs, and code runs on Google's servers, so avoid sensitive data. Always sanity-check AI-generated results manually.",
+    "tags": ["free", "data-analysis", "python", "coding", "build-tools"]
+  },
+  {
+    "slug": "google-pinpoint",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A document-analysis tool that makes large collections of PDFs, scanned images, handwritten notes, and audio files fully searchable using text recognition and speech-to-text. It also automatically highlights people, organisations, and places across the whole set.",
+    "purpose": "When a business needs to find names, dates, or terms across thousands of documents quickly, for example reviewing contracts, archives, or a large records request, instead of reading everything by hand.",
+    "comments": "Free, and strong at handling unstructured and mixed-language material. The catch is that you are uploading your documents to Google's servers, so it is not appropriate for highly confidential material where that exposure is a concern. Use the time saved to pick the right documents to dig into.",
+    "tags": ["free", "document-search", "ocr", "entity-extraction", "research"]
+  },
+  {
+    "slug": "happyscribe",
+    "primary_category": "Meetings, Transcription & Translation",
+    "description": "A transcription and subtitling platform that combines AI output with an optional human-review service and a detailed editor for syncing subtitles to audio. Supports over 120 languages.",
+    "purpose": "When a business needs publication-ready transcripts or accurately timed subtitles for videos, especially for multilingual or social distribution where precise timing matters.",
+    "comments": "Beginner-friendly, and its visual editor for adjusting subtitle timing and speaker labels is a standout. A European company focused on the full transcription workflow rather than just raw output. Paid service. Take the time to adapt translations so meaning and nuance carry across, not just literal words.",
+    "tags": ["transcription", "subtitles", "translation", "multilingual", "beginner-friendly"]
+  },
+  {
+    "slug": "invid-weverify",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A free browser extension that bundles tools for checking whether videos and images from social media are genuine. It can break a video into frames for reverse image searches, read metadata, extract text from images, and apply forensic filters that reveal manipulation.",
+    "purpose": "When a business needs to verify whether a photo or video circulating online is authentic or has been doctored, for example before reusing user-generated content or responding to something going viral.",
+    "comments": "Free and trusted, consolidating many verification tools into one interface, including reverse image search across several engines at once. Because it relies on third-party platform access, some features can break when those platforms change their rules. Compare results across sources and document why a piece of media is or is not credible.",
+    "tags": ["free", "verification", "image-forensics", "video-verification", "privacy-friendly"]
+  },
+  {
+    "slug": "languagetool",
+    "primary_category": "Writing & Content",
+    "description": "An open-source grammar, style, and spelling checker that supports over 20 languages and can be run on your own server so your text never leaves your organisation.",
+    "purpose": "When a business wants to proofread and polish writing without sending drafts to a third-party cloud service, a privacy-conscious alternative to mainstream grammar checkers.",
+    "comments": "Beginner-friendly, free, open-source, and can run locally for full privacy. By handling mechanical corrections it frees editors to focus on substance and clarity.",
+    "tags": ["free", "open-source", "grammar", "proofreading", "local-processing", "privacy-friendly"]
+  },
+  {
+    "slug": "midjourney",
+    "primary_category": "Audio, Video & Marketing",
+    "description": "An AI image generator known for high-quality, artistic visuals created from text prompts. It is accessed mainly through Discord.",
+    "purpose": "When a business needs original illustrations for abstract or hard-to-photograph concepts such as inflation, cybersecurity, or growth, where stock photos feel generic.",
+    "comments": "Among the most artistically capable image generators, though there is a learning curve to writing good prompts, and it is accessed through Discord rather than a standard app. Paid subscription. Keep a clear sign-off process for any generated visuals and label them appropriately.",
+    "tags": ["image-generation", "illustration", "marketing", "creative"]
+  },
+  {
+    "slug": "n8n",
+    "primary_category": "Automation & AI Agents",
+    "description": "An open-source workflow-automation platform for connecting apps and services and building automated processes, including ones that involve AI steps. It can be self-hosted for privacy.",
+    "purpose": "When a business wants to automate repetitive monitoring and multi-step workflows across its tools, removing manual checks and hand-offs, while keeping the system auditable.",
+    "comments": "Powerful and open-source with the option to self-host, but it is on the advanced side and takes technical effort to build. A good idea is to map out a process clearly first, even on paper, before automating it. Use the time it frees for judgement and decision-making rather than routine checking.",
+    "tags": ["open-source", "advanced", "automation", "workflow", "self-hosted", "privacy-friendly"]
+  },
+  {
+    "slug": "narakeet",
+    "primary_category": "Meetings, Transcription & Translation",
+    "description": "A text-to-speech and slide-to-video tool that turns written text into spoken audio and converts PowerPoint slides into narrated videos automatically. Supports around 100 languages and 800 voices.",
+    "purpose": "When a business wants to create voiceovers or narrated training, tutorial, or explainer videos straight from a document or slide deck, without recording equipment.",
+    "comments": "Beginner-friendly and removes the need to record and re-record narration. It has notably good coverage of languages and scripts that bigger platforms often neglect. Paid service. Tighten scripts and check name pronunciations before publishing.",
+    "tags": ["text-to-speech", "video-narration", "multilingual", "beginner-friendly"]
+  },
+  {
+    "slug": "neo4j",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A graph database that stores information as nodes and the relationships between them, rather than as rows in tables. This makes it well suited to mapping and analysing complex networks.",
+    "purpose": "When a business needs to understand connections rather than isolated facts, for example untangling company ownership structures, supplier networks, customer relationships, or patterns in financial flows.",
+    "comments": "The community edition is free and can run entirely on your own hardware, though hosting larger setups has costs. It is an advanced tool with a real learning curve. Its strength is letting you ask 'who or what connects these two things?' instead of reading records one by one.",
+    "tags": ["graph-database", "network-analysis", "advanced", "local-processing", "privacy-friendly"]
+  },
+  {
+    "slug": "notebooklm",
+    "primary_category": "Research & Fact-Checking",
+    "description": "An AI research assistant that answers only from the documents you give it, such as PDFs, reports, transcripts, or notes, and cites the exact source for each answer rather than pulling from the open internet.",
+    "purpose": "When a business needs to understand and compare what is actually in a stack of long documents, such as contracts, policies, or meeting transcripts, before deciding how to act.",
+    "comments": "Beginner-friendly and free, and because it cites the source passages you can check its answers against the original text. It is a reading and thinking aid, not a writing or publishing tool. Uploaded material is processed on Google's servers, so weigh that for sensitive documents.",
+    "tags": ["free", "document-research", "summarisation", "ai-assistant", "beginner-friendly"]
+  },
+  {
+    "slug": "ollama",
+    "primary_category": "Writing & Content",
+    "description": "A lightweight tool for downloading and running open-weight AI language models (such as Llama, Mistral, or Gemma) directly on your own computer, fully offline, with a single command.",
+    "purpose": "When a business wants to use AI on confidential material without sending any data to an outside provider, or to experiment with and compare models privately.",
+    "comments": "Free, the models cost nothing to download, and nothing leaves your machine unless you configure it to. The trade-offs are that it needs comfort with terminal commands and capable hardware (enough RAM and storage). Good for prototyping privately before deciding what, if anything, to move to the cloud.",
+    "tags": ["free", "local-processing", "open-source", "private-ai", "privacy-friendly"]
+  },
+  {
+    "slug": "openai-whisper",
+    "primary_category": "Meetings, Transcription & Translation",
+    "description": "An open-source speech-to-text model from OpenAI that you can run on your own computer. It is highly accurate across many languages, accents, and background noise, with no file-size or upload limits beyond your hardware.",
+    "purpose": "When a business needs accurate, secure transcription of meetings, calls, or interviews, especially for confidential recordings that should never leave the building.",
+    "comments": "Free, open-source, and runs entirely offline, so there is essentially no risk of data leakage. The catch is that it requires command-line and terminal knowledge to set up. It handles mixed-language speech unusually well. Use the time saved to review the audio for emphasis and verify key quotes.",
+    "tags": ["free", "open-source", "transcription", "local-processing", "advanced", "privacy-friendly"]
+  },
+  {
+    "slug": "openrefine",
+    "primary_category": "Writing & Content",
+    "description": "A free, open-source tool for cleaning up messy or inconsistent data. It looks like a spreadsheet but is far more powerful at finding and merging different spellings of the same name, fixing inconsistencies, and making large bulk changes safely.",
+    "purpose": "When a business needs to tidy a messy dataset before analysing it, for example merging duplicate customer or supplier records or standardising inconsistent entries across a large file.",
+    "comments": "Free, open-source, and runs locally so your data stays with you. There is a moderate learning curve. It replaces days of manual find-and-replace and lets you spot patterns and clean data at scale before you start analysing it.",
+    "tags": ["free", "open-source", "data-cleaning", "local-processing", "privacy-friendly"]
+  },
+  {
+    "slug": "openstreetmap",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A free, community-built map of the world, where volunteers record roads, buildings, paths, and landmarks. It often captures detail, especially in rural or under-served areas, that commercial maps miss, and its data can be queried and extracted.",
+    "purpose": "When a business needs detailed geographic data or wants to confirm what physically exists in a location, for example checking infrastructure or routes in areas with little commercial map coverage.",
+    "comments": "Free and open, and the data can be reused in your own projects. It is community-maintained, so accuracy varies by area, but it is frequently more complete than commercial maps in places those services overlook. Useful for cross-checking locations against other evidence.",
+    "tags": ["free", "open-data", "mapping", "geolocation", "privacy-friendly"]
+  },
+  {
+    "slug": "opusclip",
+    "primary_category": "Audio, Video & Marketing",
+    "description": "An AI tool that takes long videos, such as webinars, recorded talks, or podcasts, and automatically pulls out short, shareable clips, reframing them vertically and adding captions for platforms like TikTok, Reels, and Shorts.",
+    "purpose": "When a business wants to repurpose long-form video into a steady stream of short social clips without a dedicated editor, to reach audiences on short-video platforms.",
+    "comments": "Beginner-friendly and automates the tedious work of finding highlights and reframing video. It analyses the transcript to spot the strongest moments. Paid service. Use the time saved to engage with the audience that the clips bring in.",
+    "tags": ["video-editing", "social-media", "short-form-video", "marketing", "beginner-friendly"]
+  },
+  {
+    "slug": "pandas",
+    "primary_category": "Writing & Content",
+    "description": "A free, open-source Python library for serious data analysis. It handles cleaning, filtering, and analysing data as written code, so the process is transparent, repeatable, and able to cope with millions of rows that a spreadsheet cannot.",
+    "purpose": "When a business has datasets too large or complex for spreadsheets, or needs an analysis that is auditable and can be re-run reliably.",
+    "comments": "Free, open-source, and runs locally, so you keep full control of your data. It is an advanced tool that requires Python skills. Worth it when datasets exceed spreadsheet limits or the analysis must be reproducible. Frees time to explore the anomalies in the data instead of fixing formatting.",
+    "tags": ["free", "open-source", "data-analysis", "python", "advanced", "local-processing"]
+  },
+  {
+    "slug": "perplexity",
+    "primary_category": "Writing & Content",
+    "description": "An AI-powered search engine that reads live web results and gives you a direct, written answer with citations to its sources, instead of just a list of links.",
+    "purpose": "When a business needs quick background research on a topic and wants answers that come with sources it can click through and verify.",
+    "comments": "Beginner-friendly and fast for synthesising information from many pages at once, with citations for each claim. Note that its web-crawling practices have drawn criticism from some publishers. Always open the cited sources and cross-check important claims against primary documents before relying on them.",
+    "tags": ["ai-search", "research", "citations", "beginner-friendly"]
+  },
+  {
+    "slug": "protonmail",
+    "primary_category": "Security & Privacy",
+    "description": "An encrypted email service based in Switzerland. Messages between ProtonMail users are end-to-end encrypted, and you can send password-protected encrypted messages to people on other email services too.",
+    "purpose": "When a business needs to keep sensitive email confidential, ensuring that not even the email provider can read the contents, for example when handling private or commercially confidential information.",
+    "comments": "Open-source and privacy-friendly, with a familiar, easy-to-use interface that needs no special technical knowledge. Free and paid tiers are available. It prevents third parties, including the provider, from reading message content.",
+    "tags": ["encrypted-email", "privacy-friendly", "open-source", "secure-communications"]
+  },
+  {
+    "slug": "replit",
+    "primary_category": "Build Your Own Tools",
+    "description": "A browser-based coding platform that lets you write, run, and publish small applications instantly from any device with no setup. Its AI Agent can build and host a simple tool from a plain-language description.",
+    "purpose": "When a business wants to quickly build and launch a small public-facing tool, such as a calculator or simple web app for customers, without managing servers or a long development cycle.",
+    "comments": "Beginner-friendly and removes all the hosting and setup hassle, as Replit publishes the tool for you. Best AI Agent features need a paid Core plan. It is cloud-hosted, so your code and data live on Replit's servers; keep that in mind for anything sensitive. Use the saved time to test the tool with real users.",
+    "tags": ["coding", "build-tools", "no-setup", "ai-coding", "beginner-friendly"]
+  },
+  {
+    "slug": "runway",
+    "primary_category": "Audio, Video & Marketing",
+    "description": "An AI video platform that can generate video from text, images, or other video, and apply visual effects. It acts like a lightweight AI film studio.",
+    "purpose": "When a business needs illustrative or background video footage but filming is impractical, for example a generic city street or atmospheric scene for a marketing piece.",
+    "comments": "A leading innovator in AI video, often ahead of larger competitors on features, and aimed at serious creators as much as casual users. It can be among the pricier and more demanding tools here. Label AI-generated video clearly so it is not mistaken for real footage.",
+    "tags": ["video-generation", "ai-video", "marketing", "visual-effects"]
+  },
+  {
+    "slug": "tabula",
+    "primary_category": "Writing & Content",
+    "description": "A free tool that extracts data tables trapped inside PDF files and turns them back into spreadsheet formats like CSV or Excel. You upload a PDF, draw a box around a table, and it pulls out the contents.",
+    "purpose": "When a business needs to work with figures locked in PDF reports, such as financial statements, price lists, or official data published only as PDFs, without retyping them by hand.",
+    "comments": "Free and runs locally in your browser, so the data stays with you. It works best on PDFs with selectable text rather than scans. Saves the tedious work of re-typing tables and lets you check the source's own totals for errors.",
+    "tags": ["free", "pdf-extraction", "data-analysis", "local-processing", "privacy-friendly"]
+  },
+  {
+    "slug": "tor-browser",
+    "primary_category": "Security & Privacy",
+    "description": "A privacy browser that hides your internet activity by routing it through a worldwide network of volunteer servers, making it very hard to trace your browsing back to you. It can also reach sites that are blocked or censored.",
+    "purpose": "When a business needs to research sensitive topics, access blocked websites, or browse without revealing its activity to network providers or third parties.",
+    "comments": "Free and privacy-friendly, based on Firefox. It protects against network surveillance and lets you research without leaving an obvious trail. Browsing is slower than a normal browser because of how traffic is routed.",
+    "tags": ["free", "anonymous-browsing", "privacy-friendly", "censorship-resistant"]
+  },
+  {
+    "slug": "turboscribe",
+    "primary_category": "Meetings, Transcription & Translation",
+    "description": "A cloud-based transcription tool built on OpenAI's Whisper engine, wrapped in an easy interface. It adds speaker recognition, built-in translation into many languages, and bulk uploads of up to 50 files at once.",
+    "purpose": "When a business needs to transcribe large volumes of audio quickly and affordably, for example turning many hours of recorded meetings or calls into searchable text.",
+    "comments": "Beginner-friendly with a low flat fee and simple drag-and-drop bulk processing. Because it runs in the cloud, it is fine for non-confidential recordings but not ideal for sensitive sources; you are trusting their encryption and retention policies. Supports a wide range of languages.",
+    "tags": ["transcription", "cloud", "bulk-processing", "multilingual", "beginner-friendly"]
+  },
+  {
+    "slug": "veracrypt",
+    "primary_category": "Security & Privacy",
+    "description": "Free, open-source encryption software that locks individual files, encrypted containers, or entire drives, making the data unreadable without the password.",
+    "purpose": "When a business needs to protect confidential files and devices so that data cannot be accessed if a laptop, hard drive, or USB stick is lost, stolen, or seized.",
+    "comments": "Free, open-source, audited, and trusted by the security community. It runs locally and protects data at rest. There is a moderate learning curve to set up properly. Far cheaper than the cost of cleaning up after a confidential device is lost.",
+    "tags": ["free", "open-source", "disk-encryption", "local-processing", "privacy-friendly"]
+  },
+  {
+    "slug": "visualping",
+    "primary_category": "Research & Fact-Checking",
+    "description": "A website-monitoring service that watches web pages for visual or text changes and alerts you by email, Slack, or SMS when something is added, removed, or altered.",
+    "purpose": "When a business wants to keep an eye on pages that do not offer feeds or alerts, such as competitor pricing, regulatory guidance, or supplier terms, and be notified the moment they change.",
+    "comments": "Beginner-friendly and widely used for competitive intelligence and regulatory monitoring. It catches even small, quiet edits to a page. Paid tiers apply beyond light use. Capture screenshots and timestamps as evidence of what changed and when.",
+    "tags": ["web-monitoring", "competitive-intelligence", "alerts", "beginner-friendly", "privacy-friendly"]
+  },
+  {
+    "slug": "wordtune",
+    "primary_category": "Writing & Content",
+    "description": "An AI writing assistant focused on phrasing and tone. Rather than just checking grammar, it rewrites sentences to be more concise, more formal, more casual, or expanded, acting like a co-writer.",
+    "purpose": "When a business wants to improve the clarity, tone, and flow of its writing quickly, especially helpful for people writing in a second language or working to a deadline.",
+    "comments": "Beginner-friendly and good for getting past writer's block or smoothing out copy without changing its meaning. The writer keeps full control over the final wording. Paid tiers apply beyond basic use.",
+    "tags": ["writing", "rewriting", "tone", "editing", "beginner-friendly"]
+  },
+  {
+    "slug": "zapier-ai",
+    "primary_category": "Automation & AI Agents",
+    "description": "The AI features within Zapier, a popular platform that connects thousands of apps and automates tasks between them. It can monitor feeds, tag and route incoming items, and generate first-pass summaries automatically.",
+    "purpose": "When a business wants to remove repetitive manual work, such as copying, forwarding, tagging, or status-checking, by linking its existing apps into automated workflows without coding.",
+    "comments": "Beginner-friendly and a good entry point to automation. Costs can climb at scale, especially with high-volume workflows and many AI steps tied to external services, so the entry pricing does not reflect heavy use. Map a process clearly before automating it, and set a clear point where a person reviews the results; automation should reallocate attention, not replace judgement.",
+    "tags": ["automation", "workflow", "app-integration", "no-code", "beginner-friendly"]
+  }
+]

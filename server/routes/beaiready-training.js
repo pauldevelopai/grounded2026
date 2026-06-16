@@ -8,13 +8,31 @@
 // is ingested into the shared, sector-scoped knowledge base via createKnowledgeEntry
 // so future same-sector client work learns from it. rag_synced/knowledge_id track it.
 import { Router } from 'express';
+import fs from 'node:fs';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
 import { createKnowledgeEntry } from '../services/knowledge.js';
-import { runFormsSheetSync } from '../services/forms-sync.js';
+import { syncOneForm, syncFormsForTenant, toCsvUrl } from '../services/forms-sync.js';
+import { upload } from '../middleware/upload.js';
 
 const router = Router();
+
+// Pull a Google Doc's current text. "Publish to web" or "anyone with the link"
+// docs export plain text at /document/d/<ID>/export?format=txt. Returns the text,
+// or throws an actionable error if the link isn't a shareable Google Doc.
+async function fetchGoogleDocText(rawUrl) {
+  const m = (rawUrl || '').match(/\/document\/d\/(?:e\/)?([a-zA-Z0-9_-]+)/);
+  if (!m) throw new Error('that doesn\'t look like a Google Doc link (…/document/d/…)');
+  const res = await fetch(`https://docs.google.com/document/d/${m[1]}/export?format=txt`, { redirect: 'follow' });
+  if (!res.ok) throw new Error(`couldn't read that doc (HTTP ${res.status}) — share it "anyone with the link can view"`);
+  const text = await res.text();
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('text/html') || /^\s*<(!doctype|html)/i.test(text)) {
+    throw new Error('that link returned a sign-in page — set the doc to "anyone with the link can view"');
+  }
+  return text.trim();
+}
 
 async function tenantContext(req) {
   const newsroomId = await resolveNewsroomId(req);
@@ -53,10 +71,15 @@ router.post('/intake-forms', requireRole('admin'), async (req, res) => {
   try {
     const { newsroom_id, form_name, csv_url } = req.body || {};
     if (!newsroom_id || !form_name || !csv_url) return res.status(400).json({ message: 'newsroom_id, form_name, csv_url required' });
+    // Store the link as-is (toCsvUrl normalises at fetch time, keeping the original visible).
     const { rows } = await pool.query(
       `INSERT INTO intake_forms (newsroom_id, form_name, csv_url) VALUES ($1,$2,$3) RETURNING *`,
       [newsroom_id, form_name, csv_url]);
-    res.status(201).json(rows[0]);
+    // Pull responses immediately so "0 responses" never lingers when the sheet is fine.
+    let sync = null;
+    try { sync = await syncOneForm(rows[0].id); }
+    catch (e) { sync = { form: form_name, total: 0, inserted: 0, error: e.message }; }
+    res.status(201).json({ ...rows[0], sync });
   } catch (err) { console.error('[bair-train/intake-forms:post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
@@ -72,9 +95,14 @@ router.put('/intake-forms/:id', requireRole('admin'), async (req, res) => {
   } catch (err) { console.error('[bair-train/intake-forms:put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
-// Pull fresh responses now (reuses the existing all-tenant sync; idempotent).
+// Pull fresh responses now for the SELECTED client only, returning per-form
+// results (incl. failures) so the admin sees exactly what happened.
 router.post('/intake-forms/sync', requireRole('admin'), async (req, res) => {
-  try { const r = await runFormsSheetSync(); res.json({ ok: true, ...r }); }
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const results = await syncFormsForTenant(newsroomId);
+    res.json({ ok: true, results });
+  }
   catch (err) { console.error('[bair-train/intake-sync]', err); res.status(500).json({ message: 'Sync failed' }); }
 });
 
@@ -95,7 +123,9 @@ router.get('/agendas', async (req, res) => {
     const { newsroomId } = await tenantContext(req);
     const pub = isAdmin(req) ? '' : `AND status = 'published'`;
     const { rows: agendas } = await pool.query(
-      `SELECT * FROM training_agendas WHERE newsroom_id = $1 ${pub} ORDER BY scheduled_for DESC NULLS LAST, created_at DESC`, [newsroomId]);
+      `SELECT id, newsroom_id, title, scheduled_for, location, status, notes, created_at, updated_at,
+              doc_kind, doc_url, doc_name, doc_file_id, doc_synced_at, (doc_synced_text IS NOT NULL) AS doc_synced
+         FROM training_agendas WHERE newsroom_id = $1 ${pub} ORDER BY scheduled_for DESC NULLS LAST, created_at DESC`, [newsroomId]);
     for (const a of agendas) {
       const { rows: items } = await pool.query(
         `SELECT id, order_index, time_label, topic, detail FROM training_agenda_items WHERE agenda_id = $1 ORDER BY order_index`, [a.id]);
@@ -149,6 +179,90 @@ router.delete('/agendas/:id', requireRole('admin'), async (req, res) => {
     if (!rowCount) return res.status(404).json({ message: 'Agenda not found' });
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/agendas:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Agenda document (Google Doc — re-syncable — or an uploaded PDF) ───────────────
+// Attach/replace a Google Doc link and immediately pull its current text.
+router.post('/agendas/:id/doc/google', requireRole('admin'), async (req, res) => {
+  try {
+    const { doc_url } = req.body || {};
+    if (!doc_url) return res.status(400).json({ message: 'doc_url required' });
+    let text;
+    try { text = await fetchGoogleDocText(doc_url); }
+    catch (e) { return res.status(400).json({ message: e.message }); }
+    const { rows } = await pool.query(
+      `UPDATE training_agendas SET doc_kind='gdoc', doc_url=$1, doc_name=$2, doc_file_id=NULL,
+         doc_synced_text=$3, doc_synced_at=NOW(), updated_at=NOW() WHERE id=$4 RETURNING *`,
+      [doc_url, 'Google Doc', text, req.params.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Agenda not found' });
+    res.json({ ...rows[0], doc_chars: text.length });
+  } catch (err) { console.error('[bair-train/agenda-doc:google]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Re-pull the latest text of an already-attached Google Doc.
+router.post('/agendas/:id/doc/sync', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows: [a] } = await pool.query('SELECT doc_kind, doc_url FROM training_agendas WHERE id=$1', [req.params.id]);
+    if (!a) return res.status(404).json({ message: 'Agenda not found' });
+    if (a.doc_kind !== 'gdoc' || !a.doc_url) return res.status(400).json({ message: 'No Google Doc attached to sync' });
+    let text;
+    try { text = await fetchGoogleDocText(a.doc_url); }
+    catch (e) { return res.status(400).json({ message: e.message }); }
+    const { rows } = await pool.query(
+      `UPDATE training_agendas SET doc_synced_text=$1, doc_synced_at=NOW(), updated_at=NOW() WHERE id=$2 RETURNING *`,
+      [text, req.params.id]);
+    res.json({ ...rows[0], doc_chars: text.length });
+  } catch (err) { console.error('[bair-train/agenda-doc:sync]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Upload a PDF agenda. Reuses the shared uploads pipeline + uploaded_documents.
+router.post('/agendas/:id/doc/upload', requireRole('admin'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const { rows: [a] } = await pool.query('SELECT id FROM training_agendas WHERE id=$1', [req.params.id]);
+    if (!a) { fs.unlink(req.file.path, () => {}); return res.status(404).json({ message: 'Agenda not found' }); }
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,'training_agenda',$6,$7) RETURNING id`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, req.params.id, req.user.id]);
+    const { rows } = await pool.query(
+      `UPDATE training_agendas SET doc_kind='pdf', doc_file_id=$1, doc_name=$2, doc_url=NULL,
+         doc_synced_text=NULL, doc_synced_at=NULL, updated_at=NOW() WHERE id=$3 RETURNING *`,
+      [doc.id, req.file.originalname, req.params.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/agenda-doc:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+// Remove whatever document is attached.
+router.delete('/agendas/:id/doc', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows: [a] } = await pool.query('SELECT doc_file_id FROM training_agendas WHERE id=$1', [req.params.id]);
+    if (!a) return res.status(404).json({ message: 'Agenda not found' });
+    if (a.doc_file_id) await pool.query('DELETE FROM uploaded_documents WHERE id=$1', [a.doc_file_id]).catch(() => {});
+    await pool.query(
+      `UPDATE training_agendas SET doc_kind=NULL, doc_url=NULL, doc_name=NULL, doc_file_id=NULL,
+         doc_synced_text=NULL, doc_synced_at=NULL, updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    res.json({ deleted: true });
+  } catch (err) { console.error('[bair-train/agenda-doc:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Download / open the attached doc. Member-reachable but tenant-scoped (members
+// only get a PUBLISHED agenda's doc); a Google Doc 302s to its link.
+router.get('/agendas/:id/doc/download', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const pub = isAdmin(req) ? '' : `AND status = 'published'`;
+    const { rows: [a] } = await pool.query(
+      `SELECT doc_kind, doc_url, doc_file_id FROM training_agendas WHERE id=$1 AND newsroom_id=$2 ${pub}`,
+      [req.params.id, newsroomId]);
+    if (!a || !a.doc_kind) return res.status(404).json({ message: 'No document' });
+    if (a.doc_kind === 'gdoc') return res.redirect(a.doc_url);
+    const { rows: [doc] } = await pool.query('SELECT * FROM uploaded_documents WHERE id=$1', [a.doc_file_id]);
+    if (!doc || !doc.file_path || !fs.existsSync(doc.file_path)) return res.status(404).json({ message: 'File not found' });
+    res.setHeader('Content-Disposition', `inline; filename="${doc.original_name}"`);
+    res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+    fs.createReadStream(doc.file_path).pipe(res);
+  } catch (err) { console.error('[bair-train/agenda-doc:download]', err); res.status(500).json({ message: 'Download failed' }); }
 });
 
 // ── Materials (RAG-ingested) ─────────────────────────────────────────────────────
@@ -265,6 +379,69 @@ router.delete('/outcomes/:id', requireRole('admin'), async (req, res) => {
     if (rows[0].knowledge_id) await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [rows[0].knowledge_id]).catch(() => {});
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/outcomes:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Strategy items (goals + automation roadmap) ──────────────────────────────────
+// Replaces the free-form outcome document with structured items. Clients see
+// 'published' items; admins (with X-Newsroom-Id) see all for the selected client.
+const STRAT_KINDS = ['goal', 'automation'];
+const SIZE = ['low', 'medium', 'high'];
+const cleanSize = (v) => (SIZE.includes(v) ? v : null);
+
+router.get('/strategy', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const pub = isAdmin(req) ? '' : `AND status = 'published'`;
+    const { rows } = await pool.query(
+      `SELECT * FROM training_strategy_items WHERE newsroom_id = $1 ${pub}
+        ORDER BY kind, order_index, created_at`, [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[bair-train/strategy:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/strategy', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroom_id, kind, title, detail, effort, payoff, order_index, status } = req.body || {};
+    if (!newsroom_id || !title) return res.status(400).json({ message: 'newsroom_id, title required' });
+    if (kind && !STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
+    const { rows } = await pool.query(
+      `INSERT INTO training_strategy_items (newsroom_id, kind, title, detail, effort, payoff, order_index, status, created_by)
+       VALUES ($1,COALESCE($2,'goal'),$3,$4,$5,$6,COALESCE($7,0),COALESCE($8,'draft'),$9) RETURNING *`,
+      [newsroom_id, kind || null, title, detail || null, cleanSize(effort), cleanSize(payoff),
+       order_index ?? null, status || null, req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/strategy:post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/strategy/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const { kind, title, detail, effort, payoff, order_index, status } = b;
+    if (kind && !STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
+    // effort/payoff are presence-aware: a status-only toggle leaves them intact,
+    // but sending the field (incl. empty → null) updates or clears it.
+    const hasEffort = Object.prototype.hasOwnProperty.call(b, 'effort');
+    const hasPayoff = Object.prototype.hasOwnProperty.call(b, 'payoff');
+    const { rows } = await pool.query(
+      `UPDATE training_strategy_items SET kind = COALESCE($1,kind), title = COALESCE($2,title),
+         detail = COALESCE($3,detail),
+         effort = CASE WHEN $4 THEN $5 ELSE effort END,
+         payoff = CASE WHEN $6 THEN $7 ELSE payoff END,
+         order_index = COALESCE($8,order_index), status = COALESCE($9,status), updated_at = NOW()
+       WHERE id = $10 RETURNING *`,
+      [kind || null, title || null, detail ?? null, hasEffort, cleanSize(effort), hasPayoff, cleanSize(payoff),
+       order_index ?? null, status || null, req.params.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Strategy item not found' });
+    res.json(rows[0]);
+  } catch (err) { console.error('[bair-train/strategy:put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/strategy/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM training_strategy_items WHERE id = $1', [req.params.id]);
+    if (!rowCount) return res.status(404).json({ message: 'Strategy item not found' });
+    res.json({ deleted: true });
+  } catch (err) { console.error('[bair-train/strategy:del]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;
