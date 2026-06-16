@@ -384,16 +384,20 @@ const KINDS = ['doc', 'slide', 'video', 'link', 'exercise'];
 function MaterialsSection({ clientId, setErr }) {
   const api = useApi(clientId);
   const [rows, setRows] = useState(null);
-  const [draft, setDraft] = useState({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true });
-  const load = useCallback(() => { api('/beaiready/training/materials').then(setRows).catch((e) => setErr(e.message)); }, [api, setErr]);
+  const [agendas, setAgendas] = useState([]);
+  const [draft, setDraft] = useState({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' });
+  const load = useCallback(() => {
+    api('/beaiready/training/materials').then(setRows).catch((e) => setErr(e.message));
+    api('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
+  }, [api, setErr]);
   useEffect(() => { setRows(null); load(); }, [load]);
-  const create = async (e) => { e.preventDefault(); if (!draft.title.trim()) return; setErr(''); try { await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) }); setDraft({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true }); load(); } catch (e) { setErr(e.message); } };
+  const create = async (e) => { e.preventDefault(); if (!draft.title.trim()) return; setErr(''); try { await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) }); setDraft({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' }); load(); } catch (e) { setErr(e.message); } };
 
   return (
-    <Section title="Training materials" hint="Published materials appear in the client's portal">
+    <Section title="Training materials" hint="Published materials appear in the client's portal — link each to its training">
       <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
         {rows == null ? <p style={muted}>Loading…</p> : rows.length === 0 ? <p style={muted}>No materials yet.</p> :
-          rows.map((m) => <MaterialCard key={m.id} m={m} api={api} onChanged={load} setErr={setErr} />)}
+          rows.map((m) => <MaterialCard key={m.id} m={m} api={api} agendas={agendas} onChanged={load} setErr={setErr} />)}
       </div>
       <form onSubmit={create} style={{ ...card, display: 'grid', gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 13 }}>New material</div>
@@ -404,6 +408,7 @@ function MaterialsSection({ clientId, setErr }) {
         </div>
         <input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Short description" style={inp} />
         <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} placeholder="Body / notes (this is what the knowledge base learns from)" style={{ ...inp, minHeight: 64 }} />
+        <AgendaSelect agendas={agendas} value={draft.agenda_id} onChange={(v) => setDraft({ ...draft, agenda_id: v })} />
         <label style={chk}><input type="checkbox" checked={draft.rag_shareable} onChange={(e) => setDraft({ ...draft, rag_shareable: e.target.checked })} /> Share with the BE AI READY knowledge base (sector-scoped)</label>
         <button type="submit" style={{ ...btn, justifySelf: 'start' }}>Add material</button>
       </form>
@@ -411,15 +416,16 @@ function MaterialsSection({ clientId, setErr }) {
   );
 }
 
-function MaterialCard({ m, api, onChanged, setErr }) {
+function MaterialCard({ m, api, agendas, onChanged, setErr }) {
   const [edit, setEdit] = useState(false);
-  const [f, setF] = useState({ title: m.title, kind: m.kind, url: m.url || '', description: m.description || '', content: m.content || '', published: m.published, rag_shareable: m.rag_shareable });
+  const [f, setF] = useState({ title: m.title, kind: m.kind, url: m.url || '', description: m.description || '', content: m.content || '', published: m.published, rag_shareable: m.rag_shareable, agenda_id: m.agenda_id || '' });
   const save = async () => { setErr(''); try { await api(`/beaiready/training/materials/${m.id}`, { method: 'PUT', body: JSON.stringify(f) }); setEdit(false); onChanged(); } catch (e) { setErr(e.message); } };
   const del = async () => { setErr(''); try { await api(`/beaiready/training/materials/${m.id}`, { method: 'DELETE' }); onChanged(); } catch (e) { setErr(e.message); } };
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <div><span style={{ ...pill, background: '#f1f0ec', color: '#6b6359' }}>{m.kind}</span> <strong style={{ marginLeft: 6 }}>{m.title}</strong>
+          {m.agenda_title && <span style={{ ...pill, background: '#eef2ff', color: '#3730a3', marginLeft: 6 }}>{m.agenda_title}</span>}
           {!m.published && <span style={{ ...pill, ...pubOff, marginLeft: 6 }}>draft</span>}
           {m.rag_synced && <span style={{ ...pill, background: '#dcfce7', color: '#166534', marginLeft: 6 }}>in knowledge base</span>}</div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -438,6 +444,7 @@ function MaterialCard({ m, api, onChanged, setErr }) {
           </div>
           <input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Description" style={inp} />
           <textarea value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} style={{ ...inp, minHeight: 64 }} />
+          <AgendaSelect agendas={agendas} value={f.agenda_id} onChange={(v) => setF({ ...f, agenda_id: v })} />
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <label style={chk}><input type="checkbox" checked={f.published} onChange={(e) => setF({ ...f, published: e.target.checked })} /> Published to client</label>
             <label style={chk}><input type="checkbox" checked={f.rag_shareable} onChange={(e) => setF({ ...f, rag_shareable: e.target.checked })} /> Share with knowledge base</label>
@@ -457,37 +464,42 @@ const SIZE_OPTS = ['', 'low', 'medium', 'high'];
 function StrategySection({ clientId, setErr }) {
   const api = useApi(clientId);
   const [items, setItems] = useState(null);
-  const load = useCallback(() => { api('/beaiready/training/strategy').then(setItems).catch((e) => setErr(e.message)); }, [api, setErr]);
+  const [agendas, setAgendas] = useState([]);
+  const load = useCallback(() => {
+    api('/beaiready/training/strategy').then(setItems).catch((e) => setErr(e.message));
+    api('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
+  }, [api, setErr]);
   useEffect(() => { setItems(null); load(); }, [load]);
   const goals = (items || []).filter((i) => i.kind === 'goal');
   const autos = (items || []).filter((i) => i.kind === 'automation');
   return (
-    <Section title="Strategy" hint="Goals + automation roadmap — published items show in the client's dashboard">
+    <Section title="Strategy" hint="Goals + automation roadmap — link to a training and/or set a target date; published items show in the client's dashboard">
       {items == null ? <p style={muted}>Loading…</p> : (
         <div style={{ display: 'grid', gap: 18 }}>
           <StrategyGroup kind="goal" label="Goals" hint="What the business wants from AI"
-            rows={goals} api={api} clientId={clientId} onChanged={load} setErr={setErr} />
+            rows={goals} api={api} clientId={clientId} agendas={agendas} onChanged={load} setErr={setErr} />
           <StrategyGroup kind="automation" label="Automation roadmap" hint="What to automate — sized by effort & payoff"
-            rows={autos} api={api} clientId={clientId} onChanged={load} setErr={setErr} />
+            rows={autos} api={api} clientId={clientId} agendas={agendas} onChanged={load} setErr={setErr} />
         </div>
       )}
     </Section>
   );
 }
 
-function StrategyGroup({ kind, label, hint, rows, api, clientId, onChanged, setErr }) {
+function StrategyGroup({ kind, label, hint, rows, api, clientId, agendas, onChanged, setErr }) {
   const auto = kind === 'automation';
-  const [draft, setDraft] = useState({ title: '', detail: '', effort: '', payoff: '' });
+  const [draft, setDraft] = useState({ title: '', detail: '', effort: '', payoff: '', agenda_id: '', target_date: '' });
   const [suggestions, setSuggestions] = useState(null);   // null = not asked, [] = none, [...] = list
   const [noteMsg, setNoteMsg] = useState('');
   const [suggesting, setSuggesting] = useState(false);
 
   const addItem = (item) => api('/beaiready/training/strategy', { method: 'POST', body: JSON.stringify({
     newsroom_id: clientId, kind, title: item.title, detail: item.detail || null,
-    effort: auto ? (item.effort || null) : null, payoff: auto ? (item.payoff || null) : null }) });
+    effort: auto ? (item.effort || null) : null, payoff: auto ? (item.payoff || null) : null,
+    agenda_id: item.agenda_id || null, target_date: item.target_date || null }) });
   const add = async (e) => {
     e.preventDefault(); if (!draft.title.trim()) return; setErr('');
-    try { await addItem(draft); setDraft({ title: '', detail: '', effort: '', payoff: '' }); onChanged(); } catch (e) { setErr(e.message); }
+    try { await addItem(draft); setDraft({ title: '', detail: '', effort: '', payoff: '', agenda_id: '', target_date: '' }); onChanged(); } catch (e) { setErr(e.message); }
   };
   const suggest = async () => {
     setSuggesting(true); setErr(''); setNoteMsg('');
@@ -526,7 +538,7 @@ function StrategyGroup({ kind, label, hint, rows, api, clientId, onChanged, setE
       )}
       <div style={{ display: 'grid', gap: 8, marginBottom: 8 }}>
         {rows.length === 0 ? <p style={muted}>None yet.</p> :
-          rows.map((it) => <StrategyItemCard key={it.id} it={it} auto={auto} api={api} onChanged={onChanged} setErr={setErr} />)}
+          rows.map((it) => <StrategyItemCard key={it.id} it={it} auto={auto} api={api} agendas={agendas} onChanged={onChanged} setErr={setErr} />)}
       </div>
       <form onSubmit={add} style={{ ...card, display: 'grid', gap: 8 }}>
         <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder={auto ? 'What to automate (e.g. Draft monthly client report)' : 'Goal (e.g. Cut report turnaround in half)'} style={inp} />
@@ -537,18 +549,25 @@ function StrategyGroup({ kind, label, hint, rows, api, clientId, onChanged, setE
             <SizeSelect label="Payoff" value={draft.payoff} onChange={(v) => setDraft({ ...draft, payoff: v })} />
           </div>
         )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <AgendaSelect agendas={agendas} value={draft.agenda_id} onChange={(v) => setDraft({ ...draft, agenda_id: v })} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5b6b63' }}>Target date
+            <input type="date" value={draft.target_date} onChange={(e) => setDraft({ ...draft, target_date: e.target.value })} style={inp} />
+          </label>
+        </div>
         <button type="submit" style={{ ...btn, justifySelf: 'start' }}>Add {auto ? 'item' : 'goal'}</button>
       </form>
     </div>
   );
 }
 
-function StrategyItemCard({ it, auto, api, onChanged, setErr }) {
+function StrategyItemCard({ it, auto, api, agendas, onChanged, setErr }) {
   const [edit, setEdit] = useState(false);
-  const [f, setF] = useState({ title: it.title, detail: it.detail || '', effort: it.effort || '', payoff: it.payoff || '' });
-  const save = async () => { setErr(''); try { await api(`/beaiready/training/strategy/${it.id}`, { method: 'PUT', body: JSON.stringify({ title: f.title, detail: f.detail, effort: auto ? (f.effort || null) : null, payoff: auto ? (f.payoff || null) : null }) }); setEdit(false); onChanged(); } catch (e) { setErr(e.message); } };
+  const [f, setF] = useState({ title: it.title, detail: it.detail || '', effort: it.effort || '', payoff: it.payoff || '', agenda_id: it.agenda_id || '', target_date: it.target_date ? it.target_date.slice(0, 10) : '' });
+  const save = async () => { setErr(''); try { await api(`/beaiready/training/strategy/${it.id}`, { method: 'PUT', body: JSON.stringify({ title: f.title, detail: f.detail, effort: auto ? (f.effort || null) : null, payoff: auto ? (f.payoff || null) : null, agenda_id: f.agenda_id || null, target_date: f.target_date || null }) }); setEdit(false); onChanged(); } catch (e) { setErr(e.message); } };
   const del = async () => { setErr(''); try { await api(`/beaiready/training/strategy/${it.id}`, { method: 'DELETE' }); onChanged(); } catch (e) { setErr(e.message); } };
   const togglePub = async () => { setErr(''); try { await api(`/beaiready/training/strategy/${it.id}`, { method: 'PUT', body: JSON.stringify({ status: it.status === 'published' ? 'draft' : 'published' }) }); onChanged(); } catch (e) { setErr(e.message); } };
+  const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -557,6 +576,8 @@ function StrategyItemCard({ it, auto, api, onChanged, setErr }) {
           <span style={{ ...pill, ...(it.status === 'published' ? pubOn : pubOff), marginLeft: 6 }}>{it.status}</span>
           {auto && it.effort && <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359', marginLeft: 6 }}>effort: {it.effort}</span>}
           {auto && it.payoff && <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359', marginLeft: 6 }}>payoff: {it.payoff}</span>}
+          {it.target_date && <span style={{ ...pill, background: '#fef3c7', color: '#92400e', marginLeft: 6 }}>by {fmtDate(it.target_date)}</span>}
+          {it.agenda_title && <span style={{ ...pill, background: '#eef2ff', color: '#3730a3', marginLeft: 6 }}>{it.agenda_title}</span>}
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={togglePub} style={tag}>{it.status === 'published' ? 'Unpublish' : 'Publish'}</button>
@@ -575,6 +596,12 @@ function StrategyItemCard({ it, auto, api, onChanged, setErr }) {
               <SizeSelect label="Payoff" value={f.payoff} onChange={(v) => setF({ ...f, payoff: v })} />
             </div>
           )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <AgendaSelect agendas={agendas} value={f.agenda_id} onChange={(v) => setF({ ...f, agenda_id: v })} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5b6b63' }}>Target date
+              <input type="date" value={f.target_date} onChange={(e) => setF({ ...f, target_date: e.target.value })} style={inp} />
+            </label>
+          </div>
           <button onClick={save} style={{ ...btn, justifySelf: 'start' }}>Save</button>
         </div>
       )}
@@ -588,6 +615,20 @@ function SizeSelect({ label, value, onChange }) {
       {label}
       <select value={value} onChange={(e) => onChange(e.target.value)} style={inp}>
         {SIZE_OPTS.map((s) => <option key={s} value={s}>{s || '—'}</option>)}
+      </select>
+    </label>
+  );
+}
+
+// Pick which training (agenda) a material or strategy item belongs to.
+function AgendaSelect({ agendas, value, onChange }) {
+  const fmt = (d) => (d ? ` · ${new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}` : '');
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#5b6b63' }}>
+      Training
+      <select value={value || ''} onChange={(e) => onChange(e.target.value)} style={inp}>
+        <option value="">— No training —</option>
+        {(agendas || []).map((a) => <option key={a.id} value={a.id}>{a.title}{fmt(a.scheduled_for)}</option>)}
       </select>
     </label>
   );

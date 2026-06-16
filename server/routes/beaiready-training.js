@@ -274,24 +274,26 @@ const KINDS = ['doc', 'slide', 'video', 'link', 'exercise'];
 router.get('/materials', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const pub = isAdmin(req) ? '' : 'AND published = true';
+    const pub = isAdmin(req) ? '' : 'AND m.published = true';
     const { rows } = await pool.query(
-      `SELECT * FROM training_materials WHERE newsroom_id = $1 ${pub} ORDER BY order_index, created_at`, [newsroomId]);
+      `SELECT m.*, a.title AS agenda_title, a.scheduled_for AS agenda_date
+         FROM training_materials m LEFT JOIN training_agendas a ON a.id = m.agenda_id
+        WHERE m.newsroom_id = $1 ${pub} ORDER BY m.order_index, m.created_at`, [newsroomId]);
     res.json(rows);
   } catch (err) { console.error('[bair-train/materials:get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 router.post('/materials', requireRole('admin'), async (req, res) => {
   try {
-    const { newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable } = req.body || {};
+    const { newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable, agenda_id } = req.body || {};
     if (!newsroom_id || !title) return res.status(400).json({ message: 'newsroom_id, title required' });
     if (kind && !KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${KINDS.join(', ')}` });
     const { rows } = await pool.query(
-      `INSERT INTO training_materials (newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable, created_by)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'doc'),COALESCE($7,0),COALESCE($8,true),COALESCE($9,true),$10) RETURNING *`,
+      `INSERT INTO training_materials (newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable, agenda_id, created_by)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'doc'),COALESCE($7,0),COALESCE($8,true),COALESCE($9,true),$10,$11) RETURNING *`,
       [newsroom_id, title, description || null, content || null, url || null, kind || null,
        order_index ?? null, typeof published === 'boolean' ? published : null,
-       typeof rag_shareable === 'boolean' ? rag_shareable : null, req.user.id]);
+       typeof rag_shareable === 'boolean' ? rag_shareable : null, agenda_id || null, req.user.id]);
     const row = rows[0];
     const tenant = await tenantContext(req);
     await syncToRag({ table: 'training_materials', row, tenant, category: 'training_material', shouldIngest: row.rag_shareable && !!row.content });
@@ -301,16 +303,20 @@ router.post('/materials', requireRole('admin'), async (req, res) => {
 
 router.put('/materials/:id', requireRole('admin'), async (req, res) => {
   try {
-    const { title, description, content, url, kind, order_index, published, rag_shareable } = req.body || {};
+    const b = req.body || {};
+    const { title, description, content, url, kind, order_index, published, rag_shareable, agenda_id } = b;
     if (kind && !KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${KINDS.join(', ')}` });
+    const hasAgenda = Object.prototype.hasOwnProperty.call(b, 'agenda_id');   // presence-aware so it can be set or cleared
     const { rows } = await pool.query(
       `UPDATE training_materials SET title = COALESCE($1,title), description = COALESCE($2,description),
          content = COALESCE($3,content), url = COALESCE($4,url), kind = COALESCE($5,kind),
          order_index = COALESCE($6,order_index), published = COALESCE($7,published),
-         rag_shareable = COALESCE($8,rag_shareable), updated_at = NOW() WHERE id = $9 RETURNING *`,
+         rag_shareable = COALESCE($8,rag_shareable),
+         agenda_id = CASE WHEN $9 THEN $10 ELSE agenda_id END,
+         updated_at = NOW() WHERE id = $11 RETURNING *`,
       [title || null, description ?? null, content ?? null, url ?? null, kind || null,
        order_index ?? null, typeof published === 'boolean' ? published : null,
-       typeof rag_shareable === 'boolean' ? rag_shareable : null, req.params.id]);
+       typeof rag_shareable === 'boolean' ? rag_shareable : null, hasAgenda, agenda_id || null, req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Material not found' });
     const row = rows[0];
     const tenant = await tenantContext(req);
@@ -394,24 +400,26 @@ const cleanSize = (v) => (SIZE.includes(v) ? v : null);
 router.get('/strategy', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const pub = isAdmin(req) ? '' : `AND status = 'published'`;
+    const pub = isAdmin(req) ? '' : `AND s.status = 'published'`;
     const { rows } = await pool.query(
-      `SELECT * FROM training_strategy_items WHERE newsroom_id = $1 ${pub}
-        ORDER BY kind, order_index, created_at`, [newsroomId]);
+      `SELECT s.*, a.title AS agenda_title, a.scheduled_for AS agenda_date
+         FROM training_strategy_items s LEFT JOIN training_agendas a ON a.id = s.agenda_id
+        WHERE s.newsroom_id = $1 ${pub}
+        ORDER BY s.kind, s.target_date NULLS LAST, s.order_index, s.created_at`, [newsroomId]);
     res.json(rows);
   } catch (err) { console.error('[bair-train/strategy:get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 router.post('/strategy', requireRole('admin'), async (req, res) => {
   try {
-    const { newsroom_id, kind, title, detail, effort, payoff, order_index, status } = req.body || {};
+    const { newsroom_id, kind, title, detail, effort, payoff, order_index, status, agenda_id, target_date } = req.body || {};
     if (!newsroom_id || !title) return res.status(400).json({ message: 'newsroom_id, title required' });
     if (kind && !STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
     const { rows } = await pool.query(
-      `INSERT INTO training_strategy_items (newsroom_id, kind, title, detail, effort, payoff, order_index, status, created_by)
-       VALUES ($1,COALESCE($2,'goal'),$3,$4,$5,$6,COALESCE($7,0),COALESCE($8,'draft'),$9) RETURNING *`,
+      `INSERT INTO training_strategy_items (newsroom_id, kind, title, detail, effort, payoff, order_index, status, agenda_id, target_date, created_by)
+       VALUES ($1,COALESCE($2,'goal'),$3,$4,$5,$6,COALESCE($7,0),COALESCE($8,'draft'),$9,$10,$11) RETURNING *`,
       [newsroom_id, kind || null, title, detail || null, cleanSize(effort), cleanSize(payoff),
-       order_index ?? null, status || null, req.user.id]);
+       order_index ?? null, status || null, agenda_id || null, target_date || null, req.user.id]);
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[bair-train/strategy:post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -425,14 +433,20 @@ router.put('/strategy/:id', requireRole('admin'), async (req, res) => {
     // but sending the field (incl. empty → null) updates or clears it.
     const hasEffort = Object.prototype.hasOwnProperty.call(b, 'effort');
     const hasPayoff = Object.prototype.hasOwnProperty.call(b, 'payoff');
+    const hasAgenda = Object.prototype.hasOwnProperty.call(b, 'agenda_id');
+    const hasTarget = Object.prototype.hasOwnProperty.call(b, 'target_date');
+    const { agenda_id, target_date } = b;
     const { rows } = await pool.query(
       `UPDATE training_strategy_items SET kind = COALESCE($1,kind), title = COALESCE($2,title),
          detail = COALESCE($3,detail),
          effort = CASE WHEN $4 THEN $5 ELSE effort END,
          payoff = CASE WHEN $6 THEN $7 ELSE payoff END,
-         order_index = COALESCE($8,order_index), status = COALESCE($9,status), updated_at = NOW()
-       WHERE id = $10 RETURNING *`,
+         agenda_id = CASE WHEN $8 THEN $9 ELSE agenda_id END,
+         target_date = CASE WHEN $10 THEN $11 ELSE target_date END,
+         order_index = COALESCE($12,order_index), status = COALESCE($13,status), updated_at = NOW()
+       WHERE id = $14 RETURNING *`,
       [kind || null, title || null, detail ?? null, hasEffort, cleanSize(effort), hasPayoff, cleanSize(payoff),
+       hasAgenda, agenda_id || null, hasTarget, target_date || null,
        order_index ?? null, status || null, req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Strategy item not found' });
     res.json(rows[0]);

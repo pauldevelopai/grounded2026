@@ -130,6 +130,23 @@ function TrainingRecord() {
                     </a>
                   </p>
                 )}
+                {/* Materials linked to this training. */}
+                {(() => {
+                  const mats = (myMaterials || []).filter((m) => m.agenda_id === a.id);
+                  return mats.length === 0 ? null : (
+                    <div style={{ marginTop: 10, borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076', marginBottom: 4 }}>Materials</div>
+                      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 4 }}>
+                        {mats.map((m) => (
+                          <li key={m.id} style={{ fontSize: 13 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#c75b39', marginRight: 6 }}>{m.kind}</span>
+                            {m.url ? <a href={m.url} target="_blank" rel="noreferrer">{m.title}</a> : m.title}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -140,11 +157,11 @@ function TrainingRecord() {
       <section className="hub-band" style={{ marginBottom: 24 }}>
         {myMaterials == null ? (
           <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
-        ) : myMaterials.length === 0 ? (
-          <p style={{ margin: 0 }}>Your training materials will appear here — slides, guides and exercises from your sessions.</p>
+        ) : myMaterials.filter((m) => !m.agenda_id).length === 0 ? (
+          <p style={{ margin: 0 }}>Your training materials will appear here — slides, guides and exercises from your sessions. {myMaterials.length > 0 && 'Materials tied to a specific training show under that training above.'}</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 10 }}>
-            {myMaterials.map((m) => (
+            {myMaterials.filter((m) => !m.agenda_id).map((m) => (
               <li key={m.id} style={{ fontSize: 13.5 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#c75b39', background: '#f7ece7', padding: '1px 7px', borderRadius: 999, marginRight: 6 }}>{m.kind}</span>
                 {m.url ? <a href={m.url} target="_blank" rel="noreferrer"><strong>{m.title}</strong></a> : <strong>{m.title}</strong>}

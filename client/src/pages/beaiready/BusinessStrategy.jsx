@@ -82,6 +82,8 @@ function StrategyBlock({ title, items, auto }) {
                 {s.effort ? `  · effort: ${s.effort}` : ''}{s.payoff ? `  · payoff: ${s.payoff}` : ''}
               </span>
             )}
+            {s.target_date && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 7px', borderRadius: 999 }}>by {new Date(s.target_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
+            {s.agenda_title && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#3730a3', background: '#eef2ff', padding: '1px 7px', borderRadius: 999 }}>{s.agenda_title}</span>}
             {s.detail && <div style={{ color: '#6b6359', marginTop: 2 }}>{s.detail}</div>}
           </li>
         ))}
