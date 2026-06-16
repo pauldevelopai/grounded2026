@@ -15,6 +15,9 @@ import { resolveNewsroomId } from '../lib/tenancy.js';
 import { createKnowledgeEntry } from '../services/knowledge.js';
 import { syncOneForm, syncFormsForTenant, toCsvUrl } from '../services/forms-sync.js';
 import { upload } from '../middleware/upload.js';
+import { scrapeArticle } from '../services/web-scraper.js';
+import { extractText } from '../services/document-processor.js';
+import { callClaude } from '../services/claude.js';
 
 const router = Router();
 
@@ -442,6 +445,133 @@ router.delete('/strategy/:id', requireRole('admin'), async (req, res) => {
     if (!rowCount) return res.status(404).json({ message: 'Strategy item not found' });
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/strategy:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Company knowledge (per-client context the AI reasons over) ───────────────────
+// Uploaded docs, a scraped website, or a typed note. Admin-only; never shown to a
+// client. The extracted text is what the strategy suggestions are grounded in.
+router.get('/company-knowledge', async (req, res) => {
+  try {
+    if (!isAdmin(req)) return res.json([]);   // internal context only
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT id, kind, title, url, file_id, left(extracted_text, 220) AS snippet,
+              (extracted_text IS NOT NULL AND length(extracted_text) > 0) AS has_text, created_at
+         FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[bair-train/company-knowledge:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/company-knowledge/website', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroom_id, url } = req.body || {};
+    if (!newsroom_id || !url) return res.status(400).json({ message: 'newsroom_id, url required' });
+    const scraped = await scrapeArticle(url);
+    if (!scraped.success || !scraped.text) return res.status(400).json({ message: `Couldn't read that page${scraped.error ? `: ${scraped.error}` : ''}` });
+    const { rows } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
+       VALUES ($1,'website',$2,$3,$4,$5) RETURNING id, kind, title, url, created_at`,
+      [newsroom_id, scraped.title || url, url, scraped.text, req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/company-knowledge:website]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/company-knowledge/upload', requireRole('admin'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const { newsroom_id } = req.body || {};
+    if (!newsroom_id) { fs.unlink(req.file.path, () => {}); return res.status(400).json({ message: 'newsroom_id required' }); }
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,'company_knowledge',$6,$7) RETURNING id`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, newsroom_id, req.user.id]);
+    let text = '';
+    try { text = await extractText(req.file.path, req.file.mimetype); } catch (e) { console.error('[company-knowledge extract]', e.message); }
+    const { rows } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by)
+       VALUES ($1,'doc',$2,$3,$4,$5) RETURNING id, kind, title, file_id, created_at`,
+      [newsroom_id, req.file.originalname, doc.id, (text || '').slice(0, 20000), req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/company-knowledge:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+router.post('/company-knowledge/note', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroom_id, title, text } = req.body || {};
+    if (!newsroom_id || !text?.trim()) return res.status(400).json({ message: 'newsroom_id and text required' });
+    const { rows } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
+       VALUES ($1,'note',$2,$3,$4) RETURNING id, kind, title, created_at`,
+      [newsroom_id, title || 'Note', text.trim(), req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/company-knowledge:note]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/company-knowledge/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows: [s] } = await pool.query('SELECT file_id FROM beaiready_company_sources WHERE id = $1', [req.params.id]);
+    if (!s) return res.status(404).json({ message: 'Not found' });
+    if (s.file_id) await pool.query('DELETE FROM uploaded_documents WHERE id = $1', [s.file_id]).catch(() => {});
+    await pool.query('DELETE FROM beaiready_company_sources WHERE id = $1', [req.params.id]);
+    res.json({ deleted: true });
+  } catch (err) { console.error('[bair-train/company-knowledge:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Everything the AI knows about this client, as one text blob for prompting.
+async function gatherBusinessContext(newsroomId) {
+  const parts = [];
+  const { rows: [t] } = await pool.query(
+    `SELECT o.name AS org, s.name AS sector FROM newsrooms n
+       LEFT JOIN organisations o ON o.id = n.organisation_id
+       LEFT JOIN sectors s ON s.id = o.sector_id WHERE n.id = $1`, [newsroomId]).catch(() => ({ rows: [{}] }));
+  if (t?.org) parts.push(`Business: ${t.org}${t.sector ? ` (sector: ${t.sector})` : ''}`);
+  const { rows: intake } = await pool.query(
+    `SELECT response FROM intake_responses WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
+  if (intake.length) {
+    const lines = intake.map((r) => Object.entries(r.response || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')).filter(Boolean);
+    parts.push(`Intake / staff survey responses (${intake.length}):\n${lines.join('\n').slice(0, 6000)}`);
+  }
+  const { rows: srcs } = await pool.query(
+    `SELECT kind, title, extracted_text FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC LIMIT 20`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const s of srcs) {
+    if (s.extracted_text) parts.push(`[${s.kind}] ${s.title || ''}:\n${s.extracted_text.slice(0, 3000)}`);
+  }
+  const { rows: existing } = await pool.query(
+    `SELECT kind, title FROM training_strategy_items WHERE newsroom_id = $1`, [newsroomId]).catch(() => ({ rows: [] }));
+  if (existing.length) parts.push(`Existing strategy items (do not duplicate):\n${existing.map((e) => `- [${e.kind}] ${e.title}`).join('\n')}`);
+  return parts.join('\n\n').slice(0, 14000);
+}
+
+function parseSuggestions(text) {
+  if (!text) return [];
+  const m = text.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  try { const a = JSON.parse(m[0]); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
+// Suggest Goals or Automation items from everything we know about the business.
+// Returns suggestions only (not saved) — the consultant adds the ones they want.
+router.post('/strategy/suggest', requireRole('admin'), async (req, res) => {
+  try {
+    const { kind } = req.body || {};
+    if (!STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
+    const { newsroomId } = await tenantContext(req);
+    const context = await gatherBusinessContext(newsroomId);
+    if (!context.trim()) return res.json({ suggestions: [], note: 'No company knowledge yet — add intake responses, a website or a doc first.' });
+    const auto = kind === 'automation';
+    const system =
+      'You are an AI strategy consultant for South African SMEs on the Be AI Ready platform. From what is known ' +
+      'about ONE specific business, propose concrete, realistic ' +
+      (auto ? 'automation-roadmap items (specific workflows/tasks to automate with AI).' : 'AI goals (outcomes the business wants from AI).') +
+      ' Ground every suggestion in the provided context — no generic filler. Output ONLY a JSON array, no prose. Each element: ' +
+      (auto ? '{"title": string, "detail": string, "effort": "low"|"medium"|"high", "payoff": "low"|"medium"|"high"}.'
+            : '{"title": string, "detail": string}.') +
+      ' 4–6 items. Do not duplicate the existing items listed.';
+    const userContent = `What we know about this business:\n\n${context}\n\nSuggest the ${auto ? 'automation items' : 'goals'} now as a JSON array.`;
+    const raw = await callClaude({ system, userContent, maxTokens: 1400, temperature: 0.5 });
+    const suggestions = parseSuggestions(raw).filter((s) => s && s.title).slice(0, 8);
+    res.json({ suggestions });
+  } catch (err) { console.error('[bair-train/strategy:suggest]', err); res.status(500).json({ message: err.message || 'Suggestion failed' }); }
 });
 
 export default router;

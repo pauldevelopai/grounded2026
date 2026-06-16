@@ -40,6 +40,7 @@ export default function BeAIReadyAdminTraining() {
       {clientId && (
         <div style={{ display: 'grid', gap: 24 }}>
           <IntakeSection clientId={clientId} setErr={setErr} />
+          <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
           <AgendaSection clientId={clientId} setErr={setErr} />
           <MaterialsSection clientId={clientId} setErr={setErr} />
           <StrategySection clientId={clientId} setErr={setErr} />
@@ -153,6 +154,67 @@ function IntakeSection({ clientId, setErr }) {
           </div>
         </details>
       )}
+    </Section>
+  );
+}
+
+// ── Company knowledge (internal context the AI reasons over) ─────────────────────
+const SRC_LABEL = { doc: 'Doc', website: 'Website', note: 'Note' };
+function CompanyKnowledgeSection({ clientId, setErr }) {
+  const api = useApi(clientId);
+  const [rows, setRows] = useState(null);
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState({ title: '', text: '' });
+  const [fileKey, setFileKey] = useState(0);
+  const [busy, setBusy] = useState('');
+  const load = useCallback(() => { api('/beaiready/training/company-knowledge').then(setRows).catch((e) => setErr(e.message)); }, [api, setErr]);
+  useEffect(() => { setRows(null); load(); }, [load]);
+
+  const addWebsite = async () => { if (!url.trim()) return; setBusy('web'); setErr(''); try { await api('/beaiready/training/company-knowledge/website', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, url: url.trim() }) }); setUrl(''); load(); } catch (e) { setErr(e.message); } setBusy(''); };
+  const addNote = async () => { if (!note.text.trim()) return; setBusy('note'); setErr(''); try { await api('/beaiready/training/company-knowledge/note', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, title: note.title || null, text: note.text }) }); setNote({ title: '', text: '' }); load(); } catch (e) { setErr(e.message); } setBusy(''); };
+  const uploadDoc = async (file) => {
+    if (!file) return; setBusy('doc'); setErr('');
+    try {
+      const fd = new FormData(); fd.append('newsroom_id', clientId); fd.append('file', file);   // newsroom_id before file (multer)
+      const res = await fetch('/api/beaiready/training/company-knowledge/upload', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
+      if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || 'Upload failed'); }
+      setFileKey((k) => k + 1); load();
+    } catch (e) { setErr(e.message); } setBusy('');
+  };
+  const remove = async (id) => { setErr(''); try { await api(`/beaiready/training/company-knowledge/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+
+  return (
+    <Section title="Company knowledge" hint="Docs, a website or notes about this client — context the AI uses for strategy suggestions (internal; not shown to the client)">
+      <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+        {rows == null ? <p style={muted}>Loading…</p> : rows.length === 0 ? <p style={muted}>Nothing yet — add a website, upload a doc, or write a note.</p> :
+          rows.map((s) => (
+            <div key={s.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 13 }}>
+                <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359' }}>{SRC_LABEL[s.kind] || s.kind}</span>
+                <strong style={{ marginLeft: 6 }}>{s.title || s.url || 'Untitled'}</strong>
+                {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, fontSize: 12, color: '#c75b39' }}>↗</a>}
+                {!s.has_text && <span style={{ ...muted, marginLeft: 6 }}>· no text extracted</span>}
+                {s.snippet && <div style={{ color: '#8a8076', marginTop: 3 }}>{s.snippet}…</div>}
+              </div>
+              <button onClick={() => remove(s.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+            </div>
+          ))}
+      </div>
+      <div style={{ ...card, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Company website URL to scrape" style={{ ...inp, minWidth: 260, flex: 1 }} />
+          <button type="button" onClick={addWebsite} disabled={busy === 'web' || !url.trim()} style={btn}>{busy === 'web' ? 'Scraping…' : 'Add website'}</button>
+          <label style={{ ...tag, cursor: 'pointer' }}>
+            {busy === 'doc' ? 'Uploading…' : 'Upload doc (PDF/DOCX/…)'}
+            <input key={fileKey} type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" style={{ display: 'none' }} onChange={(e) => uploadDoc(e.target.files?.[0])} />
+          </label>
+        </div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          <input value={note.title} onChange={(e) => setNote({ ...note, title: e.target.value })} placeholder="Note title (optional)" style={inp} />
+          <textarea value={note.text} onChange={(e) => setNote({ ...note, text: e.target.value })} placeholder="Type anything useful about the business — what they do, their tools, their goals…" style={{ ...inp, minHeight: 64 }} />
+          <button type="button" onClick={addNote} disabled={busy === 'note' || !note.text.trim()} style={{ ...btn, justifySelf: 'start' }}>Add note</button>
+        </div>
+      </div>
     </Section>
   );
 }
@@ -416,20 +478,52 @@ function StrategySection({ clientId, setErr }) {
 function StrategyGroup({ kind, label, hint, rows, api, clientId, onChanged, setErr }) {
   const auto = kind === 'automation';
   const [draft, setDraft] = useState({ title: '', detail: '', effort: '', payoff: '' });
+  const [suggestions, setSuggestions] = useState(null);   // null = not asked, [] = none, [...] = list
+  const [noteMsg, setNoteMsg] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
+
+  const addItem = (item) => api('/beaiready/training/strategy', { method: 'POST', body: JSON.stringify({
+    newsroom_id: clientId, kind, title: item.title, detail: item.detail || null,
+    effort: auto ? (item.effort || null) : null, payoff: auto ? (item.payoff || null) : null }) });
   const add = async (e) => {
     e.preventDefault(); if (!draft.title.trim()) return; setErr('');
-    try {
-      await api('/beaiready/training/strategy', { method: 'POST', body: JSON.stringify({
-        newsroom_id: clientId, kind, title: draft.title, detail: draft.detail || null,
-        effort: auto ? (draft.effort || null) : null, payoff: auto ? (draft.payoff || null) : null }) });
-      setDraft({ title: '', detail: '', effort: '', payoff: '' }); onChanged();
-    } catch (e) { setErr(e.message); }
+    try { await addItem(draft); setDraft({ title: '', detail: '', effort: '', payoff: '' }); onChanged(); } catch (e) { setErr(e.message); }
   };
+  const suggest = async () => {
+    setSuggesting(true); setErr(''); setNoteMsg('');
+    try { const r = await api('/beaiready/training/strategy/suggest', { method: 'POST', body: JSON.stringify({ kind }) }); setSuggestions(r.suggestions || []); setNoteMsg(r.note || ''); }
+    catch (e) { setErr(e.message); }
+    setSuggesting(false);
+  };
+  const addSuggestion = async (i) => { setErr(''); try { await addItem(suggestions[i]); setSuggestions((s) => s.filter((_, j) => j !== i)); onChanged(); } catch (e) { setErr(e.message); } };
+
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-        <strong style={{ fontSize: 14 }}>{label}</strong><span style={{ fontSize: 12, color: '#8a8076' }}>{hint}</span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <strong style={{ fontSize: 14 }}>{label}</strong><span style={{ fontSize: 12, color: '#8a8076' }}>{hint}</span>
+        </div>
+        <button type="button" onClick={suggest} disabled={suggesting} style={tag}>{suggesting ? 'Thinking…' : '✨ Suggest with AI'}</button>
       </div>
+      {noteMsg && <p style={{ ...muted, marginBottom: 8 }}>{noteMsg}</p>}
+      {suggestions && suggestions.length > 0 && (
+        <div style={{ ...card, background: '#fbf7f4', borderColor: '#eaddd3', marginBottom: 8, display: 'grid', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#c75b39' }}>AI suggestions — from this client's knowledge. Add the ones you want.</div>
+          {suggestions.map((s, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+              <div style={{ fontSize: 13 }}>
+                <strong>{s.title}</strong>
+                {auto && (s.effort || s.payoff) && <span style={{ color: '#8a8076' }}> · effort: {s.effort || '—'} · payoff: {s.payoff || '—'}</span>}
+                {s.detail && <div style={{ color: '#6b6359', marginTop: 2 }}>{s.detail}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" onClick={() => addSuggestion(i)} style={tag}>Add</button>
+                <button type="button" onClick={() => setSuggestions((x) => x.filter((_, j) => j !== i))} style={{ ...tag, color: '#8a8076' }}>Dismiss</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'grid', gap: 8, marginBottom: 8 }}>
         {rows.length === 0 ? <p style={muted}>None yet.</p> :
           rows.map((it) => <StrategyItemCard key={it.id} it={it} auto={auto} api={api} onChanged={onChanged} setErr={setErr} />)}
