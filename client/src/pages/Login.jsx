@@ -79,7 +79,7 @@ export default function Login() {
   }
 
   return (
-    <div className="login-page">
+    <div className={IS_BEAIREADY ? 'login-page beaiready' : 'login-page'}>
       <div className="login-card">
         <h1>{IS_BEAIREADY ? 'Be AI Ready' : 'Grounded'}</h1>
         <p className="brand-sub">{IS_BEAIREADY ? 'by Develop AI' : 'Newsroom-owned AI · by Develop AI'}</p>

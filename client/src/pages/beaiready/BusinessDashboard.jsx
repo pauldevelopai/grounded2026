@@ -2,7 +2,7 @@
 // A coherent map of everything they have: the five productivity metrics, a card
 // per client-facing pillar (each linking to its tool + showing that pillar's
 // recommendations), the live toolbox, and the law/regulation tracker. The fuller
-// training detail (agenda, materials) lives on /dashboard/training and the strategy
+// training detail (agenda, materials) lives on the public /training page and the strategy
 // (goals, automation roadmap, Staff AI Needs) on /dashboard/strategy; this just
 // summarises + links. Real data only, honest empty states; scoped server-side to
 // the caller's own tenant.
@@ -25,7 +25,7 @@ const PILLARS = [
   { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Build your AI policy' },
   { key: 'data-security', label: 'Data Security', to: '/dashboard/security', cta: 'Your AI tools & data exposure' },
   { key: 'productivity', label: 'Productivity', to: '/dashboard/productivity', cta: 'Track productivity' },
-  { key: 'training', label: 'Training', to: '/dashboard/training', cta: 'Agenda & materials' },
+  { key: 'training', label: 'Training', to: '/training', cta: 'Agenda & materials' },
   { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals, automation roadmap & Staff AI Needs' },
 ];
 

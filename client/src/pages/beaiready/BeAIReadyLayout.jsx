@@ -5,7 +5,7 @@
 // is untouched; the host switch in App.jsx picks which layout wraps the public
 // routes.
 import { lazy, Suspense, useEffect } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import FeedbackBubble from '../../components/FeedbackBubble.jsx';
 import { PILLARS } from './pillars.js';
@@ -18,8 +18,16 @@ const TERRACOTTA = '#c75b39';
 const linkStyle = { color: '#e7e0d8', textDecoration: 'none', fontSize: 14, fontWeight: 500, padding: '8px 10px' };
 
 export default function BeAIReadyLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Log out, then drop straight onto the sign-in screen so you can come back as a
+  // different user (e.g. switch between a client login and the Develop AI admin).
+  const signOut = async () => {
+    try { await logout(); } catch { /* ignore */ }
+    navigate('/login');
+  };
 
   useEffect(() => {
     const prev = document.title;
@@ -48,9 +56,15 @@ export default function BeAIReadyLayout() {
               <Link key={p.key} to={`/pillar/${p.key}`} style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>{p.nav}</Link>
             ))}
             {user ? (
-              <Link to="/dashboard" style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
-                My dashboard
-              </Link>
+              <>
+                <Link to={user.role === 'admin' ? '/admin' : '/dashboard'} style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
+                  {user.role === 'admin' ? 'Admin' : 'My dashboard'}
+                </Link>
+                <button onClick={signOut} title={`Signed in as ${user.email || user.name || ''}`}
+                  style={{ ...linkStyle, background: 'none', border: '1px solid rgba(231,224,216,0.35)', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Sign out
+                </button>
+              </>
             ) : (
               <a href={`/login?next=${nextParam}`} style={{ ...linkStyle, color: '#fff', border: `1px solid ${TERRACOTTA}`, borderRadius: 6 }}>
                 Client sign in
