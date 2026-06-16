@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
-import { createKnowledgeEntry } from '../services/knowledge.js';
+import { createKnowledgeEntry, getRelevantKnowledge } from '../services/knowledge.js';
 import { syncOneForm, syncFormsForTenant, toCsvUrl } from '../services/forms-sync.js';
 import { upload } from '../middleware/upload.js';
 import { scrapeArticle } from '../services/web-scraper.js';
@@ -46,8 +46,17 @@ async function tenantContext(req) {
 }
 const isAdmin = (req) => req.user?.role === 'admin';
 
-// Ingest (or re-ingest) a training row's body into the shared sector knowledge base.
-// Deletes any prior entry first so an edit doesn't duplicate. category = 'training_material'|'training_outcome'.
+// Ingest (or re-ingest) a training/strategy row into the shared knowledge base so
+// FUTURE engagements — this client AND other companies of similar size/activity —
+// can learn from it. Stored SECTOR-scoped (organisation_id NULL) so it informs the
+// whole sector, matching the "sector-scoped" promise in the UI. Deletes any prior
+// entry first so an edit doesn't duplicate. Works for any row carrying
+// knowledge_id + rag_synced columns (materials, outcomes, strategy items).
+const RAG_SOURCE_DESC = {
+  training_outcome: 'BE AI READY training outcome',
+  training_material: 'BE AI READY training material',
+  training_strategy: 'BE AI READY AI-strategy item (what a similar business is doing with AI)',
+};
 async function syncToRag({ table, row, tenant, category, shouldIngest }) {
   if (row.knowledge_id) {
     await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [row.knowledge_id]).catch(() => {});
@@ -59,10 +68,10 @@ async function syncToRag({ table, row, tenant, category, shouldIngest }) {
   }
   const knowledgeId = await createKnowledgeEntry({
     category, subcategory: row.kind || null,
-    title: row.title, content: row.content,
-    sectorId: tenant.sectorId, organisationId: tenant.organisationId,
+    title: row.title, content: row.content || row.detail || row.title,
+    sectorId: tenant.sectorId, organisationId: null,    // sector-shared, not locked to one client
     sourceType: 'beaiready_training', sourceId: row.id,
-    sourceDescription: category === 'training_outcome' ? 'BE AI READY training outcome' : 'BE AI READY training material',
+    sourceDescription: RAG_SOURCE_DESC[category] || 'BE AI READY',
     confidence: 0.6,
   });
   await pool.query(`UPDATE ${table} SET knowledge_id = $1, rag_synced = true WHERE id = $2`, [knowledgeId, row.id]);
@@ -420,7 +429,10 @@ router.post('/strategy', requireRole('admin'), async (req, res) => {
        VALUES ($1,COALESCE($2,'goal'),$3,$4,$5,$6,COALESCE($7,0),COALESCE($8,'draft'),$9,$10,$11) RETURNING *`,
       [newsroom_id, kind || null, title, detail || null, cleanSize(effort), cleanSize(payoff),
        order_index ?? null, status || null, agenda_id || null, target_date || null, req.user.id]);
-    res.status(201).json(rows[0]);
+    const row = rows[0];
+    const tenant = await tenantContext(req);
+    await syncToRag({ table: 'training_strategy_items', row, tenant, category: 'training_strategy', shouldIngest: row.status === 'published' });
+    res.status(201).json(row);
   } catch (err) { console.error('[bair-train/strategy:post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
@@ -449,14 +461,18 @@ router.put('/strategy/:id', requireRole('admin'), async (req, res) => {
        hasAgenda, agenda_id || null, hasTarget, target_date || null,
        order_index ?? null, status || null, req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Strategy item not found' });
-    res.json(rows[0]);
+    const row = rows[0];
+    const tenant = await tenantContext(req);
+    await syncToRag({ table: 'training_strategy_items', row, tenant, category: 'training_strategy', shouldIngest: row.status === 'published' });
+    res.json(row);
   } catch (err) { console.error('[bair-train/strategy:put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 router.delete('/strategy/:id', requireRole('admin'), async (req, res) => {
   try {
-    const { rowCount } = await pool.query('DELETE FROM training_strategy_items WHERE id = $1', [req.params.id]);
-    if (!rowCount) return res.status(404).json({ message: 'Strategy item not found' });
+    const { rows } = await pool.query('DELETE FROM training_strategy_items WHERE id = $1 RETURNING knowledge_id', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Strategy item not found' });
+    if (rows[0].knowledge_id) await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [rows[0].knowledge_id]).catch(() => {});
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/strategy:del]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -569,22 +585,35 @@ router.post('/strategy/suggest', requireRole('admin'), async (req, res) => {
   try {
     const { kind } = req.body || {};
     if (!STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
-    const { newsroomId } = await tenantContext(req);
+    const { newsroomId, sectorId } = await tenantContext(req);
     const context = await gatherBusinessContext(newsroomId);
     if (!context.trim()) return res.json({ suggestions: [], note: 'No company knowledge yet — add intake responses, a website or a doc first.' });
     const auto = kind === 'automation';
+
+    // Cross-company RAG: pull what's worked for similar (same-sector) businesses from
+    // the shared knowledge base (training outcomes, strategies, industry insights).
+    let sectorLessons = '', lessonsUsed = 0;
+    try {
+      const kb = await getRelevantKnowledge({ sectorId, searchTerms: `AI ${auto ? 'automation workflow' : 'goals strategy'} ${context.slice(0, 400)}`, limit: 6 });
+      if (kb && kb.length) {
+        lessonsUsed = kb.length;
+        sectorLessons = '\n\nWhat has worked for similar businesses in this sector (draw on these patterns — adapt, do not copy blindly):\n' +
+          kb.map((k) => `- ${k.title}: ${(k.content || '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n');
+      }
+    } catch (e) { console.error('[strategy:suggest rag]', e.message); }
+
     const system =
       'You are an AI strategy consultant for South African SMEs on the Be AI Ready platform. From what is known ' +
-      'about ONE specific business, propose concrete, realistic ' +
+      'about ONE specific business — and the patterns that worked for similar businesses — propose concrete, realistic ' +
       (auto ? 'automation-roadmap items (specific workflows/tasks to automate with AI).' : 'AI goals (outcomes the business wants from AI).') +
       ' Ground every suggestion in the provided context — no generic filler. Output ONLY a JSON array, no prose. Each element: ' +
       (auto ? '{"title": string, "detail": string, "effort": "low"|"medium"|"high", "payoff": "low"|"medium"|"high"}.'
             : '{"title": string, "detail": string}.') +
       ' 4–6 items. Do not duplicate the existing items listed.';
-    const userContent = `What we know about this business:\n\n${context}\n\nSuggest the ${auto ? 'automation items' : 'goals'} now as a JSON array.`;
+    const userContent = `What we know about this business:\n\n${context}${sectorLessons}\n\nSuggest the ${auto ? 'automation items' : 'goals'} now as a JSON array.`;
     const raw = await callClaude({ system, userContent, maxTokens: 1400, temperature: 0.5 });
     const suggestions = parseSuggestions(raw).filter((s) => s && s.title).slice(0, 8);
-    res.json({ suggestions });
+    res.json({ suggestions, sector_lessons_used: lessonsUsed });
   } catch (err) { console.error('[bair-train/strategy:suggest]', err); res.status(500).json({ message: err.message || 'Suggestion failed' }); }
 });
 
