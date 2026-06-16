@@ -11,6 +11,7 @@ import { publicFetch } from '../../hooks/usePublicApi.js';
 const TABS = [
   { key: 'lawsuits',    label: 'Lawsuits',    api: '/public/lawsuits?pageSize=40',    name: 'case_name',       base: '/legal/lawsuits' },
   { key: 'regulations', label: 'Regulations', api: '/public/regulations?pageSize=40', name: 'regulation_name', base: '/legal/regulations' },
+  { key: 'briefings',   label: 'Daily briefings' },   // past "Today in AI governance" summaries
 ];
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
@@ -33,10 +34,11 @@ export default function BeAIReadyTracker() {
   const [tab, setTab] = useState('lawsuits');
   const [data, setData] = useState({}); // key -> array of items
   const [today, setToday] = useState(undefined); // undefined=loading, null=none yet
+  const [history, setHistory] = useState(undefined); // past daily briefings
   const active = TABS.find((t) => t.key === tab);
 
   useEffect(() => {
-    if (data[tab]) return; // already loaded (empty array counts as loaded)
+    if (tab === 'briefings' || data[tab]) return; // briefings has no item feed; empty array counts as loaded
     publicFetch(active.api)
       .then((d) => setData((s) => ({ ...s, [tab]: Array.isArray(d) ? d : (d?.items || []) })))
       .catch(() => setData((s) => ({ ...s, [tab]: [] })));
@@ -44,6 +46,7 @@ export default function BeAIReadyTracker() {
 
   useEffect(() => {
     publicFetch('/public/governance-today').then((v) => setToday(v || null)).catch(() => setToday(null));
+    publicFetch('/public/governance-today/history').then((v) => setHistory(Array.isArray(v) ? v : [])).catch(() => setHistory([]));
   }, []);
 
   const items = data[tab];
@@ -95,45 +98,75 @@ export default function BeAIReadyTracker() {
         ))}
       </div>
 
-      {items != null && items.length > 0 && (
-        <div style={{ fontSize: 11.5, color: '#a89e92', margin: '-6px 0 12px' }}>
-          Newest first · as of {fmtDate(new Date())}
-          {(() => {
-            const newest = items[0]?.latest_event_date || items[0]?.updated_at;
-            const a = relAge(newest);
-            return newest ? ` · latest entry ${a}` : '';
-          })()}
-        </div>
-      )}
-
-      {items == null ? (
-        <p style={{ color: '#8a8076' }}>Loading…</p>
-      ) : items.length === 0 ? (
-        <p style={{ color: '#8a8076' }}>Nothing to show right now.</p>
+      {tab === 'briefings' ? (
+        // Past daily briefings — the archive of the "Today in AI governance" summary.
+        history === undefined ? (
+          <p style={{ color: '#8a8076' }}>Loading…</p>
+        ) : history.length === 0 ? (
+          <p style={{ color: '#8a8076' }}>No briefings yet — the first one publishes with the next daily run (05:00).</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
+            {history.map((b) => (
+              <li key={b.digest_date} className="hub-card">
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#c75b39' }}>{fmtDate(b.generated_at || b.digest_date)}</div>
+                <div style={{ fontSize: 14, lineHeight: 1.6, color: '#3a342e', margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>{b.summary}</div>
+                {b.headlines?.length > 0 && (
+                  <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {b.headlines.map((h, i) => (
+                      <a key={i} href={h.url} target="_blank" rel="noreferrer"
+                        style={{ fontSize: 12, color: '#7a4636', background: '#f7ece7', padding: '3px 9px', borderRadius: 999, textDecoration: 'none', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {h.title} ↗
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
-          {items.map((it) => (
-            <li key={it.id}>
-              <Link to={`${active.base}/${it.id}`} className="hub-card" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700, fontSize: 15.5 }}>{it[active.name]}</span>
-                  <span style={{ fontSize: 12, color: '#8a8076', whiteSpace: 'nowrap' }}>
-                    {fmtDate(it.latest_event_date || it.updated_at)}
-                    {(() => { const a = relAge(it.latest_event_date || it.updated_at); return a ? ` · ${a}` : ''; })()}
-                    {it.status ? ` · ${String(it.status).replace(/_/g, ' ')}` : ''}
-                  </span>
-                </div>
-                {it.latest_event_title && <div style={{ fontSize: 12.5, color: '#c75b39', marginTop: 2 }}>{it.latest_event_title}</div>}
-                {it.summary && <p style={{ fontSize: 13, color: '#4a443d', margin: '6px 0 0' }}>{it.summary}</p>}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+        <>
+          {items != null && items.length > 0 && (
+            <div style={{ fontSize: 11.5, color: '#a89e92', margin: '-6px 0 12px' }}>
+              Newest first · as of {fmtDate(new Date())}
+              {(() => {
+                const newest = items[0]?.latest_event_date || items[0]?.updated_at;
+                const a = relAge(newest);
+                return newest ? ` · latest entry ${a}` : '';
+              })()}
+            </div>
+          )}
 
-      <div className="hub-hero-cta" style={{ margin: '20px 0 24px' }}>
-        <Link to={active.base} className="hub-btn hub-btn-ghost">Open the full {active.label.toLowerCase()} tracker, with filters →</Link>
-      </div>
+          {items == null ? (
+            <p style={{ color: '#8a8076' }}>Loading…</p>
+          ) : items.length === 0 ? (
+            <p style={{ color: '#8a8076' }}>Nothing to show right now.</p>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
+              {items.map((it) => (
+                <li key={it.id}>
+                  <Link to={`${active.base}/${it.id}`} className="hub-card" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: 15.5 }}>{it[active.name]}</span>
+                      <span style={{ fontSize: 12, color: '#8a8076', whiteSpace: 'nowrap' }}>
+                        {fmtDate(it.latest_event_date || it.updated_at)}
+                        {(() => { const a = relAge(it.latest_event_date || it.updated_at); return a ? ` · ${a}` : ''; })()}
+                        {it.status ? ` · ${String(it.status).replace(/_/g, ' ')}` : ''}
+                      </span>
+                    </div>
+                    {it.latest_event_title && <div style={{ fontSize: 12.5, color: '#c75b39', marginTop: 2 }}>{it.latest_event_title}</div>}
+                    {it.summary && <p style={{ fontSize: 13, color: '#4a443d', margin: '6px 0 0' }}>{it.summary}</p>}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="hub-hero-cta" style={{ margin: '20px 0 24px' }}>
+            <Link to={active.base} className="hub-btn hub-btn-ghost">Open the full {active.label.toLowerCase()} tracker, with filters →</Link>
+          </div>
+        </>
+      )}
     </div>
   );
 }

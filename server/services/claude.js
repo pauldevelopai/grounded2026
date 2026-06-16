@@ -350,7 +350,7 @@ export async function chatWithGroundedHelp({ history = [], message, contextItems
  * Returns { text, citations } where citations is an array of {url, title}
  * objects the model cited (may be empty if no search was needed).
  */
-export async function callClaudeWithWebSearch({ system, userContent, maxTokens = 1500, maxUses = 5 }) {
+export async function callClaudeWithWebSearch({ system, userContent, maxTokens = 1500, maxUses = 5, finalTextOnly = false }) {
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
   const params = {
     model: MODEL,
@@ -361,13 +361,23 @@ export async function callClaudeWithWebSearch({ system, userContent, maxTokens =
   };
   const message = await client.messages.create(params);
 
-  // Content blocks are a mix of text + tool_use + server_tool_use + web_search_tool_result
-  const textBlocks = (message.content || []).filter(b => b.type === 'text');
+  // Content blocks are a mix of text + tool_use + server_tool_use + web_search_tool_result.
+  const blocks = message.content || [];
+  let textBlocks = blocks.filter(b => b.type === 'text');
+  // finalTextOnly: return just the synthesized answer (text after the last search),
+  // dropping the model's between-search narration ("Let me now write the briefing").
+  if (finalTextOnly) {
+    let lastNonText = -1;
+    blocks.forEach((b, i) => { if (b.type !== 'text') lastNonText = i; });
+    const finalBlocks = blocks.slice(lastNonText + 1).filter(b => b.type === 'text');
+    if (finalBlocks.length) textBlocks = finalBlocks;
+  }
   const text = textBlocks.map(b => b.text).join('\n');
 
-  // Harvest citations from any text blocks that carry them (new SDK feature)
+  // Harvest citations from ALL text blocks (sources cited mid-search still count,
+  // even when finalTextOnly trims the returned prose to the final answer).
   const citations = [];
-  for (const b of textBlocks) {
+  for (const b of blocks.filter(b => b.type === 'text')) {
     if (Array.isArray(b.citations)) {
       for (const c of b.citations) {
         citations.push({ url: c.url, title: c.title });

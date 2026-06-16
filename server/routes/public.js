@@ -3,7 +3,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { chatWithGroundedHelp, callClaude } from '../services/claude.js';
-import { getGovernanceToday } from '../services/governance-today.js';
+import { getGovernanceToday, getGovernanceTodayHistory } from '../services/governance-today.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
@@ -1141,6 +1141,12 @@ ${entries}
 router.get('/governance-today', async (req, res) => {
   try { res.json(await getGovernanceToday()); }
   catch (err) { console.error('[public/governance-today]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Past daily briefings (newest first) — the tracker's "Daily briefings" tab.
+router.get('/governance-today/history', async (req, res) => {
+  try { res.json(await getGovernanceTodayHistory(60)); }
+  catch (err) { console.error('[public/governance-today/history]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── AI Toolkit (imported from aikit) ─────────────────────────────────────────
