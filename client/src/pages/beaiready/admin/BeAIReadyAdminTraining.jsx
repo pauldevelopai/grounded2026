@@ -38,7 +38,7 @@ export default function BeAIReadyAdminTraining() {
       </div>
 
       {clientId && (
-        <div style={{ display: 'grid', gap: 24 }}>
+        <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'minmax(0, 1fr)' }}>
           <IntakeSection clientId={clientId} setErr={setErr} />
           <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
           <AgendaSection clientId={clientId} setErr={setErr} />
@@ -139,22 +139,72 @@ function IntakeSection({ clientId, setErr }) {
           ))}
         </ul>
       )}
-      {responses && responses.length > 0 && (
-        <details style={{ marginTop: 8 }}>
-          <summary style={{ fontSize: 13, color: '#c75b39', cursor: 'pointer' }}>View {responses.length} response{responses.length === 1 ? '' : 's'}</summary>
-          <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-            {responses.slice(0, 50).map((r) => (
-              <div key={r.id} style={{ ...card, padding: 10, fontSize: 12.5 }}>
-                <div style={muted}>{r.form_name}{r.submitted_at ? ` · ${new Date(r.submitted_at).toLocaleDateString()}` : ''}</div>
-                {Object.entries(r.response || {}).slice(0, 8).map(([k, v]) => (
-                  <div key={k}><strong>{k}:</strong> {String(v)}</div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
+      {responses && responses.length > 0 && <IntakeResponses responses={responses} />}
     </Section>
+  );
+}
+
+// ── Intake responses, glanceable: a summary strip + a scannable table ────────────
+const RESP_LABELS = {
+  'Timestamp': 'When', 'Email Address': 'Email', 'What is your name?': 'Name', 'How old are you?': 'Age',
+  'Where do you live?': 'Location', 'How would you describe your familiarity with AI?': 'AI familiarity',
+  'Please list the AI tools and platforms that you have used.': 'Tools used',
+  'What have you heard about AI that you would like to learn?': 'Wants to learn',
+};
+const respLabel = (k) => RESP_LABELS[k] || k.replace(/\?$/, '').trim();
+// Sensible column order for glancing: name, rating, the rest, then when/email last.
+const respColScore = (k) => {
+  const lk = k.toLowerCase();
+  if (lk.includes('name')) return 0;
+  if (lk.includes('familiar') || lk.includes('rating') || lk.includes('rate')) return 1;
+  if (lk.includes('timestamp') || lk === 'email address' || lk.includes('email')) return 9;
+  return 5;
+};
+const isRating = (vals) => vals.length > 0 && vals.every((v) => /^\d{1,2}$/.test(String(v).trim()) && +v <= 10);
+const ratingColor = (n) => (n >= 7 ? ['#dcfce7', '#166534'] : n >= 4 ? ['#fef3c7', '#92400e'] : ['#fee2e2', '#991b1b']);
+
+function IntakeResponses({ responses }) {
+  const cols = [];
+  for (const r of responses) for (const k of Object.keys(r.response || {})) if (!cols.includes(k)) cols.push(k);
+  cols.sort((a, b) => respColScore(a) - respColScore(b));
+  // Detect the AI-familiarity rating column (all small ints) for the summary + chips.
+  const ratingCol = cols.find((c) => isRating(responses.map((r) => r.response?.[c]).filter((v) => v != null && v !== '')));
+  const nums = ratingCol ? responses.map((r) => +r.response[ratingCol]).filter((n) => !isNaN(n)) : [];
+  const avg = nums.length ? (nums.reduce((s, n) => s + n, 0) / nums.length).toFixed(1) : null;
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <span style={statPill}><strong>{responses.length}</strong> responses</span>
+        {avg && <span style={statPill}>avg {respLabel(ratingCol).toLowerCase()} <strong>{avg}</strong>/10</span>}
+      </div>
+      <details open>
+        <summary style={{ fontSize: 13, color: '#c75b39', cursor: 'pointer', marginBottom: 8 }}>View all {responses.length} responses</summary>
+        <div style={{ overflowX: 'auto', maxHeight: 520, overflowY: 'auto', border: '1px solid #eee5da', borderRadius: 10 }}>
+          <table style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%' }}>
+            <thead>
+              <tr>{cols.map((c) => (
+                <th key={c} title={c} style={th}>{respLabel(c)}</th>
+              ))}</tr>
+            </thead>
+            <tbody>
+              {responses.map((r) => (
+                <tr key={r.id} style={{ borderTop: '1px solid #f0ebe3' }}>
+                  {cols.map((c) => {
+                    const v = r.response?.[c] ?? '';
+                    if (c === ratingCol && v !== '') {
+                      const [bg, fg] = ratingColor(+v);
+                      return <td key={c} style={td}><span style={{ ...pill, background: bg, color: fg, fontSize: 11 }}>{v}</span></td>;
+                    }
+                    return <td key={c} style={td}><div title={String(v)} style={cellClamp}>{String(v)}</div></td>;
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
   );
 }
 
@@ -669,3 +719,7 @@ const pubOff = { background: '#f1f0ec', color: '#8a8076' };
 const muted = { color: '#8a8076', fontSize: 13, margin: 0 };
 const list = { listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 4 };
 const chk = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#5b5249' };
+const statPill = { fontSize: 13, padding: '5px 12px', borderRadius: 999, background: '#f7ece7', color: '#7a4636' };
+const th = { position: 'sticky', top: 0, background: '#faf8f5', textAlign: 'left', padding: '8px 10px', fontWeight: 700, color: '#5b5249', whiteSpace: 'nowrap', borderBottom: '1px solid #e4dcd2', zIndex: 1 };
+const td = { padding: '7px 10px', verticalAlign: 'top', color: '#3a342e' };
+const cellClamp = { maxWidth: 280, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
