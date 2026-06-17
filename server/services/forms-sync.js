@@ -67,18 +67,35 @@ function toObjects(rows) {
   });
 }
 
+// Telltales of a Google Sheets web page / sign-in page / gviz JSONP — NEVER present
+// in a real Forms CSV. Used to reject the whole fetch AND to skip any stray row.
+const NOT_CSV = /<!doctype html|<html[\s>]|<script|window\['ppConfig'\]|docs\.google\.com\/spreadsheets|waffle_|google\.visualization|google\.script/i;
+
 async function syncForm(form) {
   const res = await fetch(toCsvUrl(form.csv_url), { redirect: 'follow' });
   if (!res.ok) throw new Error(`the sheet URL returned HTTP ${res.status} — check it's shared so anyone with the link can view`);
   const text = await res.text();
-  // Guard the #1 cause of "0 responses": an HTML page (editor / sign-in) instead of CSV.
   const ct = res.headers.get('content-type') || '';
-  if (ct.includes('text/html') || /^\s*<(!doctype|html)/i.test(text)) {
-    throw new Error('that link returned a web page, not CSV — open the responses Sheet, then File → Share → Publish to web → CSV and paste that link (or share the sheet "anyone with the link")');
+  const linkAdvice = 'open the responses Sheet → Share → "anyone with the link can view" (or File → Share → Publish to web → CSV) and paste that link';
+  // Reject anything that's actually the Sheet's web page / a sign-in page rather than
+  // CSV. Scanned across the head of the body, not just char 0 — Google can prefix it
+  // with )]}' or whitespace. This is what poisoned the table with HTML fragments.
+  if (ct.includes('text/html') || NOT_CSV.test(text.slice(0, 5000))) {
+    throw new Error(`that link returned a web page, not CSV — ${linkAdvice}`);
   }
-  const objects = toObjects(parseCsv(text));
+  const rows = parseCsv(text);
+  // Validate the header looks like real column names — short, plain text, no markup.
+  // A garbage fetch's "header" is a line of HTML/JS and gets caught here.
+  const header = rows[0] || [];
+  const headerLooksWrong = header.length < 2 || header.some((h) => h.length > 200 || /[<>{}\\]|function\s*\(|=>/.test(h));
+  if (headerLooksWrong) {
+    throw new Error(`that link did not return a clean CSV (the first row looks like web-page markup, not column headings) — ${linkAdvice}`);
+  }
+  const objects = toObjects(rows);
   let inserted = 0;
   for (const obj of objects) {
+    // Belt-and-braces: never store a row that still looks like markup/script.
+    if (NOT_CSV.test(JSON.stringify(obj))) continue;
     const rowHash = createHash('sha256').update(JSON.stringify(obj)).digest('hex');
     // Best-effort timestamp from a common Google Forms column.
     const tsRaw = obj['Timestamp'] || obj['timestamp'] || null;
