@@ -28,12 +28,12 @@ export default function BeAIReadyHome() {
   return (
     <div className="hub hub-beaiready">
       <section className="hub-hero">
-        <div className="hub-eyebrow">Be AI Ready · for small &amp; medium businesses</div>
-        <h1>Your customers are asking their AI questions, but is your business appearing as the answer?</h1>
+        <div className="hub-eyebrow">Be AI Ready · for organisations of every size, public or private</div>
+        <h1>Is your organisation ready for an AI‑first world?</h1>
         <p className="hub-lede">
-          One structured programme to get your business AI ready — across <b>how AI sees you</b>, <b>how you
-          govern it</b>, <b>how you secure your data</b>, <b>how productively your team works with it</b>,
-          <b> how they’re trained</b>, and <b>your AI strategy</b>. A living dashboard, included for life.
+          One structured programme to get any organisation AI ready — across <b>how you govern it</b>, <b>how you
+          secure your data</b>, <b>how productively your team works with it</b>, <b>how they’re trained</b>,
+          <b> how AI sees you</b>, and <b>your AI strategy</b>. A living dashboard, included for life.
         </p>
         <div className="hub-hero-cta">
           <a href={SCOPING_WHATSAPP} target="_blank" rel="noreferrer" className="hub-btn hub-btn-solid">
@@ -76,16 +76,10 @@ export default function BeAIReadyHome() {
         </Link>
       </section>
 
-      {/* ── Pricing ── */}
-      <div className="hub-section-label">Investment — once-off, nothing monthly</div>
-      <section className="hub-tiers">
-        <Tier name="Essential" size="Up to ~20 people" price="R50 000" hours="6 hours of consultant face-time" />
-        <Tier name="Growth" size="~20–100 people" price="R85 000" hours="12 hours of consultant face-time" featured />
-        <Tier name="Enterprise" size="100+ people" price="R120 000+" hours="15 hours of consultant face-time" />
-      </section>
+      {/* ── Closing / contact (no pricing — scoped per engagement) ── */}
       <p className="hub-foot-note">
-        Every tier includes the full audit across all pillars, the findings report and action plan, and your
-        dashboard with lifetime monitoring. Get in touch:
+        Every engagement includes the full audit across all pillars, the findings report and action plan, and
+        your dashboard with lifetime monitoring. Get in touch:
         &nbsp;<a href="mailto:paul@developai.co.za">paul@developai.co.za</a>
         &nbsp;· <a href="https://developai.co.za" target="_blank" rel="noreferrer">developai.co.za</a>
       </p>
@@ -100,16 +94,3 @@ export default function BeAIReadyHome() {
 }
 
 function n(v) { return v == null ? '—' : v.toLocaleString(); }
-
-function Tier({ name, size, price, hours, featured }) {
-  return (
-    <div className={featured ? 'hub-tier hub-tier-featured' : 'hub-tier'}>
-      {featured && <div className="hub-tier-ribbon">Most common</div>}
-      <h3>{name}</h3>
-      <div className="hub-tier-size">{size}</div>
-      <div className="hub-tier-price">{price}</div>
-      <div className="hub-tier-note">Full audit · dashboard · lifetime monitoring</div>
-      <div className="hub-tier-note" style={{ color: '#c75b39', fontWeight: 600 }}>{hours}</div>
-    </div>
-  );
-}
