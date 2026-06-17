@@ -47,14 +47,18 @@ export default function BeAIReadyTracker() {
   // Load the active feed (lawsuits / regulations) with filters; debounced on search.
   useEffect(() => {
     if (tab === 'briefings') return;
-    const p = new URLSearchParams({ pageSize: '60' });
+    const p = new URLSearchParams({ pageSize: '100' });
     if (q.trim()) p.set('q', q.trim());
     if (status) p.set('status', status);
     if (jurisdiction) p.set('jurisdiction', jurisdiction);
     const run = setTimeout(() => {
       publicFetch(`/public/${tab}?${p}`)
         .then((d) => {
-          const list = Array.isArray(d) ? d : (d?.items || []);
+          // Truly newest-first by recent ACTIVITY (latest event / last update) — the
+          // server's GREATEST() sort can hoist a 2024 law with a future effective date
+          // above this week's developments, which buried the fresh auto-added entries.
+          const recency = (x) => new Date(x.latest_event_date || x.updated_at || x.created_at || 0).getTime();
+          const list = (Array.isArray(d) ? d : (d?.items || [])).slice().sort((a, b) => recency(b) - recency(a));
           setItems(list);
           setTotal(typeof d?.total === 'number' ? d.total : list.length);
           // Capture filter options from the unfiltered load so they stay stable while filtering.
