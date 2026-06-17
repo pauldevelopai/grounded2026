@@ -65,10 +65,10 @@ export default function BeAIReadyHome() {
       {/* ── Live proof from the shared tracker ── */}
       <div className="hub-section-label">Built on live infrastructure, not guesswork</div>
       <section className="hub-stats">
-        <Link className="hub-stat" to="/legal/lawsuits">
+        <Link className="hub-stat" to="/tracker">
           <div className="hub-stat-value">{n(stats.lawsuits)}</div><div className="hub-stat-label">AI lawsuits tracked daily</div>
         </Link>
-        <Link className="hub-stat" to="/legal/regulations">
+        <Link className="hub-stat" to="/tracker">
           <div className="hub-stat-value">{n(stats.regulations)}</div><div className="hub-stat-label">AI regulations tracked</div>
         </Link>
         <Link className="hub-stat" to="/toolbox">

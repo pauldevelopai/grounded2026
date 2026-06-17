@@ -206,9 +206,11 @@ export default function App() {
             <Route index element={<PublicHome />} />
             <Route path="dashboard"      element={<Suspense fallback={<LazyFallback />}><PublicLegalDashboard /></Suspense>} />
             <Route path="ethics-builder" element={<Suspense fallback={<LazyFallback />}><EthicsPolicyBuilder /></Suspense>} />
-            <Route path="lawsuits" element={<PublicLawsuitsList />} />
+            {/* On the BE AI READY door the canonical list is /tracker; redirect the old
+                GROUNDED lists there. Detail pages stay (the tracker rows link to them). */}
+            <Route path="lawsuits" element={IS_BEAIREADY ? <Navigate to="/tracker" replace /> : <PublicLawsuitsList />} />
             <Route path="lawsuits/:id" element={<PublicLawsuitDetail />} />
-            <Route path="regulations" element={<PublicRegulationsList />} />
+            <Route path="regulations" element={IS_BEAIREADY ? <Navigate to="/tracker" replace /> : <PublicRegulationsList />} />
             <Route path="regulations/:id" element={<PublicRegulationDetail />} />
             <Route path="explore"        element={<Suspense fallback={<LazyFallback />}><PublicExplore /></Suspense>} />
             <Route path="sources"        element={<Suspense fallback={<LazyFallback />}><PublicSources /></Suspense>} />

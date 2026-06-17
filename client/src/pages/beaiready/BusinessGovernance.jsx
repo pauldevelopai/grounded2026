@@ -53,8 +53,7 @@ export default function BusinessGovernance() {
       </p>
       <p style={{ marginBottom: 22 }}>
         <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
-        <Link to="/legal/lawsuits">AI lawsuits</Link> &nbsp;·&nbsp;
-        <Link to="/legal/regulations">AI regulations</Link>, tracked daily
+        <Link to="/tracker">AI lawsuits &amp; regulations</Link>, tracked daily
       </p>
 
       {err && <div style={{ background: '#FEF2F2', color: '#B91C1C', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{err}</div>}

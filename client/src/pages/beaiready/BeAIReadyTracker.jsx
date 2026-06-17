@@ -32,24 +32,46 @@ const relAge = (d) => {
 
 export default function BeAIReadyTracker() {
   const [tab, setTab] = useState('lawsuits');
-  const [data, setData] = useState({}); // key -> array of items
+  const [items, setItems] = useState(null);
+  const [total, setTotal] = useState(null);
+  const [facets, setFacets] = useState({ statuses: [], jurisdictions: [] });
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState('');
+  const [jurisdiction, setJurisdiction] = useState('');
   const [today, setToday] = useState(undefined); // undefined=loading, null=none yet
   const [history, setHistory] = useState(undefined); // past daily briefings
   const active = TABS.find((t) => t.key === tab);
+  const filtered = !!(q.trim() || status || jurisdiction);
+  const switchTab = (key) => { setTab(key); setItems(null); setQ(''); setStatus(''); setJurisdiction(''); };
 
+  // Load the active feed (lawsuits / regulations) with filters; debounced on search.
   useEffect(() => {
-    if (tab === 'briefings' || data[tab]) return; // briefings has no item feed; empty array counts as loaded
-    publicFetch(active.api)
-      .then((d) => setData((s) => ({ ...s, [tab]: Array.isArray(d) ? d : (d?.items || []) })))
-      .catch(() => setData((s) => ({ ...s, [tab]: [] })));
-  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (tab === 'briefings') return;
+    const p = new URLSearchParams({ pageSize: '60' });
+    if (q.trim()) p.set('q', q.trim());
+    if (status) p.set('status', status);
+    if (jurisdiction) p.set('jurisdiction', jurisdiction);
+    const run = setTimeout(() => {
+      publicFetch(`/public/${tab}?${p}`)
+        .then((d) => {
+          const list = Array.isArray(d) ? d : (d?.items || []);
+          setItems(list);
+          setTotal(typeof d?.total === 'number' ? d.total : list.length);
+          // Capture filter options from the unfiltered load so they stay stable while filtering.
+          if (!q.trim() && !status && !jurisdiction) {
+            const uniq = (arr) => [...new Set(arr.filter(Boolean))].sort();
+            setFacets({ statuses: uniq(list.map((x) => x.status)), jurisdictions: uniq(list.map((x) => x.jurisdiction)) });
+          }
+        })
+        .catch(() => { setItems([]); setTotal(0); });
+    }, q ? 250 : 0);
+    return () => clearTimeout(run);
+  }, [tab, q, status, jurisdiction]);
 
   useEffect(() => {
     publicFetch('/public/governance-today').then((v) => setToday(v || null)).catch(() => setToday(null));
     publicFetch('/public/governance-today/history').then((v) => setHistory(Array.isArray(v) ? v : [])).catch(() => setHistory([]));
   }, []);
-
-  const items = data[tab];
 
   return (
     <div className="hub hub-beaiready">
@@ -87,7 +109,7 @@ export default function BeAIReadyTracker() {
 
       <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e4dcd2', marginBottom: 18 }}>
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
+          <button key={t.key} onClick={() => switchTab(t.key)}
             style={{
               padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 15,
               fontWeight: tab === t.key ? 700 : 500, color: tab === t.key ? '#c75b39' : '#6b6359',
@@ -126,10 +148,24 @@ export default function BeAIReadyTracker() {
         )
       ) : (
         <>
-          {items != null && items.length > 0 && (
-            <div style={{ fontSize: 11.5, color: '#a89e92', margin: '-6px 0 12px' }}>
-              Newest first · as of {fmtDate(new Date())}
-              {(() => {
+          {/* Filters — search, status, jurisdiction (server-side via the public API). */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${active.label.toLowerCase()}…`} style={fInp} />
+            <select value={status} onChange={(e) => setStatus(e.target.value)} style={fInp}>
+              <option value="">All statuses</option>
+              {facets.statuses.map((s) => <option key={s} value={s}>{String(s).replace(/_/g, ' ')}</option>)}
+            </select>
+            <select value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} style={fInp}>
+              <option value="">All jurisdictions</option>
+              {facets.jurisdictions.map((j) => <option key={j} value={j}>{j}</option>)}
+            </select>
+            {filtered && <button onClick={() => { setQ(''); setStatus(''); setJurisdiction(''); }} style={fClear}>Clear</button>}
+          </div>
+
+          {items != null && (
+            <div style={{ fontSize: 11.5, color: '#a89e92', margin: '-2px 0 12px' }}>
+              {total != null ? `${total} ${active.label.toLowerCase()}${filtered ? ' (filtered)' : ''} · ` : ''}newest first
+              {items.length > 0 && (() => {
                 const newest = items[0]?.latest_event_date || items[0]?.updated_at;
                 const a = relAge(newest);
                 return newest ? ` · latest entry ${a}` : '';
@@ -140,7 +176,7 @@ export default function BeAIReadyTracker() {
           {items == null ? (
             <p style={{ color: '#8a8076' }}>Loading…</p>
           ) : items.length === 0 ? (
-            <p style={{ color: '#8a8076' }}>Nothing to show right now.</p>
+            <p style={{ color: '#8a8076' }}>{filtered ? 'No matches — try clearing the filters.' : 'Nothing to show right now.'}</p>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
               {items.map((it) => (
@@ -161,12 +197,11 @@ export default function BeAIReadyTracker() {
               ))}
             </ul>
           )}
-
-          <div className="hub-hero-cta" style={{ margin: '20px 0 24px' }}>
-            <Link to={active.base} className="hub-btn hub-btn-ghost">Open the full {active.label.toLowerCase()} tracker, with filters →</Link>
-          </div>
         </>
       )}
     </div>
   );
 }
+
+const fInp = { padding: '8px 12px', border: '1px solid #e4dcd2', borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit', background: '#fff', color: '#3a342e', flex: '1 1 200px', minWidth: 0 };
+const fClear = { padding: '8px 12px', border: '1px solid #e4dcd2', borderRadius: 8, fontSize: 13, background: '#faf8f5', color: '#6b6359', cursor: 'pointer' };
