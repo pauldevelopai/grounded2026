@@ -1,11 +1,13 @@
-// BeAIReadyAdminTracker — review the lawsuits & regulations the daily governance
-// briefing added automatically. They're live on the public tracker the moment
-// they're added (post-moderation); here an admin confirms them ("Keep") or removes
-// a wrong one. Pending items first. All real, source-cited data.
+// BeAIReadyAdminTracker — review the lawsuits & regulations added automatically by
+// our sources (the daily governance briefing, the TechieRay harvest). They're live
+// on the public tracker the moment they're added (post-moderation); here an admin
+// sees WHERE each came from and confirms ("Keep") or removes it. Pending first.
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../../../hooks/useApi.js';
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
+// Where an auto-added entry came from (source_origin → friendly label).
+const SOURCE_LABEL = { governance_today: 'Daily briefing', techieray: 'TechieRay tracker' };
 
 export default function BeAIReadyAdminTracker() {
   const [data, setData] = useState(null);
@@ -28,9 +30,10 @@ export default function BeAIReadyAdminTracker() {
     <div style={{ maxWidth: 920 }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Tracker review</h1>
       <p style={{ color: '#6b6359', marginBottom: 16, maxWidth: '70ch' }}>
-        Lawsuits and regulations the daily 05:00 briefing added automatically from its web-search sources.
-        They’re already live on the public tracker — confirm the ones that are right, and remove anything
-        inaccurate. {pending > 0 && <strong>{pending} pending review.</strong>}
+        Lawsuits and regulations added automatically by our sources — the daily 05:00 briefing and the
+        weekly TechieRay harvest. Each row shows <strong>where it came from</strong> (“via …”) and links to
+        its source. They’re already live on the public tracker — confirm the ones that are right, and remove
+        anything inaccurate or duplicated. {pending > 0 && <strong>{pending} pending review.</strong>}
       </p>
       {err && <div style={banner}>{err}</div>}
 
@@ -59,6 +62,7 @@ function Group({ title, kind, rows, busy, keep, remove }) {
                 <div style={{ flex: 1, minWidth: 240 }}>
                   <strong>{r.name}</strong>
                   <span style={{ ...pill, ...(r.review_status === 'pending' ? pendOn : pubOn), marginLeft: 6 }}>{r.review_status}</span>
+                  <span style={{ ...pill, background: '#eef2ff', color: '#3730a3', marginLeft: 6 }}>via {SOURCE_LABEL[r.source_origin] || r.source_origin || 'manual'}</span>
                   <div style={muted}>
                     {[r.jurisdiction, r.status && String(r.status).replace(/_/g, ' '), fmtDate(r.dated)].filter(Boolean).join(' · ')}
                   </div>

@@ -78,17 +78,22 @@ async function extractRegulations(pageText) {
   return out;
 }
 
-// Does a regulation already exist in the tracker (curated or previously harvested)?
-async function alreadyTracked(name, juris) {
+// Find an existing tracker row that matches this regulation — by our deterministic
+// external_id (a prior techieray harvest of the SAME item) or by a (bidirectional)
+// name/short-name match (a curated or differently-named row). Prefers the external_id
+// hit so re-runs update our own row rather than colliding with a curated one.
+async function findExisting(eid, name) {
   const { rows } = await pool.query(
-    `SELECT 1 FROM ai_regulations
+    `SELECT id, source_origin FROM ai_regulations
       WHERE external_id = $1
          OR lower(regulation_name) = lower($2)
          OR lower(short_name) = lower($2)
          OR regulation_name ILIKE $3
+         OR (short_name IS NOT NULL AND short_name <> '' AND $2 ILIKE '%' || short_name || '%')
+      ORDER BY (external_id = $1) DESC
       LIMIT 1`,
-    [extId(name, juris), name, `%${name}%`]);
-  return rows.length > 0;
+    [eid, name, `%${name}%`]);
+  return rows[0] || null;
 }
 
 async function ensureSource() {
@@ -102,7 +107,7 @@ async function ensureSource() {
 
 export async function harvestTechieray() {
   const sourceId = await ensureSource();
-  let pageText, considered = 0, added = 0, skipped = 0;
+  let pageText, considered = 0, added = 0, updated = 0, skipped = 0;
   try {
     pageText = await renderPageText();
     if (!pageText || pageText.length < 200) throw new Error('rendered page had no usable text');
@@ -110,30 +115,44 @@ export async function harvestTechieray() {
     considered = regs.length;
     for (const d of regs) {
       try {
-        if (await alreadyTracked(d.name, d.jurisdiction)) { skipped++; continue; }
+        const eid = extId(d.name, d.jurisdiction);
         const status = clean(d.status, REG_STATUS, 'enacted');
         const type = clean(d.regulation_type, REG_TYPES, 'regulation');
         const enacted = validDate(d.enacted_date);
-        const eventDate = validDate(d.effective_date) || enacted || new Date().toISOString().slice(0, 10);
-        const { rows } = await pool.query(
-          `INSERT INTO ai_regulations (regulation_name, short_name, jurisdiction, status, regulation_type, summary,
-              enacted_date, effective_date, source_url, external_id, auto_added, review_status, source_origin, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,'pending','techieray',NOW(),NOW()) RETURNING id`,
-          [d.name, d.short_name || null, d.jurisdiction || null, status, type, d.summary || null,
-           enacted, validDate(d.effective_date), d.source_url || URL, extId(d.name, d.jurisdiction)]);
-        await pool.query(
-          `INSERT INTO ai_regulation_events (regulation_id, event_date, event_type, title, description, source_url, source_verified_at)
-           VALUES ($1,$2,'harvested',$3,$4,$5,NOW())`,
-          [rows[0].id, eventDate, d.name, d.summary || null, d.source_url || URL]).catch(() => {});
-        added++;
+        const eff = validDate(d.effective_date);
+        const existing = await findExisting(eid, d.name);
+        if (existing && existing.source_origin === 'techieray') {
+          // Our own prior harvest of this item → refresh it (no duplicate, keeps review state).
+          await pool.query(
+            `UPDATE ai_regulations SET status = $2, regulation_type = $3,
+               summary = COALESCE($4, summary), enacted_date = COALESCE($5, enacted_date),
+               effective_date = COALESCE($6, effective_date), source_url = COALESCE($7, source_url),
+               updated_at = NOW() WHERE id = $1`,
+            [existing.id, status, type, d.summary || null, enacted, eff, d.source_url || null]);
+          updated++;
+        } else if (existing) {
+          skipped++;   // already tracked under a curated / other-origin row — never clobber
+        } else {
+          const { rows } = await pool.query(
+            `INSERT INTO ai_regulations (regulation_name, short_name, jurisdiction, status, regulation_type, summary,
+                enacted_date, effective_date, source_url, external_id, auto_added, review_status, source_origin, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,'pending','techieray',NOW(),NOW()) RETURNING id`,
+            [d.name, d.short_name || null, d.jurisdiction || null, status, type, d.summary || null,
+             enacted, eff, d.source_url || URL, eid]);
+          await pool.query(
+            `INSERT INTO ai_regulation_events (regulation_id, event_date, event_type, title, description, source_url, source_verified_at)
+             VALUES ($1,$2,'harvested',$3,$4,$5,NOW())`,
+            [rows[0].id, eff || enacted || new Date().toISOString().slice(0, 10), d.name, d.summary || null, d.source_url || URL]).catch(() => {});
+          added++;
+        }
       } catch (e) { console.error('[techieray] upsert failed for', d.name, e.message); skipped++; }
     }
     await pool.query(
       `UPDATE ai_legal_sources SET last_run_at = NOW(), last_success_at = NOW(), last_error = NULL,
          items_seen = COALESCE(items_seen,0) + $2, items_new = COALESCE(items_new,0) + $3,
          config = config || $4::jsonb, updated_at = NOW() WHERE id = $1`,
-      [sourceId, considered, added, JSON.stringify({ last_harvest_at: new Date().toISOString(), last_harvest_count: considered, last_harvest_added: added })]);
-    return { considered, added, skipped };
+      [sourceId, considered, added, JSON.stringify({ last_harvest_at: new Date().toISOString(), last_harvest_count: considered, last_harvest_added: added, last_harvest_updated: updated })]);
+    return { considered, added, updated, skipped };
   } catch (err) {
     await pool.query('UPDATE ai_legal_sources SET last_run_at = NOW(), last_error = $2, updated_at = NOW() WHERE id = $1', [sourceId, err.message]).catch(() => {});
     throw err;

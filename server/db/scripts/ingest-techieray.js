@@ -8,7 +8,7 @@ import { harvestTechieray } from '../../services/legal-ingest/techieray.js';
 try {
   console.log('Harvesting TechieRay Global AI Regulation Tracker…');
   const r = await harvestTechieray();
-  console.log(`Done — ${r.considered} found · ${r.added} new (pending review) · ${r.skipped} already tracked/skipped.`);
+  console.log(`Done — ${r.considered} found · ${r.added} new (pending review) · ${r.updated} refreshed · ${r.skipped} already tracked.`);
 } catch (err) {
   console.error('Harvest failed:', err.message);
   process.exitCode = 1;

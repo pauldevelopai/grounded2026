@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
     const out = {};
     for (const [kind, t] of Object.entries(TABLES)) {
       const { rows } = await pool.query(
-        `SELECT id, ${t.nameCol} AS name, jurisdiction, status, summary, source_url, review_status,
+        `SELECT id, ${t.nameCol} AS name, jurisdiction, status, summary, source_url, source_origin, review_status,
                 ${t.dateCol} AS dated, created_at
            FROM ${t.table} WHERE auto_added = true
           ORDER BY (review_status = 'pending') DESC, created_at DESC LIMIT 200`);

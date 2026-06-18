@@ -7,11 +7,19 @@ import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scr
 import { startScan, finishScan, updateScan } from './scan-state.js';
 import { runFormsSheetSync } from './forms-sync.js';
 import { generateGovernanceToday } from './governance-today.js';
+import { harvestTechieray } from './legal-ingest/techieray.js';
 
 // Regenerate the "Today" AI-governance digest (web-search-backed) for the tracker.
 export async function runGovernanceTodayDigest() {
   const v = await generateGovernanceToday();
   return { result: `Today digest regenerated (${v.headlines?.length || 0} sources)`, itemsProcessed: 1 };
+}
+
+// Weekly: re-scan TechieRay's Global AI Regulation Tracker → ai_regulations.
+// Idempotent (updates existing harvested rows, skips curated, no duplicates).
+export async function runTechierayHarvest() {
+  const r = await harvestTechieray();
+  return { result: `TechieRay: ${r.added} new · ${r.updated} refreshed · ${r.skipped} skipped (of ${r.considered})`, itemsProcessed: r.added + r.updated };
 }
 
 // Helper: create a notification for all admin users (broadcast)
@@ -959,6 +967,7 @@ export const JOB_REGISTRY = {
   data_security_triage:       runDataSecurityTriage,
   ethics_triage:              runEthicsTriage,
   governance_today_digest:    runGovernanceTodayDigest,
+  techieray_harvest:          runTechierayHarvest,
 };
 
 // ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──
