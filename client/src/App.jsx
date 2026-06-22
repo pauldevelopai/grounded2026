@@ -114,6 +114,7 @@ import BeAIReadyToolboxForYou from './pages/beaiready/BeAIReadyToolboxForYou.jsx
 import BeAIReadyToolboxSuggest from './pages/beaiready/BeAIReadyToolboxSuggest.jsx';
 import BeAIReadyToolboxCategory from './pages/beaiready/BeAIReadyToolboxCategory.jsx';
 import BeAIReadyTracker from './pages/beaiready/BeAIReadyTracker.jsx';
+import BeAIReadyNodes from './pages/beaiready/BeAIReadyNodes.jsx';
 import BeAIReadyFeature from './pages/beaiready/BeAIReadyFeature.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
@@ -197,6 +198,7 @@ export default function App() {
               <Route path="/toolbox/category/:name" element={<BeAIReadyToolboxCategory />} />
               <Route path="/toolbox/:slug" element={<BeAIReadyToolbox mode="detail" />} />
               <Route path="/tracker" element={<BeAIReadyTracker />} />
+              <Route path="/nodes" element={<BeAIReadyNodes />} />
               <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
             </Route>
           )}

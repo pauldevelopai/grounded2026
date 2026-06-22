@@ -1,8 +1,13 @@
 // Public, no-auth endpoints for the ailegal.co.za reader-facing surface.
 // Mount BEFORE any auth middleware.
 import { Router } from 'express';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import pool from '../db/pool.js';
 import { chatWithGroundedHelp, callClaude } from '../services/claude.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { getGovernanceToday, getGovernanceTodayHistory } from '../services/governance-today.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
@@ -1185,6 +1190,53 @@ router.get('/toolkit', async (req, res) => {
   } catch (err) {
     console.error('[public/toolkit]', err);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ── BE AI READY — product-filtered Nodes registry ───────────────────────────
+// The BAIR storefront (beaiready host) has no /nodes/ route of its own, so it can't
+// read the static front-door registry same-origin. This reads nodes.json (the box
+// copy, the local sibling repo, or the live URL as a fallback) and returns only the
+// Nodes tagged for the 'bair' product — keeping nodes.json the single source of
+// truth (one Node, two storefronts; never duplicated).
+let _bairNodesCache = { at: 0, data: null };
+const NODES_RUN_BASE = process.env.NODES_RUN_BASE || 'https://grounded.developai.co.za/nodes';
+
+async function loadNodesRegistry() {
+  const candidates = [
+    process.env.NODES_REGISTRY_FILE,
+    '/var/www/nodes/nodes.json',                              // the box
+    path.join(__dirname, '../../../Nodes/nodes/nodes.json'),  // local dev sibling repo
+  ].filter(Boolean);
+  for (const f of candidates) {
+    try { return JSON.parse(await readFile(f, 'utf8')); } catch { /* try next */ }
+  }
+  const url = process.env.NODES_REGISTRY_URL || 'https://grounded.developai.co.za/nodes/nodes.json';
+  const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (!r.ok) throw new Error(`registry ${r.status}`);
+  return r.json();
+}
+
+router.get('/bair-nodes', async (req, res) => {
+  try {
+    if (!_bairNodesCache.data || Date.now() - _bairNodesCache.at > 5 * 60 * 1000) {
+      const reg = await loadNodesRegistry();
+      const nodes = ((reg && reg.nodes) || [])
+        .filter((n) => Array.isArray(n.products) && n.products.includes('bair'))
+        .map((n) => ({
+          slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
+          hosted: !!n.hosted,
+          // Run path: the JWT is host-agnostic, so a signed-in BAIR client is accepted
+          // by the hosted Node on the grounded host (zero Caddy change on beaiready).
+          runUrl: n.hosted ? `${NODES_RUN_BASE}/${n.slug}/app/` : null,
+        }));
+      _bairNodesCache = { at: Date.now(), data: { nodes } };
+    }
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json(_bairNodesCache.data);
+  } catch (err) {
+    console.error('[public/bair-nodes]', err.message);
+    res.status(500).json({ nodes: [], message: 'Could not load the Nodes list.' });
   }
 });
 

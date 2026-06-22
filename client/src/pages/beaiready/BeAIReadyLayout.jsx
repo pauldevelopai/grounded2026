@@ -55,6 +55,7 @@ export default function BeAIReadyLayout() {
             {PILLARS.map((p) => (
               <Link key={p.key} to={`/pillar/${p.key}`} style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>{p.nav}</Link>
             ))}
+            <Link to="/nodes" style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>Nodes</Link>
             {user ? (
               <>
                 <Link to={user.role === 'admin' ? '/admin' : '/dashboard'} style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
