@@ -1200,7 +1200,6 @@ router.get('/toolkit', async (req, res) => {
 // Nodes tagged for the 'bair' product — keeping nodes.json the single source of
 // truth (one Node, two storefronts; never duplicated).
 let _bairNodesCache = { at: 0, data: null };
-const NODES_RUN_BASE = process.env.NODES_RUN_BASE || 'https://grounded.developai.co.za/nodes';
 
 async function loadNodesRegistry() {
   const candidates = [
@@ -1226,9 +1225,12 @@ router.get('/bair-nodes', async (req, res) => {
         .map((n) => ({
           slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
           hosted: !!n.hosted,
-          // Run path: the JWT is host-agnostic, so a signed-in BAIR client is accepted
-          // by the hosted Node on the grounded host (zero Caddy change on beaiready).
-          runUrl: n.hosted ? `${NODES_RUN_BASE}/${n.slug}/app/` : null,
+          // Run path: SAME-ORIGIN relative URL so the Node opens on whatever host
+          // served the storefront (the beaiready host). The tracker_token cookie is
+          // host-scoped, so the Node must be reached on beaiready (where the client
+          // signed in) — otherwise the browser won't send the cookie and the Node
+          // bounces to login. Caddy serves /nodes/bair-extract/app/* on beaiready too.
+          runUrl: n.hosted ? `/nodes/${n.slug}/app/` : null,
         }));
       _bairNodesCache = { at: Date.now(), data: { nodes } };
     }
