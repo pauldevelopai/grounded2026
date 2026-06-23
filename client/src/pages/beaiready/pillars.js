@@ -75,13 +75,13 @@ export const PILLARS = [
     ],
   },
   {
-    key: 'productivity',
-    nav: 'Productivity',
-    label: 'Productivity',
-    tagline: 'Get more done — measured fairly.',
+    key: 'productivity',   // key kept for routing/recs continuity; displayed as "Tools"
+    nav: 'Tools',
+    label: 'Tools',
+    tagline: 'The AI tools your team actually uses.',
     intro:
-      'AI should show whether work is moving, not watch your people. A set of tools built around how small ' +
-      'and medium businesses actually run.',
+      'The practical AI tools for getting work done — a continuously scored toolbox, the Nodes your business ' +
+      'runs and owns, and a fair, no-surveillance view of productivity.',
     features: [
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
@@ -110,11 +110,11 @@ export const PILLARS = [
   {
     key: 'strategy',
     nav: 'Strategy',
-    label: 'Your AI Strategy',
-    tagline: 'Plot the goals. Find what to automate.',
+    label: 'Strategy',
+    tagline: 'The bigger picture — and what’s next.',
     intro:
-      'We map your company’s goals and your full workflow end to end, then identify exactly which parts ' +
-      'are worth automating with AI — and in what order.',
+      'The strategic and emerging parts of being AI ready: your goals and automation roadmap, how AI sees ' +
+      'your business, your data security, capturing your team’s know-how, and where your people need support.',
     features: [
       { name: 'Goals, workflow & automation roadmap', status: 'partial', dash: '/dashboard/strategy', slug: 'strategy-roadmap',
         what: 'A clear map of how your business runs — every step and hand-off — and which parts AI should take on first, sized by effort and payoff: your practical automation roadmap, built with your team.' },
@@ -124,12 +124,28 @@ export const PILLARS = [
   },
 ];
 
-// Pillars shown in the nav + on the home page right now (Paul, 2026-06-23):
-// Training, Governance, Productivity (Nodes lives under Productivity). Visibility,
-// Data Security and Strategy are HIDDEN for the time being — their full defs stay
-// above so they're one line from coming back; their /pillar/:key + dashboard pages
-// still exist, just unlinked. The array order here is the displayed order.
-const VISIBLE_KEYS = ['training', 'governance', 'productivity'];
+// Strategy absorbs KnowHow + the Visibility and Data Security features (Paul,
+// 2026-06-23): those become sub-areas of Strategy rather than their own tabs. We do
+// it by reference so there's one source of truth per feature (and the Visibility /
+// Data Security pillar defs + their /dashboard tools stay intact, just unlinked).
+(() => {
+  const byKey = (k) => PILLARS.find((p) => p.key === k);
+  const training = byKey('training');
+  const knowhow = training.features.find((f) => f.slug === 'knowhow');
+  training.features = training.features.filter((f) => f.slug !== 'knowhow');   // KnowHow moves out of Training
+  const strategy = byKey('strategy');
+  strategy.features = [
+    knowhow,
+    ...byKey('visibility').features,
+    ...byKey('data-security').features,
+    ...strategy.features,
+  ].filter(Boolean);
+})();
+
+// Pillars shown in the nav + on the home page (Paul, 2026-06-23): Training,
+// Governance, Tools (Nodes under it), Strategy (which now holds KnowHow, Visibility
+// and Data Security). The array order here is the displayed order.
+const VISIBLE_KEYS = ['training', 'governance', 'productivity', 'strategy'];
 export const VISIBLE_PILLARS = VISIBLE_KEYS.map((k) => PILLARS.find((p) => p.key === k)).filter(Boolean);
 
 export function findPillar(key) {

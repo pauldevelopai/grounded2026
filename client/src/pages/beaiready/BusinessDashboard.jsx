@@ -19,16 +19,14 @@ const METRICS = [
   ['client_outcomes', 'Client outcomes'],
 ];
 
-// The client-facing pillars, each with the tool it opens. Visibility, Data Security
-// and Strategy are hidden for the time being (Paul, 2026-06-23) — left here, commented,
-// so they're one line from returning.
+// The client-facing pillars, each with the tool it opens (Paul, 2026-06-23):
+// Training, Governance, Tools, Strategy. Visibility + Data Security now live under
+// Strategy (reachable from the Strategy pillar page), so they're not separate cards.
 const PILLARS = [
   { key: 'training', label: 'Training', to: '/training', cta: 'Agenda & materials' },
   { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Build your AI policy' },
-  { key: 'productivity', label: 'Productivity', to: '/dashboard/productivity', cta: 'Track productivity' },
-  // { key: 'visibility', label: 'Visibility', to: '/dashboard/visibility', cta: 'How AI sees your business' },
-  // { key: 'data-security', label: 'Data Security', to: '/dashboard/security', cta: 'Your AI tools & data exposure' },
-  // { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals, automation roadmap & Staff AI Needs' },
+  { key: 'productivity', label: 'Tools', to: '/dashboard/productivity', cta: 'Toolbox, Nodes & productivity' },
+  { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals, automation roadmap & more' },
 ];
 
 const PRIORITY_STYLE = {

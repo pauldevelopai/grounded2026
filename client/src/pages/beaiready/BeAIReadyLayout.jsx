@@ -51,26 +51,28 @@ export default function BeAIReadyLayout() {
             <span style={{ fontSize: 10.5, color: TERRACOTTA, fontWeight: 600 }}>by Develop&nbsp;AI</span>
           </Link>
           <nav style={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* The live pillars (Training, Governance, Productivity) — Nodes lives
-                under Productivity. Visibility/Data Security/Strategy hidden for now. */}
+            {/* The live pillar tabs (Training, Governance, Tools, Strategy). */}
             {VISIBLE_PILLARS.map((p) => (
               <Link key={p.key} to={`/pillar/${p.key}`} style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>{p.nav}</Link>
             ))}
-            {user ? (
-              <>
-                <Link to={user.role === 'admin' ? '/admin' : '/dashboard'} style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
-                  {user.role === 'admin' ? 'Admin' : 'My dashboard'}
-                </Link>
-                <button onClick={signOut} title={`Signed in as ${user.email || user.name || ''}`}
-                  style={{ ...linkStyle, background: 'none', border: '1px solid rgba(231,224,216,0.35)', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <a href={`/login?next=${nextParam}`} style={{ ...linkStyle, color: '#fff', border: `1px solid ${TERRACOTTA}`, borderRadius: 6 }}>
-                Client sign in
-              </a>
-            )}
+            {/* A clear gap, then the sign-in / account box. */}
+            <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginLeft: 22 }}>
+              {user ? (
+                <>
+                  <Link to={user.role === 'admin' ? '/admin' : '/dashboard'} style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
+                    {user.role === 'admin' ? 'Admin' : 'My dashboard'}
+                  </Link>
+                  <button onClick={signOut} title={`Signed in as ${user.email || user.name || ''}`}
+                    style={{ ...linkStyle, background: 'none', border: '1px solid rgba(231,224,216,0.35)', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <a href={`/login?next=${nextParam}`} style={{ ...linkStyle, color: '#fff', border: `1px solid ${TERRACOTTA}`, borderRadius: 6 }}>
+                  Client sign in
+                </a>
+              )}
+            </span>
           </nav>
         </div>
       </header>
