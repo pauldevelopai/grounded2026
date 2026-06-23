@@ -1,6 +1,6 @@
 // BusinessProductivity — the authed Productivity workspace (/dashboard/productivity).
 // The five measures (no surveillance — aggregate, entered by the business) and the
-// live AI toolbox link. Scoped to the tenant. (BetterBoss lives on the Training tab.)
+// live AI toolbox link. Scoped to the tenant. (KnowHow lives on the Training tab.)
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';

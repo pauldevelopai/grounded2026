@@ -85,7 +85,7 @@ export default function BeAIReadyTraining() {
 }
 
 // The signed-in client's living training record — agenda, materials, past/upcoming
-// trainings, the sector course library, and the BetterBoss roadmap. Scoped
+// trainings, the sector course library, and the KnowHow roadmap. Scoped
 // server-side to the caller's own tenant (published items only for members).
 function TrainingRecord() {
   const [trainings, setTrainings] = useState(null);
@@ -99,6 +99,12 @@ function TrainingRecord() {
     apiFetch('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
   }, []);
+
+  // Every published material shows somewhere: under its agenda when that agenda is
+  // visible (published), otherwise here in "Your materials" — so nothing is silently
+  // hidden if an admin published a material but left its agenda in draft.
+  const visibleAgendaIds = new Set((agendas || []).map((a) => a.id));
+  const looseMaterials = (myMaterials || []).filter((m) => !m.agenda_id || !visibleAgendaIds.has(m.agenda_id));
 
   return (
     <>
@@ -157,11 +163,11 @@ function TrainingRecord() {
       <section className="hub-band" style={{ marginBottom: 24 }}>
         {myMaterials == null ? (
           <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
-        ) : myMaterials.filter((m) => !m.agenda_id).length === 0 ? (
+        ) : looseMaterials.length === 0 ? (
           <p style={{ margin: 0 }}>Your training materials will appear here — slides, guides and exercises from your sessions. {myMaterials.length > 0 && 'Materials tied to a specific training show under that training above.'}</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 10 }}>
-            {myMaterials.filter((m) => !m.agenda_id).map((m) => (
+            {looseMaterials.map((m) => (
               <li key={m.id} style={{ fontSize: 13.5 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#c75b39', background: '#f7ece7', padding: '1px 7px', borderRadius: 999, marginRight: 6 }}>{m.kind}</span>
                 {m.url ? <a href={m.url} target="_blank" rel="noreferrer"><strong>{m.title}</strong></a> : <strong>{m.title}</strong>}
@@ -215,7 +221,7 @@ function TrainingRecord() {
       <div className="hub-section-label">On the roadmap</div>
       <section className="hub-band" style={{ background: '#f4f1ec', marginBottom: 24 }}>
         <p style={{ margin: 0 }}>
-          <strong>BetterBoss</strong> — capture a manager's hard-won expertise and turn it into an AI guide
+          <strong>KnowHow</strong> — capture a manager's hard-won expertise and turn it into an AI guide
           that coaches junior staff through their real work.
           <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#8a8076' }}>In development</span>
         </p>

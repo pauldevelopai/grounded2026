@@ -139,7 +139,7 @@ export default function BusinessDashboard() {
       <div className="hub-section-label">On the roadmap</div>
       <section className="hub-band" style={{ background: '#f4f1ec' }}>
         <p style={{ margin: 0 }}>
-          <strong>BetterBoss</strong> — clone a senior leader's expertise to coach your team.
+          <strong>KnowHow</strong> — clone a senior leader's expertise to coach your team.
           <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#8a8076' }}>Coming soon</span>
         </p>
       </section>
