@@ -85,6 +85,8 @@ export const PILLARS = [
     features: [
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
+      { name: 'Nodes', status: 'live', to: '/nodes',
+        what: 'Small AI tools your business runs and owns — like Extract PDF: drop in a document, get trusted structured data back. Run them here, or download and run on your own machine.' },
       { name: 'Track employee productivity', status: 'live', dash: '/dashboard/productivity', slug: 'productivity-tracking',
         what: 'Five measures only — deliverables, revenue, time spent, AI hours saved, client outcomes — entered at the business level with your own baselines. Never used to police individuals.' },
     ],
@@ -121,6 +123,14 @@ export const PILLARS = [
     ],
   },
 ];
+
+// Pillars shown in the nav + on the home page right now (Paul, 2026-06-23):
+// Training, Governance, Productivity (Nodes lives under Productivity). Visibility,
+// Data Security and Strategy are HIDDEN for the time being — their full defs stay
+// above so they're one line from coming back; their /pillar/:key + dashboard pages
+// still exist, just unlinked. The array order here is the displayed order.
+const VISIBLE_KEYS = ['training', 'governance', 'productivity'];
+export const VISIBLE_PILLARS = VISIBLE_KEYS.map((k) => PILLARS.find((p) => p.key === k)).filter(Boolean);
 
 export function findPillar(key) {
   return PILLARS.find((p) => p.key === key) || null;

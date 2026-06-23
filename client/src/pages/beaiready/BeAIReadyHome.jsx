@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
-import { PILLARS, STATUS_LABEL, SCOPING_WHATSAPP } from './pillars.js';
+import { VISIBLE_PILLARS, STATUS_LABEL, SCOPING_WHATSAPP } from './pillars.js';
 
 const STATUS_DOT = { live: '#16a34a', partial: '#d97706', building: '#94a3b8' };
 
@@ -31,9 +31,9 @@ export default function BeAIReadyHome() {
         <div className="hub-eyebrow">Be AI Ready · for organisations of every size, public or private</div>
         <h1>Is your organisation ready for an AI‑first world?</h1>
         <p className="hub-lede">
-          One structured programme to get any organisation AI ready — across <b>how you govern it</b>, <b>how you
-          secure your data</b>, <b>how productively your team works with it</b>, <b>how they’re trained</b>,
-          <b> how AI sees you</b>, and <b>your AI strategy</b>. A living dashboard, included for life.
+          One structured programme to get any organisation AI ready — across <b>how you govern it</b>, <b>how
+          productively your team works with it</b>, and <b>how they’re trained</b>. A living dashboard, included
+          for life.
         </p>
         <div className="hub-hero-cta">
           <a href={SCOPING_WHATSAPP} target="_blank" rel="noreferrer" className="hub-btn hub-btn-solid">
@@ -43,9 +43,9 @@ export default function BeAIReadyHome() {
       </section>
 
       {/* ── The pillars — the whole offering, one card each ── */}
-      <div className="hub-section-label">The six pillars of being AI ready</div>
+      <div className="hub-section-label">The pillars of being AI ready</div>
       <section className="hub-grid">
-        {PILLARS.map((p) => (
+        {VISIBLE_PILLARS.map((p) => (
           <Link key={p.key} to={`/pillar/${p.key}`} className="hub-card" style={{ textDecoration: 'none', color: 'inherit' }}>
             <div className="hub-card-kicker">{p.label}</div>
             <p style={{ fontSize: 14, fontWeight: 650, color: '#1c1b1a', margin: '0 0 4px' }}>{p.tagline}</p>

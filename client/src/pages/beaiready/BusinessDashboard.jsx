@@ -19,14 +19,16 @@ const METRICS = [
   ['client_outcomes', 'Client outcomes'],
 ];
 
-// The client-facing pillars, each with the tool it opens.
+// The client-facing pillars, each with the tool it opens. Visibility, Data Security
+// and Strategy are hidden for the time being (Paul, 2026-06-23) — left here, commented,
+// so they're one line from returning.
 const PILLARS = [
-  { key: 'visibility', label: 'Visibility', to: '/dashboard/visibility', cta: 'How AI sees your business' },
-  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Build your AI policy' },
-  { key: 'data-security', label: 'Data Security', to: '/dashboard/security', cta: 'Your AI tools & data exposure' },
-  { key: 'productivity', label: 'Productivity', to: '/dashboard/productivity', cta: 'Track productivity' },
   { key: 'training', label: 'Training', to: '/training', cta: 'Agenda & materials' },
-  { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals, automation roadmap & Staff AI Needs' },
+  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Build your AI policy' },
+  { key: 'productivity', label: 'Productivity', to: '/dashboard/productivity', cta: 'Track productivity' },
+  // { key: 'visibility', label: 'Visibility', to: '/dashboard/visibility', cta: 'How AI sees your business' },
+  // { key: 'data-security', label: 'Data Security', to: '/dashboard/security', cta: 'Your AI tools & data exposure' },
+  // { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals, automation roadmap & Staff AI Needs' },
 ];
 
 const PRIORITY_STYLE = {

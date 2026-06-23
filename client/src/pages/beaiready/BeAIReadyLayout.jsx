@@ -8,7 +8,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import FeedbackBubble from '../../components/FeedbackBubble.jsx';
-import { PILLARS } from './pillars.js';
+import { VISIBLE_PILLARS } from './pillars.js';
 
 const PublicChatbot = lazy(() => import('../public/PublicChatbot.jsx'));
 
@@ -51,11 +51,11 @@ export default function BeAIReadyLayout() {
             <span style={{ fontSize: 10.5, color: TERRACOTTA, fontWeight: 600 }}>by Develop&nbsp;AI</span>
           </Link>
           <nav style={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* The six pillars — every item is a real page on THIS site. */}
-            {PILLARS.map((p) => (
+            {/* The live pillars (Training, Governance, Productivity) — Nodes lives
+                under Productivity. Visibility/Data Security/Strategy hidden for now. */}
+            {VISIBLE_PILLARS.map((p) => (
               <Link key={p.key} to={`/pillar/${p.key}`} style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>{p.nav}</Link>
             ))}
-            <Link to="/nodes" style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>Nodes</Link>
             {user ? (
               <>
                 <Link to={user.role === 'admin' ? '/admin' : '/dashboard'} style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
