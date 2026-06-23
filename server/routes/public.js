@@ -9,6 +9,7 @@ import { chatWithGroundedHelp, callClaude } from '../services/claude.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { getGovernanceToday, getGovernanceTodayHistory } from '../services/governance-today.js';
+import { getAINewsToday, getAINewsTodayHistory } from '../services/ai-news-today.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
@@ -1152,6 +1153,19 @@ router.get('/governance-today', async (req, res) => {
 router.get('/governance-today/history', async (req, res) => {
   try { res.json(await getGovernanceTodayHistory(60)); }
   catch (err) { console.error('[public/governance-today/history]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// The "Today in AI" news briefing (cached; refreshed by the ai_news_today_digest
+// job). Sister of governance-today: AI news from the newsletters, not AI law.
+// Public, read-only; returns null until first generated.
+router.get('/ai-news-today', async (req, res) => {
+  try { res.json(await getAINewsToday()); }
+  catch (err) { console.error('[public/ai-news-today]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.get('/ai-news-today/history', async (req, res) => {
+  try { res.json(await getAINewsTodayHistory(60)); }
+  catch (err) { console.error('[public/ai-news-today/history]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── AI Toolkit (imported from aikit) ─────────────────────────────────────────

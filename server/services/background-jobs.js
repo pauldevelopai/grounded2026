@@ -7,12 +7,27 @@ import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scr
 import { startScan, finishScan, updateScan } from './scan-state.js';
 import { runFormsSheetSync } from './forms-sync.js';
 import { generateGovernanceToday } from './governance-today.js';
+import { generateAINewsToday } from './ai-news-today.js';
 import { harvestTechieray } from './legal-ingest/techieray.js';
 
 // Regenerate the "Today" AI-governance digest (web-search-backed) for the tracker.
 export async function runGovernanceTodayDigest() {
   const v = await generateGovernanceToday();
   return { result: `Today digest regenerated (${v.headlines?.length || 0} sources)`, itemsProcessed: 1 };
+}
+
+// Regenerate the "Today in AI" news briefing for the BE AI READY home. First pulls
+// today's newsletters from Gmail (best-effort — same ingestion the Morning Briefing
+// uses) so the briefing is fresh, then synthesises it from the ingested items.
+export async function runAINewsTodayDigest() {
+  try { await runNewsletterDigest(); }
+  catch (e) { console.error('[ai-news-today:ingest]', e.message); }
+  const v = await generateAINewsToday();
+  return {
+    result: v ? `AI-news briefing regenerated (${v.headlines?.length || 0} sources)`
+              : 'No recent newsletter items — AI-news briefing left empty',
+    itemsProcessed: v ? 1 : 0,
+  };
 }
 
 // Weekly: re-scan TechieRay's Global AI Regulation Tracker → ai_regulations.
@@ -967,6 +982,7 @@ export const JOB_REGISTRY = {
   data_security_triage:       runDataSecurityTriage,
   ethics_triage:              runEthicsTriage,
   governance_today_digest:    runGovernanceTodayDigest,
+  ai_news_today_digest:       runAINewsTodayDigest,
   techieray_harvest:          runTechierayHarvest,
 };
 

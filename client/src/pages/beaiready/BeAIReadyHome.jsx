@@ -10,6 +10,8 @@ const STATUS_DOT = { live: '#16a34a', partial: '#d97706', building: '#94a3b8' };
 
 export default function BeAIReadyHome() {
   const [stats, setStats] = useState({ lawsuits: null, regulations: null, tools: null });
+  // The two daily briefings that lead the page (undefined = loading, null = none yet).
+  const [briefings, setBriefings] = useState({ news: undefined, law: undefined });
 
   useEffect(() => {
     Promise.allSettled([
@@ -23,6 +25,8 @@ export default function BeAIReadyHome() {
         tools: t.status === 'fulfilled' ? t.value : null,
       })
     );
+    publicFetch('/public/ai-news-today').then((v) => setBriefings((b) => ({ ...b, news: v || null }))).catch(() => setBriefings((b) => ({ ...b, news: null })));
+    publicFetch('/public/governance-today').then((v) => setBriefings((b) => ({ ...b, law: v || null }))).catch(() => setBriefings((b) => ({ ...b, law: null })));
   }, []);
 
   return (
@@ -41,6 +45,22 @@ export default function BeAIReadyHome() {
           </a>
         </div>
       </section>
+
+      {/* ── Today in AI — the two daily briefings (News on top, Law below). Only
+          shows once at least one has been generated; no empty cards. ── */}
+      {(briefings.news?.summary || briefings.law?.summary) && (
+        <>
+          <div className="hub-section-label">Today in AI</div>
+          <section style={{ display: 'grid', gap: 14, marginBottom: 28 }}>
+            {briefings.news?.summary && (
+              <BriefingCard kicker="AI News" data={briefings.news} />
+            )}
+            {briefings.law?.summary && (
+              <BriefingCard kicker="AI Law" data={briefings.law} to="/tracker" toLabel="Open the tracker →" />
+            )}
+          </section>
+        </>
+      )}
 
       {/* ── The pillars — the whole offering, one card each ── */}
       <div className="hub-section-label">The pillars of being AI ready</div>
@@ -94,3 +114,36 @@ export default function BeAIReadyHome() {
 }
 
 function n(v) { return v == null ? '—' : v.toLocaleString(); }
+
+// One daily briefing card: kicker, ~100-word summary, its source links, and the
+// time it was generated. Used for both AI News and AI Law on the home page.
+function BriefingCard({ kicker, data, to, toLabel }) {
+  const when = data.generated_at
+    ? new Date(data.generated_at).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+    : null;
+  return (
+    <div style={{ background: '#fff', border: '1px solid #eee5da', borderLeft: '3px solid #c75b39', borderRadius: 12, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#c75b39' }}>{kicker}</span>
+        {when && <span style={{ fontSize: 11.5, color: '#a89e92' }}>{when}</span>}
+      </div>
+      <p style={{ margin: '8px 0 0', fontSize: 14.5, lineHeight: 1.6, color: '#2a2724', whiteSpace: 'pre-wrap' }}>{data.summary}</p>
+      {data.headlines?.length > 0 && (
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+          {data.headlines.slice(0, 4).map((h, i) => (
+            h.url
+              ? <a key={i} href={h.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#c75b39', textDecoration: 'none' }}>{trim(h.title)} ↗</a>
+              : <span key={i} style={{ fontSize: 12, color: '#8a8076' }}>{trim(h.title)}</span>
+          ))}
+        </div>
+      )}
+      {to && (
+        <p style={{ margin: '10px 0 0' }}>
+          <Link to={to} style={{ fontSize: 13, fontWeight: 600, color: '#c75b39' }}>{toLabel}</Link>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function trim(s) { s = s || ''; return s.length > 52 ? s.slice(0, 50).trimEnd() + '…' : s; }
