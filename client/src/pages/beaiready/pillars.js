@@ -97,7 +97,8 @@ export const PILLARS = [
     label: 'Training',
     tagline: 'Change what your team does on Monday.',
     intro:
-      'Hands-on, practical AI training — and a living record of it in your dashboard.',
+      'Hands-on, practical AI training — with a living record of it in your dashboard, a read on where ' +
+      'your team needs support, and the tools to capture their hard-won know-how.',
     features: [
       { name: 'Book a training', status: 'live', to: '/training',
         what: 'A hands-on one-day on-site training + three mentoring sessions (R35k, up to 30 people) — the strongest place to start. See the full offer and book a date.' },
@@ -114,7 +115,7 @@ export const PILLARS = [
     tagline: 'The bigger picture — and what’s next.',
     intro:
       'The strategic and emerging parts of being AI ready: your goals and automation roadmap, how AI sees ' +
-      'your business, your data security, capturing your team’s know-how, and where your people need support.',
+      'your business, and your data security.',
     features: [
       { name: 'Goals, workflow & automation roadmap', status: 'partial', dash: '/dashboard/strategy', slug: 'strategy-roadmap',
         what: 'A clear map of how your business runs — every step and hand-off — and which parts AI should take on first, sized by effort and payoff: your practical automation roadmap, built with your team.' },
@@ -124,21 +125,26 @@ export const PILLARS = [
   },
 ];
 
-// Strategy absorbs KnowHow + the Visibility and Data Security features (Paul,
-// 2026-06-23): those become sub-areas of Strategy rather than their own tabs. We do
-// it by reference so there's one source of truth per feature (and the Visibility /
-// Data Security pillar defs + their /dashboard tools stay intact, just unlinked).
+// Training keeps KnowHow and gains Staff AI Needs (moved from Strategy, Paul
+// 2026-06-23). Strategy still absorbs the Visibility + Data Security features —
+// those become sub-areas of Strategy rather than their own tabs — done by
+// reference so there's one source of truth per feature (the Visibility / Data
+// Security pillar defs + their /dashboard tools stay intact, just unlinked).
 (() => {
   const byKey = (k) => PILLARS.find((p) => p.key === k);
   const training = byKey('training');
-  const knowhow = training.features.find((f) => f.slug === 'knowhow');
-  training.features = training.features.filter((f) => f.slug !== 'knowhow');   // KnowHow moves out of Training
   const strategy = byKey('strategy');
+  // Staff AI Needs moves Strategy → Training (KnowHow already lives in Training).
+  const staffNeeds = strategy.features.find((f) => f.slug === 'staff-needs');
+  if (staffNeeds) {
+    strategy.features = strategy.features.filter((f) => f.slug !== 'staff-needs');
+    training.features = [...training.features, staffNeeds];
+  }
+  // Strategy = its own roadmap, plus the (otherwise hidden) Visibility + Data Security features.
   strategy.features = [
-    knowhow,
+    ...strategy.features,
     ...byKey('visibility').features,
     ...byKey('data-security').features,
-    ...strategy.features,
   ].filter(Boolean);
 })();
 

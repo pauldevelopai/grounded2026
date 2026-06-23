@@ -167,6 +167,8 @@ const PublicRootHome = IS_BEAIREADY ? BeAIReadyHome : PublicHome;
 // explainer + sign-in to logged-out visitors. Copy mirrors pillars.js.
 const GATE_TRACKER = { title: 'Legal, Ethics & Regulation tracker', blurb: 'A daily-updated feed of AI lawsuits and regulations worldwide — in one place, newest first — the live infrastructure that keeps your governance current.' };
 const GATE_TOOLBOX = { title: 'AI Toolbox', blurb: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' };
+const GATE_NODES = { title: 'Nodes', blurb: 'Small AI tools your business runs and owns — like Extract PDF: drop in a document, get trusted structured data back. Run them here, or download and run on your own machine.' };
+const GATE_TRAINING = { title: 'Your training', blurb: 'Your AI training in one place — your agenda and materials, past and upcoming sessions, and your team’s AI needs. Sign in to see what’s scheduled for your team and pick up your materials.' };
 
 export default function App() {
   return (
@@ -212,7 +214,10 @@ export default function App() {
               <Route element={<GatedFeature {...GATE_TRACKER} />}>
                 <Route path="/tracker" element={<BeAIReadyTracker />} />
               </Route>
-              <Route path="/nodes" element={<BeAIReadyNodes />} />
+              {/* Nodes storefront — LIVE tool: behind the login wall. */}
+              <Route element={<GatedFeature {...GATE_NODES} />}>
+                <Route path="/nodes" element={<BeAIReadyNodes />} />
+              </Route>
               <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
             </Route>
           )}
@@ -255,8 +260,10 @@ export default function App() {
           {/* ── Training — host-aware: the BE AI READY door gets the business
                 training offer; Grounded keeps the newsroom course library. ── */}
           <Route path="/training" element={<PublicShell />}>
+            {/* On BE AI READY the training page is gated + personalised to the signed-in
+                client (their agenda, materials, sessions). Grounded's stays public. */}
             <Route index element={IS_BEAIREADY
-              ? <BeAIReadyTraining />
+              ? <GatedFeature {...GATE_TRAINING}><BeAIReadyTraining /></GatedFeature>
               : <Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
           </Route>
 
