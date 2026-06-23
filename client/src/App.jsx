@@ -115,6 +115,7 @@ import BeAIReadyToolboxSuggest from './pages/beaiready/BeAIReadyToolboxSuggest.j
 import BeAIReadyToolboxCategory from './pages/beaiready/BeAIReadyToolboxCategory.jsx';
 import BeAIReadyTracker from './pages/beaiready/BeAIReadyTracker.jsx';
 import BeAIReadyNodes from './pages/beaiready/BeAIReadyNodes.jsx';
+import GatedFeature from './pages/beaiready/GatedFeature.jsx';
 import BeAIReadyFeature from './pages/beaiready/BeAIReadyFeature.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
@@ -160,6 +161,12 @@ const IS_BEAIREADY = typeof window !== 'undefined' &&
 const PublicShell = IS_BEAIREADY ? BeAIReadyLayout : PublicLayout;
 const PublicRootHome = IS_BEAIREADY ? BeAIReadyHome : PublicHome;
 
+// BE AI READY login wall: the live tools (Tracker + Toolbox) sit behind sign-in
+// (Paul's call, 2026-06-22). Marketing stays public. GatedFeature shows a friendly
+// explainer + sign-in to logged-out visitors. Copy mirrors pillars.js.
+const GATE_TRACKER = { title: 'Legal, Ethics & Regulation tracker', blurb: 'A daily-updated feed of AI lawsuits and regulations worldwide — in one place, newest first — the live infrastructure that keeps your governance current.' };
+const GATE_TOOLBOX = { title: 'AI Toolbox', blurb: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' };
+
 export default function App() {
   return (
     <AuthProvider>
@@ -189,15 +196,21 @@ export default function App() {
           {IS_BEAIREADY && (
             <Route element={<BeAIReadyLayout />}>
               <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
-              <Route path="/toolbox" element={<BeAIReadyToolbox mode="list" />} />
-              <Route path="/toolbox/finder" element={<BeAIReadyToolboxFinder />} />
-              <Route path="/toolbox/explore" element={<BeAIReadyToolboxExplorer />} />
-              <Route path="/toolbox/ask" element={<BeAIReadyToolboxAsk />} />
-              <Route path="/toolbox/for-you" element={<BeAIReadyToolboxForYou />} />
-              <Route path="/toolbox/suggest" element={<BeAIReadyToolboxSuggest />} />
-              <Route path="/toolbox/category/:name" element={<BeAIReadyToolboxCategory />} />
-              <Route path="/toolbox/:slug" element={<BeAIReadyToolbox mode="detail" />} />
-              <Route path="/tracker" element={<BeAIReadyTracker />} />
+              {/* AI Toolbox — LIVE tool: behind the login wall (friendly explainer when out). */}
+              <Route element={<GatedFeature {...GATE_TOOLBOX} />}>
+                <Route path="/toolbox" element={<BeAIReadyToolbox mode="list" />} />
+                <Route path="/toolbox/finder" element={<BeAIReadyToolboxFinder />} />
+                <Route path="/toolbox/explore" element={<BeAIReadyToolboxExplorer />} />
+                <Route path="/toolbox/ask" element={<BeAIReadyToolboxAsk />} />
+                <Route path="/toolbox/for-you" element={<BeAIReadyToolboxForYou />} />
+                <Route path="/toolbox/suggest" element={<BeAIReadyToolboxSuggest />} />
+                <Route path="/toolbox/category/:name" element={<BeAIReadyToolboxCategory />} />
+                <Route path="/toolbox/:slug" element={<BeAIReadyToolbox mode="detail" />} />
+              </Route>
+              {/* Legal/Governance Tracker — LIVE tool: behind the login wall. */}
+              <Route element={<GatedFeature {...GATE_TRACKER} />}>
+                <Route path="/tracker" element={<BeAIReadyTracker />} />
+              </Route>
               <Route path="/nodes" element={<BeAIReadyNodes />} />
               <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
             </Route>
@@ -211,9 +224,10 @@ export default function App() {
             {/* On the BE AI READY door the canonical list is /tracker; redirect the old
                 GROUNDED lists there. Detail pages stay (the tracker rows link to them). */}
             <Route path="lawsuits" element={IS_BEAIREADY ? <Navigate to="/tracker" replace /> : <PublicLawsuitsList />} />
-            <Route path="lawsuits/:id" element={<PublicLawsuitDetail />} />
+            {/* On beaiready the tracker's detail pages are gated too (no public bypass to the content). */}
+            <Route path="lawsuits/:id" element={IS_BEAIREADY ? <GatedFeature {...GATE_TRACKER}><PublicLawsuitDetail /></GatedFeature> : <PublicLawsuitDetail />} />
             <Route path="regulations" element={IS_BEAIREADY ? <Navigate to="/tracker" replace /> : <PublicRegulationsList />} />
-            <Route path="regulations/:id" element={<PublicRegulationDetail />} />
+            <Route path="regulations/:id" element={IS_BEAIREADY ? <GatedFeature {...GATE_TRACKER}><PublicRegulationDetail /></GatedFeature> : <PublicRegulationDetail />} />
             <Route path="explore"        element={<Suspense fallback={<LazyFallback />}><PublicExplore /></Suspense>} />
             <Route path="sources"        element={<Suspense fallback={<LazyFallback />}><PublicSources /></Suspense>} />
             {/* Submit is folded into the Feedback mechanism (the bubble). Old links redirect. */}
