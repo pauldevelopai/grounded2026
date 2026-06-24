@@ -10,15 +10,21 @@ import { apiFetch } from '../../../hooks/useApi.js';
 const BRIEFINGS = [
   {
     which: 'ai-news', kicker: 'AI News',
-    blurb: 'A short daily read on the biggest AI developments, written from the newsletters ingested into your Morning Briefing. Regenerate pulls today’s newsletters from Gmail first, then rewrites it.',
+    blurb: 'A short daily read on the biggest AI developments. Drawn from your curated newsletters (the AI ones ingested from Gmail’s Forums tab); if none have come in, it falls back to a live web search. Set the source below.',
     path: '/public/ai-news-today',
   },
   {
     which: 'governance', kicker: 'AI Law',
-    blurb: 'The “Today in AI governance” digest — AI law, regulation and enforcement, via a live web search. The same briefing that leads the tracker. Regenerate uses AI credit.',
+    blurb: 'AI law, regulation and enforcement — written directly from your own Law & Regulation tracker, so the team has full oversight of what it can say. The same briefing that leads the tracker.',
     path: '/public/governance-today',
   },
 ];
+
+const SOURCE_LABEL = {
+  newsletters: 'your curated newsletters',
+  websearch: 'a live web search',
+  tracker: 'your Law & Regulation tracker',
+};
 
 export default function BeAIReadyAdminBriefings() {
   return (
@@ -28,9 +34,10 @@ export default function BeAIReadyAdminBriefings() {
         The two daily briefings at the top of the Be AI Ready home page. Edit either by hand and save, or
         regenerate it from source. They also refresh automatically each morning.
       </p>
-      <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'grid', gap: 16, marginBottom: 16 }}>
         {BRIEFINGS.map((b) => <BriefingCard key={b.which} {...b} />)}
       </div>
+      <SourcesSettings />
     </div>
   );
 }
@@ -79,7 +86,12 @@ function BriefingCard({ which, kicker, blurb, path }) {
             : 'not generated yet'}
         </span>
       </div>
-      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '4px 0 12px', maxWidth: '64ch' }}>{blurb}</p>
+      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '4px 0 8px', maxWidth: '64ch' }}>{blurb}</p>
+      {data?.source && (
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: '#c75b39', marginBottom: 12 }}>
+          ● This briefing was written from {SOURCE_LABEL[data.source] || data.source}
+        </div>
+      )}
 
       {err && <div style={banner('#FEF2F2', '#B91C1C')}>{err}</div>}
       {msg && <div style={banner('#ECFDF5', '#065F46')}>{msg}</div>}
@@ -119,8 +131,68 @@ function BriefingCard({ which, kicker, blurb, path }) {
   );
 }
 
+// Source oversight — see and tune where each briefing draws from, no deploy needed.
+function SourcesSettings() {
+  const [s, setS] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  useEffect(() => { apiFetch('/briefings/settings').then(setS).catch((e) => setErr(e.message)); }, []);
+  const setNews = (patch) => setS((x) => ({ ...x, ai_news: { ...x.ai_news, ...patch } }));
+  const setLaw = (patch) => setS((x) => ({ ...x, ai_law: { ...x.ai_law, ...patch } }));
+
+  const save = async () => {
+    setBusy(true); setErr(''); setMsg('');
+    try { const next = await apiFetch('/briefings/settings', { method: 'PUT', body: JSON.stringify(s) }); setS(next); setMsg('Saved — applies on the next regenerate / morning run.'); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  if (!s) return null;
+  return (
+    <div style={{ ...card, background: '#faf8f5' }}>
+      <h2 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Sources &amp; settings</h2>
+      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 14px', maxWidth: '66ch' }}>
+        Where each briefing draws from, and the dials that shape it. Changes apply the next time a briefing is regenerated (here or at the morning run).
+      </p>
+      {err && <div style={banner('#FEF2F2', '#B91C1C')}>{err}</div>}
+      {msg && <div style={banner('#ECFDF5', '#065F46')}>{msg}</div>}
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={kickerStyle}>AI News — source</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0' }}>
+          {[['auto', 'Newsletters, web fallback'], ['newsletters', 'Newsletters only'], ['websearch', 'Web search only']].map(([v, label]) => (
+            <button key={v} onClick={() => setNews({ source: v })}
+              style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e4dcd2', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', background: s.ai_news.source === v ? '#c75b39' : '#fff', color: s.ai_news.source === v ? '#fff' : '#6b6359' }}>{label}</button>
+          ))}
+          <label style={{ fontSize: 12.5, color: '#6b6359', marginLeft: 6 }}>days of newsletters
+            <input type="number" min="1" max="14" value={s.ai_news.days} onChange={(e) => setNews({ days: e.target.value })} style={{ ...numInp, marginLeft: 6 }} />
+          </label>
+        </div>
+        <label style={{ fontSize: 12, color: '#8a8076' }}>What the web search looks for (when used)</label>
+        <textarea value={s.ai_news.web_focus} onChange={(e) => setNews({ web_focus: e.target.value })} rows={2}
+          style={{ ...textarea, fontSize: 13, marginTop: 4 }} />
+      </div>
+
+      <div style={{ borderTop: '1px solid #efe7dd', paddingTop: 14, marginBottom: 14 }}>
+        <div style={kickerStyle}>AI Law — source</div>
+        <p style={{ fontSize: 12.5, color: '#6b6359', margin: '8px 0' }}>
+          Written <strong>directly from your Law &amp; Regulation tracker</strong> — only what your team has tracked. Keep the tracker current and the briefing stays current.
+          <label style={{ display: 'block', marginTop: 8 }}>Number of most-recent tracked items to brief from
+            <input type="number" min="3" max="20" value={s.ai_law.item_count} onChange={(e) => setLaw({ item_count: e.target.value })} style={{ ...numInp, marginLeft: 6 }} />
+          </label>
+        </p>
+      </div>
+
+      <button style={btnSolid} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button>
+    </div>
+  );
+}
+
 const card = { background: '#fff', border: '1px solid #eee5da', borderRadius: 12, padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' };
 const kickerStyle = { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#c75b39' };
+const numInp = { width: 60, padding: '5px 8px', border: '1px solid #e4dcd2', borderRadius: 6, fontSize: 13, fontFamily: 'inherit' };
 const banner = (bg, fg) => ({ background: bg, color: fg, padding: '8px 12px', borderRadius: 8, margin: '0 0 10px', fontSize: 12.5 });
 const textarea = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: '1px solid #e4dcd2', borderRadius: 10, fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit', resize: 'vertical', color: '#1c1b1a' };
 const btnSolid = { padding: '8px 16px', background: '#c75b39', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' };

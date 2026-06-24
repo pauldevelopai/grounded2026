@@ -14,7 +14,11 @@ import { harvestTechieray } from './legal-ingest/techieray.js';
 // Regenerate the "Today" AI-governance digest (web-search-backed) for the tracker.
 export async function runGovernanceTodayDigest() {
   const v = await generateGovernanceToday();
-  return { result: `Today digest regenerated (${v.headlines?.length || 0} sources)`, itemsProcessed: 1 };
+  return {
+    result: v ? `Today digest regenerated from the tracker (${v.headlines?.length || 0} items)`
+              : 'No tracked lawsuits/regulations yet — AI-Law briefing left empty',
+    itemsProcessed: v ? 1 : 0,
+  };
 }
 
 // Regenerate the "Today in AI" news briefing for the BE AI READY home. First pulls

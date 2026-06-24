@@ -9,19 +9,20 @@
 // state: if there are no recent items, it returns null rather than inventing news.
 import pool from '../db/pool.js';
 import { callClaude, callClaudeWithWebSearch } from './claude.js';
+import { getBriefingSettings } from './briefing-settings.js';
 
 const KEY = 'ai_news_today';
 
-// The recent newsletter items to brief from: last few days, not rejected,
+// The recent newsletter items to brief from: last `days` days, not rejected,
 // curriculum-relevant first (those are the items the triage flagged as material).
-async function recentItems() {
+async function recentItems(days = 4) {
   const { rows } = await pool.query(
     `SELECT subject, summary, source_url, sender
        FROM newsletter_items
       WHERE is_rejected = false
-        AND received_at >= NOW() - INTERVAL '4 days'
+        AND received_at >= NOW() - ($1 || ' days')::interval
       ORDER BY is_curriculum_relevant DESC, received_at DESC
-      LIMIT 16`).catch(() => ({ rows: [] }));
+      LIMIT 16`, [String(days)]).catch(() => ({ rows: [] }));
   return rows;
 }
 
@@ -53,12 +54,12 @@ function dedupeCitations(cites) {
 // Fallback when no newsletters have been ingested: a LIVE web search for the day's
 // top AI-industry news (products, model releases, company moves, adoption — NOT law,
 // which the governance briefing covers). Returns { findings, headlines } or nulls.
-async function researchTopAINews() {
+async function researchTopAINews(focus) {
+  const what = focus || 'major model/product releases, big company moves, funding, notable launches, and real-world adoption';
   const researchSystem =
     'You are a research assistant for an "AI news" briefing. Use web search to find the most significant ' +
-    'AI-INDUSTRY developments worldwide from the LAST ~5 DAYS — major model/product releases, big company ' +
-    'moves, funding, notable launches, and real-world adoption. Do NOT focus on law/regulation (that is a ' +
-    'separate briefing). Prefer authoritative, recent sources. Never invent; if unsure, leave it out.';
+    `AI-INDUSTRY developments worldwide from the LAST ~5 DAYS — ${what}. Do NOT focus on law/regulation (that ` +
+    'is a separate briefing). Prefer authoritative, recent sources. Never invent; if unsure, leave it out.';
   const researchUser =
     'List the 4–6 most important AI-industry developments from the last ~5 days. For each: one factual line ' +
     '(what, who, when) and the source. Bullet list, facts only — no analysis.';
@@ -67,24 +68,29 @@ async function researchTopAINews() {
 }
 
 export async function generateAINewsToday() {
-  const items = await recentItems();
+  const { ai_news: cfg } = await getBriefingSettings();
+  // 'auto' uses newsletters and only web-searches if none are ingested; 'newsletters'
+  // never web-searches; 'websearch' skips newsletters entirely.
+  const items = cfg.source === 'websearch' ? [] : await recentItems(cfg.days);
 
-  // Prefer the curated newsletters; fall back to a live web search when none have
-  // been ingested, so the briefing always has fresh material (never just empty).
-  let sourceList, headlines, sourceNote;
+  let sourceList, headlines, sourceNote, source;
   if (items.length) {
     sourceList = items.map((it) => {
       const line = (it.summary || it.subject || '').replace(/\s+/g, ' ').trim().slice(0, 280);
       return `- ${line}${it.source_url ? ` (${it.source_url})` : ''}`;
     }).join('\n');
     headlines = dedupeCitations(items.map((it) => ({ title: it.subject || it.sender, url: it.source_url }))).slice(0, 6);
-    sourceNote = 'from curated newsletters';
+    sourceNote = 'from your curated newsletters';
+    source = 'newsletters';
+  } else if (cfg.source === 'newsletters') {
+    return null;   // newsletters-only and none ingested — honest empty (no web fallback)
   } else {
-    const research = await researchTopAINews();
+    const research = await researchTopAINews(cfg.web_focus);
     if (!research.findings) return null;   // truly nothing to report — honest empty
     sourceList = research.findings;
     headlines = dedupeCitations(research.citations).slice(0, 6);
     sourceNote = 'from a live web search of the last few days';
+    source = 'websearch';
   }
 
   const writeSystem =
@@ -101,6 +107,7 @@ export async function generateAINewsToday() {
   const value = {
     summary: sanitizeSummary(text),
     headlines,
+    source,
     generated_at: new Date().toISOString(),
   };
   await pool.query(

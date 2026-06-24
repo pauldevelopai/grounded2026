@@ -7,6 +7,7 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { generateGovernanceToday } from '../services/governance-today.js';
 import { runAINewsTodayDigest } from '../services/background-jobs.js';
+import { getBriefingSettings, setBriefingSettings } from '../services/briefing-settings.js';
 
 const router = Router();
 
@@ -65,6 +66,17 @@ router.post('/:which/refresh', async (req, res) => {
     console.error('[briefings:refresh]', err);
     res.status(500).json({ message: err.message || 'Refresh failed' });
   }
+});
+
+// Source oversight: read + edit where each briefing draws from and its parameters.
+router.get('/settings', async (req, res) => {
+  try { res.json(await getBriefingSettings()); }
+  catch (err) { console.error('[briefings:settings:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/settings', async (req, res) => {
+  try { res.json(await setBriefingSettings(req.body || {})); }
+  catch (err) { console.error('[briefings:settings:put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;
