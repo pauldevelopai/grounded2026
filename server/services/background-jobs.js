@@ -8,6 +8,7 @@ import { startScan, finishScan, updateScan } from './scan-state.js';
 import { runFormsSheetSync } from './forms-sync.js';
 import { generateGovernanceToday } from './governance-today.js';
 import { generateAINewsToday } from './ai-news-today.js';
+import { gmailAiFilter, isAboutAI } from './newsletter-filter.js';
 import { harvestTechieray } from './legal-ingest/techieray.js';
 
 // Regenerate the "Today" AI-governance digest (web-search-backed) for the tracker.
@@ -509,8 +510,11 @@ export async function runNewsletterDigest() {
   const categoryFilter = LABEL_NAME.startsWith('CATEGORY_')
     ? `category:${LABEL_NAME.replace('CATEGORY_', '').toLowerCase()}`
     : `label:${LABEL_NAME}`;
-  const searchQuery = `${categoryFilter} after:${dateStr}`;
+  // AI-only: the Forums tab also holds non-AI group mail, so we only fetch mail that
+  // mentions AI (the second relevance gate below catches passing mentions).
+  const searchQuery = `${categoryFilter} after:${dateStr} ${gmailAiFilter()}`.replace(/\s+/g, ' ').trim();
   const messages = await searchEmails(searchQuery, 30);
+  let skippedNonAi = 0;
 
   for (const msg of messages) {
     // Skip if already processed
@@ -522,6 +526,9 @@ export async function runNewsletterDigest() {
     try {
       const email = await readEmail(msg.id);
       if (!email.body || email.body.length < 50) continue;
+
+      // Relevance gate: only ingest mail that's genuinely ABOUT AI.
+      if (!isAboutAI(email.subject, email.body)) { skippedNonAi++; continue; }
 
       // Classify with Claude
       const classified = await classifyNewsletterContent(email.body, sectorNames);
@@ -597,7 +604,7 @@ export async function runNewsletterDigest() {
     '/newsletter'
   );
 
-  return { result: digestText, itemsProcessed };
+  return { result: `${digestText}${skippedNonAi ? ` · skipped ${skippedNonAi} non-AI` : ''}`, itemsProcessed };
 }
 
 // ── 8. Embedding Backfill ──────────────────────────────────────────────
