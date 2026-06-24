@@ -13,18 +13,24 @@ import { getBriefingSettings } from './briefing-settings.js';
 const KEY = 'governance_today';
 
 // The most-recently-updated tracked lawsuits + regulations — the curated corpus the
-// briefing is written from. Newest first across both, capped at `limit`.
+// briefing is written from. Newest first across both, capped at `limit`. Excludes
+// unvetted auto-added rows (curated by hand, or auto-added then explicitly kept) so
+// the briefing/headlines can never surface a web-sourced fabrication that an admin
+// hasn't reviewed — matching what the public tracker shows.
+const VETTED = "(auto_added = false OR review_status = 'kept')";
 async function recentTrackerItems(limit) {
   const { rows: law } = await pool.query(
     `SELECT case_name AS name, jurisdiction, status, summary, source_url, case_url,
             COALESCE(last_update, updated_at::date) AS dt, 'lawsuit' AS kind
        FROM ai_lawsuits
+      WHERE ${VETTED}
       ORDER BY COALESCE(last_update, updated_at::date) DESC NULLS LAST LIMIT $1`, [limit]
   ).catch(() => ({ rows: [] }));
   const { rows: reg } = await pool.query(
     `SELECT regulation_name AS name, jurisdiction, status, summary, source_url, official_url AS case_url,
             COALESCE(enforcement_date, effective_date, updated_at::date) AS dt, 'regulation' AS kind
        FROM ai_regulations
+      WHERE ${VETTED}
       ORDER BY updated_at DESC NULLS LAST LIMIT $1`, [limit]
   ).catch(() => ({ rows: [] }));
   return [...law, ...reg]

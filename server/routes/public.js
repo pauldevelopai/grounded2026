@@ -71,6 +71,16 @@ const PUBLIC_REG_COLS = `
 // Only these statuses are shown publicly
 const PUBLIC_REG_STATUSES = ['enacted', 'in_force', 'partial_force', 'amended'];
 
+// Auto-added tracker rows (from the old governance web-search ingest) were shown
+// publicly the moment they were created and "pruned if wrong" — but unvetted ones
+// included web-sourced fabrications (e.g. a bogus "export-control suspension"
+// regulation) that surfaced on the public tracker, the home counts, and the AI-Law
+// briefing. Public surfaces now only show a tracker row if it was curated by hand
+// (auto_added = false) or an admin explicitly kept the auto-added one
+// (review_status = 'kept'). Nothing is deleted — unvetted rows stay visible in the
+// admin tracker for review. Columns from migration 103.
+const TRACKER_PUBLIC_SQL = "(auto_added = false OR review_status = 'kept')";
+
 // Columns exposed to the public for lawsuits
 const PUBLIC_LAWSUIT_COLS = `
   id, case_name, plaintiffs, defendants, court, judge, jurisdiction, district, circuit,
@@ -90,7 +100,7 @@ router.get('/regulations', async (req, res) => {
     const offset   = (page - 1) * pageSize;
 
     // Filters are shared by the count query and the data query.
-    const filterParts = [`status = ANY($1::text[])`];
+    const filterParts = [`status = ANY($1::text[])`, TRACKER_PUBLIC_SQL];
     const params = [PUBLIC_REG_STATUSES];
 
     if (status && PUBLIC_REG_STATUSES.includes(status)) {
@@ -211,7 +221,7 @@ router.get('/regulations/recent', async (req, res) => {
 router.get('/regulations/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT ${PUBLIC_REG_COLS} FROM ai_regulations WHERE id = $1 AND status = ANY($2::text[])`,
+      `SELECT ${PUBLIC_REG_COLS} FROM ai_regulations WHERE id = $1 AND status = ANY($2::text[]) AND ${TRACKER_PUBLIC_SQL}`,
       [req.params.id, PUBLIC_REG_STATUSES]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
@@ -259,7 +269,7 @@ router.get('/lawsuits', async (req, res) => {
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
     const offset   = (page - 1) * pageSize;
 
-    const filterParts = ['1=1'];
+    const filterParts = ['1=1', TRACKER_PUBLIC_SQL];
     const params = [];
 
     if (status && status !== 'all') {
@@ -380,7 +390,7 @@ router.get('/lawsuits/recent', async (req, res) => {
 router.get('/lawsuits/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT ${PUBLIC_LAWSUIT_COLS} FROM ai_lawsuits WHERE id = $1`,
+      `SELECT ${PUBLIC_LAWSUIT_COLS} FROM ai_lawsuits WHERE id = $1 AND ${TRACKER_PUBLIC_SQL}`,
       [req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
@@ -636,6 +646,7 @@ router.post('/chat', chatCors, async (req, res) => {
                   ts_rank(search_tsv, websearch_to_tsquery('english', $1)) AS rank
              FROM ai_lawsuits
             WHERE search_tsv @@ websearch_to_tsquery('english', $1)
+              AND ${TRACKER_PUBLIC_SQL}
             ORDER BY rank DESC
             LIMIT 4`,
           [ftsQuery]
@@ -658,7 +669,8 @@ router.post('/chat', chatCors, async (req, res) => {
                   CASE WHEN filing_date IS NOT NULL THEN 'filed ' || filing_date::text ELSE NULL END AS dates,
                   summary
              FROM ai_lawsuits
-            WHERE ${ors}
+            WHERE (${ors})
+              AND ${TRACKER_PUBLIC_SQL}
             ORDER BY updated_at DESC
             LIMIT 4`,
           params
@@ -677,6 +689,7 @@ router.post('/chat', chatCors, async (req, res) => {
            FROM ai_regulations
           WHERE search_tsv @@ websearch_to_tsquery('english', $1)
             AND status = ANY($2::text[])
+            AND ${TRACKER_PUBLIC_SQL}
           ORDER BY rank DESC
           LIMIT 3`,
         [ftsQuery, PUBLIC_REG_STATUSES]
@@ -702,6 +715,7 @@ router.post('/chat', chatCors, async (req, res) => {
            FROM ai_regulations
           WHERE (${ors})
             AND status = ANY($${params.length}::text[])
+            AND ${TRACKER_PUBLIC_SQL}
           ORDER BY updated_at DESC
           LIMIT 3`,
         params
@@ -1445,16 +1459,16 @@ router.get('/overview', async (req, res) => {
   const list = async (sql, p = []) => { try { const { rows } = await pool.query(sql, p); return rows; } catch { return []; } };
   try {
     const [lawsuitsCount, regsCount, useCasesCount, ethicsCount] = await Promise.all([
-      n(`SELECT count(*)::int n FROM ai_lawsuits`),
-      n(`SELECT count(*)::int n FROM ai_regulations WHERE status = ANY($1::text[])`, [PUBLIC_REG_STATUSES]),
+      n(`SELECT count(*)::int n FROM ai_lawsuits WHERE ${TRACKER_PUBLIC_SQL}`),
+      n(`SELECT count(*)::int n FROM ai_regulations WHERE status = ANY($1::text[]) AND ${TRACKER_PUBLIC_SQL}`, [PUBLIC_REG_STATUSES]),
       n(`SELECT count(*)::int n FROM ai_legal_usecases WHERE is_published = true`),
       n(`SELECT count(*)::int n FROM ethics_items WHERE status = 'published'`),
     ]);
     const [lawsuits, regulations, useCases, ethics] = await Promise.all([
       list(`SELECT id, case_name, jurisdiction, status, case_type, summary, updated_at
-              FROM ai_lawsuits ORDER BY updated_at DESC NULLS LAST LIMIT 6`),
+              FROM ai_lawsuits WHERE ${TRACKER_PUBLIC_SQL} ORDER BY updated_at DESC NULLS LAST LIMIT 6`),
       list(`SELECT id, COALESCE(short_name, regulation_name) AS title, jurisdiction, status, summary, updated_at
-              FROM ai_regulations WHERE status = ANY($1::text[]) ORDER BY updated_at DESC NULLS LAST LIMIT 6`, [PUBLIC_REG_STATUSES]),
+              FROM ai_regulations WHERE status = ANY($1::text[]) AND ${TRACKER_PUBLIC_SQL} ORDER BY updated_at DESC NULLS LAST LIMIT 6`, [PUBLIC_REG_STATUSES]),
       list(`SELECT id, firm_name, jurisdiction, use_case_title, summary, COALESCE(published_at, updated_at) AS updated_at
               FROM ai_legal_usecases WHERE is_published = true ORDER BY COALESCE(published_at, updated_at) DESC NULLS LAST LIMIT 6`),
       list(`SELECT id, topic, item_type, title, summary, url, source_name, COALESCE(published_at, created_at) AS updated_at

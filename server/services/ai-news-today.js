@@ -53,15 +53,25 @@ function dedupeCitations(cites) {
 
 // Fallback when no newsletters have been ingested: a LIVE web search for the day's
 // top AI-industry news (products, model releases, company moves, adoption — NOT law,
-// which the governance briefing covers). Returns { findings, headlines } or nulls.
-// Reputable outlets + official company blogs that allow Anthropic's search crawler
-// (many big news sites — Reuters, AP, FT, the Verge, Wired — BLOCK it, and including
-// a blocked domain 400s the whole call, so they're left out). Restricting to these
-// is what stops AI-generated / speculative "news" sites producing fabricated stories
-// (e.g. the invented "Claude Fable 5 export-control / double pricing" item).
+// which the governance briefing covers). Returns { findings, citations }.
+//
+// CREDIBILITY IS NON-NEGOTIABLE: the search is bound to a fixed allow-list of
+// reputable outlets + official company blogs. There is NO open-web fallback — an
+// open search is exactly what produced the fabricated "Claude Fable 5 export-control
+// / double pricing" item and junk-aggregator headlines (listicles, "devFlo"), by
+// letting AI-generated and speculative sites into the results. If the allow-list
+// call fails (a listed domain blocks Anthropic's crawler → the whole call 400s), we
+// retry against official company blogs only (the safest, always-crawlable subset),
+// and if THAT fails we return nothing — an honest empty briefing, never a guess.
+// (Hard-paywalled outlets like Bloomberg / The Information are deliberately omitted
+// because they tend to block the crawler and would 400 the primary call.)
 const RELIABLE_AI_DOMAINS = [
-  'techcrunch.com', 'technologyreview.com', 'venturebeat.com', 'axios.com', 'theinformation.com',
-  'engadget.com', 'bloomberg.com', 'cnbc.com', 'semafor.com', 'theregister.com',
+  'techcrunch.com', 'technologyreview.com', 'venturebeat.com', 'axios.com',
+  'engadget.com', 'cnbc.com', 'semafor.com', 'theregister.com',
+  'anthropic.com', 'openai.com', 'blog.google', 'deepmind.google', 'microsoft.com', 'ai.meta.com', 'mistral.ai', 'nvidia.com', 'huggingface.co',
+];
+// Official primary sources only — used as the safe retry; these don't fabricate.
+const OFFICIAL_BLOG_DOMAINS = [
   'anthropic.com', 'openai.com', 'blog.google', 'deepmind.google', 'microsoft.com', 'ai.meta.com', 'mistral.ai', 'nvidia.com', 'huggingface.co',
 ];
 
@@ -79,12 +89,18 @@ async function researchTopAINews(focus) {
     'line (what, who, when) and the source URL. Bullet list, facts only — nothing you cannot cite.';
   const call = (allowedDomains) => callClaudeWithWebSearch({ system: researchSystem, userContent: researchUser, maxTokens: 1200, maxUses: 6, allowedDomains });
   let r;
-  try { r = await call(RELIABLE_AI_DOMAINS); }
-  catch (e) {
-    // A domain that blocks the crawler 400s the whole request — fall back to an
-    // open search (still bound by the strict prompt) so the briefing never dies.
-    console.warn('[ai-news:research] allowlist search failed, retrying open:', e.message);
-    r = await call(null);
+  try {
+    r = await call(RELIABLE_AI_DOMAINS);
+  } catch (e) {
+    // A listed domain that blocks the crawler 400s the whole request. Retry against
+    // official company blogs only (always crawlable) — NEVER an open search.
+    console.warn('[ai-news:research] allow-list search failed, retrying official blogs only:', e.message);
+    try {
+      r = await call(OFFICIAL_BLOG_DOMAINS);
+    } catch (e2) {
+      console.error('[ai-news:research] official-blogs search also failed — honest empty:', e2.message);
+      return { findings: '', citations: [] };
+    }
   }
   return { findings: (r.text || '').trim(), citations: r.citations || [] };
 }
