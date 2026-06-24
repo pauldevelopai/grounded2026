@@ -68,6 +68,8 @@ import knowhowRoutes from './routes/knowhow.js';
 import knowhowPublicRoutes from './routes/knowhow-public.js';
 import { requirePulse } from './middleware/pulse-flag.js';
 import { startScheduler } from './services/scheduler.js';
+import { getAINewsToday, generateAINewsToday } from './services/ai-news-today.js';
+import { getGovernanceToday, generateGovernanceToday } from './services/governance-today.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
 
@@ -407,7 +409,28 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Internal server error' });
 });
 
+// If the home "Today in AI" briefings have no cached value (e.g. just after a
+// deploy that purged a stale/fabricated cache), regenerate them once so the front
+// page is up to date without waiting for the daily job or a manual refresh. Fire-
+// and-forget + guarded: it only runs when a briefing is actually empty, never
+// blocks boot, and the generators themselves no-op (return null) when there's
+// nothing real to report — so this can't put invented content back.
+async function selfHealBriefings() {
+  try {
+    if (!(await getAINewsToday())) {
+      generateAINewsToday().then((v) => v && console.log('[boot] AI-news briefing regenerated')).catch((e) => console.warn('[boot] AI-news regen skipped:', e.message));
+    }
+  } catch (e) { console.warn('[boot] AI-news check failed:', e.message); }
+  try {
+    if (!(await getGovernanceToday())) {
+      generateGovernanceToday().then((v) => v && console.log('[boot] AI-law briefing regenerated')).catch((e) => console.warn('[boot] AI-law regen skipped:', e.message));
+    }
+  } catch (e) { console.warn('[boot] AI-law check failed:', e.message); }
+}
+
 app.listen(config.port, () => {
   console.log(`Tracker server running on port ${config.port}`);
   startScheduler();
+  // Defer slightly so boot/DB is fully settled; non-blocking.
+  setTimeout(() => { selfHealBriefings(); }, 4000);
 });
