@@ -79,6 +79,7 @@ import PulseOverview from './pages/pulse/PulseOverview.jsx';
 import PulseCycleDetail from './pages/pulse/PulseCycleDetail.jsx';
 import PulseNewsroomDetail from './pages/pulse/PulseNewsroomDetail.jsx';
 import PulseAnswer from './pages/pulse/PulseAnswer.jsx';
+import KnowHowAnswer from './pages/knowhow/KnowHowAnswer.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
@@ -106,6 +107,7 @@ import BeAIReadyAdminTraining from './pages/beaiready/admin/BeAIReadyAdminTraini
 import BeAIReadyAdminPrompts from './pages/beaiready/admin/BeAIReadyAdminPrompts.jsx';
 import BeAIReadyAdminData from './pages/beaiready/admin/BeAIReadyAdminData.jsx';
 import BeAIReadyAdminBriefings from './pages/beaiready/admin/BeAIReadyAdminBriefings.jsx';
+import BeAIReadyAdminKnowHow from './pages/beaiready/admin/BeAIReadyAdminKnowHow.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
 import BeAIReadyToolboxFinder from './pages/beaiready/BeAIReadyToolboxFinder.jsx';
@@ -185,6 +187,8 @@ export default function App() {
           <Route path="/_preview" element={<Navigate to="/sections" replace />} />
           {/* Pulse public answer page — newsroom-facing, no login (Phase 4). */}
           <Route path="/pulse/:token" element={<PulseAnswer />} />
+          {/* KnowHow public answer page — employee-facing capture, no login (token-gated). */}
+          <Route path="/knowhow/:token" element={<KnowHowAnswer />} />
 
           {/* ── Public site root (/) — PublicShell + home pick the door by host
               (grounded.* → PublicLayout/PublicHome; beaiready.* → the BE AI READY
@@ -283,6 +287,7 @@ export default function App() {
                   <Route path="/admin/training" element={<BeAIReadyAdminTraining />} />
                   <Route path="/admin/prompts" element={<BeAIReadyAdminPrompts />} />
                   <Route path="/admin/briefings" element={<BeAIReadyAdminBriefings />} />
+                  <Route path="/admin/knowhow" element={<BeAIReadyAdminKnowHow />} />
                   <Route path="/admin/data" element={<BeAIReadyAdminData />} />
                   <Route path="/admin/models" element={<BeAIReadyAdminModels />} />
                 </Route>

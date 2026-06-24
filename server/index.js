@@ -64,6 +64,8 @@ import bairScoreRoutes from './routes/bair-score.js';
 import bairIntakeRoutes from './routes/bair-intake.js';
 import pulseRoutes from './routes/pulse.js';
 import pulsePublicRoutes from './routes/pulse-public.js';
+import knowhowRoutes from './routes/knowhow.js';
+import knowhowPublicRoutes from './routes/knowhow-public.js';
 import { requirePulse } from './middleware/pulse-flag.js';
 import { startScheduler } from './services/scheduler.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
@@ -342,6 +344,10 @@ app.get('/api/pulse/status', (req, res) => res.json({ enabled: config.pulseEnabl
 app.use('/api/pulse/public', requirePulse, pulsePublicRoutes);
 app.use('/api/pulse', requirePulse, requireAuth, requireRole('admin'), pulseRoutes);
 
+// KnowHow capture (its own product, not gated by the Pulse flag). The public
+// answer surface is token-gated only; the admin surface joins the admin router below.
+app.use('/api/knowhow/public', knowhowPublicRoutes);
+
 // ── Admin-only endpoints ───────────────────────────────────────────────────────
 // All routes below this point require role = 'admin'.
 const admin = express.Router();
@@ -376,6 +382,7 @@ admin.use('/tracker-review',       trackerReviewRoutes);
 admin.use('/intelligence',         intelligenceRoutes);
 admin.use('/newsletter',           newsletterRoutes);
 admin.use('/briefings',            briefingsRoutes);
+admin.use('/knowhow',              knowhowRoutes);
 admin.use('/learning-outcomes',    learningOutcomeRoutes);
 admin.use('/learning-tasks',       learningTaskRoutes);
 admin.use('/learning-journeys',    sectorFilter, learningJourneyRoutes);

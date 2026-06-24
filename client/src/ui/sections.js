@@ -57,7 +57,7 @@ export const SECTIONS = [
     functions: [
       { name: 'Pulse',              key: 'pulse',      status: 'partial', runs: 'online', to: '/admin/pulse', blurb: 'Quick check-in questions to each newsroom; surfaces real needs and feeds active development.' },
       { name: 'Courses & Manuals',  key: 'courses',    status: 'soon',    runs: 'online', to: null, blurb: 'A newsroom-facing library of manuals and video courses for AI implementation, ethics and management.' },
-      { name: 'BetterBoss',         key: 'betterboss', status: 'soon',    runs: 'online', to: null, blurb: 'Clone an editor’s expertise in a field and use it to train junior staff.' },
+      { name: 'KnowHow',            key: 'knowhow',    status: 'soon',    runs: 'online', to: null, blurb: 'Capture the institutional knowledge in your team’s heads into a living, consent-scoped corpus — then an AI guide that coaches juniors. (Replaces BetterBoss; capture engine is live, GROUNDED surface next.)' },
     ],
   },
   {

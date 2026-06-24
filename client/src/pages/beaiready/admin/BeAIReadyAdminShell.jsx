@@ -16,6 +16,7 @@ const NAV = [
   { to: '/admin/training', label: 'Training & Strategy' },
   { to: '/admin/prompts', label: 'Prompt library' },
   { to: '/admin/briefings', label: 'Briefings' },
+  { to: '/admin/knowhow', label: 'KnowHow' },
   { to: '/admin/data', label: 'Data' },
   { to: '/admin/models', label: 'Models' },
 ];
