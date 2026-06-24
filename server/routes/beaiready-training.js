@@ -138,7 +138,9 @@ router.get('/agendas', async (req, res) => {
       `SELECT id, newsroom_id, title, scheduled_for, location, status, notes, created_at, updated_at,
               doc_kind, doc_url, doc_name, doc_file_id, doc_synced_at, (doc_synced_text IS NOT NULL) AS doc_synced,
               (SELECT COALESCE(json_agg(json_build_object('id', ud.id, 'name', ud.original_name, 'size', ud.file_size) ORDER BY ud.created_at), '[]'::json)
-                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_agenda_file' AND ud.entity_id = training_agendas.id) AS files
+                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_agenda_file' AND ud.entity_id = training_agendas.id) AS files,
+              (SELECT COALESCE(json_agg(json_build_object('id', ud.id, 'name', ud.original_name, 'size', ud.file_size) ORDER BY ud.created_at), '[]'::json)
+                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_report_file' AND ud.entity_id = training_agendas.id) AS reports
          FROM training_agendas WHERE newsroom_id = $1 ${pub} ORDER BY scheduled_for DESC NULLS LAST, created_at DESC`, [newsroomId]);
     for (const a of agendas) {
       const { rows: items } = await pool.query(
@@ -355,6 +357,7 @@ router.delete('/materials/:id', requireRole('admin'), async (req, res) => {
 // parent (agenda/material) is published.
 const FILE_SCOPES = {
   training_agenda_file:   { table: 'training_agendas',   pub: "status = 'published'" },
+  training_report_file:   { table: 'training_agendas',   pub: "status = 'published'" },
   training_material_file: { table: 'training_materials', pub: 'published = true' },
 };
 

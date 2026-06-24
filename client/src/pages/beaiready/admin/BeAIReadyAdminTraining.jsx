@@ -339,11 +339,11 @@ function AgendaSection({ clientId, setErr }) {
         {/* Documents (optional) — the agenda PDF, a training report, handouts. Add as
             many as you like; a Google Doc link can go here too. All show in the portal. */}
         <div style={{ borderTop: '1px solid #f0ebe3', paddingTop: 8, display: 'grid', gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>Documents (optional) — the agenda PDF, a training report, handouts. Add as many as you like.</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>Agenda document(s) (optional) — the agenda PDF + handouts. (The training report is added on the agenda once it’s created.)</div>
           <input value={draft.gdocUrl} onChange={(e) => setDraft({ ...draft, gdocUrl: e.target.value })} placeholder="Google Doc link (set to ‘anyone with the link’) — optional" style={inp} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ ...tag, cursor: 'pointer' }}>
-              {pendingFiles.length ? `${pendingFiles.length} file${pendingFiles.length === 1 ? '' : 's'} — add more` : '+ Attach PDF(s) (agenda, report, handouts)'}
+              {pendingFiles.length ? `${pendingFiles.length} file${pendingFiles.length === 1 ? '' : 's'} — add more` : '+ Attach agenda PDF(s)'}
               <input type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" multiple style={{ display: 'none' }}
                 onChange={(e) => { setPendingFiles((p) => [...p, ...Array.from(e.target.files || [])]); e.target.value = ''; }} />
             </label>
@@ -432,13 +432,16 @@ function AgendaCard({ agenda, api, clientId, onChanged, setErr }) {
           )}
         </div>
       )}
-      {/* Extra documents beyond the primary one — a second agenda PDF, the training
-          report, handouts. Add as many as needed; each shows in the client's portal. */}
+      {/* Two SEPARATE document areas: the agenda itself, and the post-training report.
+          Both show (separately) in the client's portal. */}
       {!edit && (
-        <div style={{ marginTop: 10, borderTop: '1px solid #f0ebe3', paddingTop: 10 }}>
+        <div style={{ marginTop: 10, borderTop: '1px solid #f0ebe3', paddingTop: 10, display: 'grid', gap: 14 }}>
           <Attachments entityType="training_agenda_file" entityId={agenda.id} files={agenda.files}
             clientId={clientId} onChanged={onChanged} setErr={setErr}
-            label="More documents — second agenda PDF, training report, handouts (add as many as you need)" />
+            label="📋 Agenda documents — the agenda PDF + any handouts" />
+          <Attachments entityType="training_report_file" entityId={agenda.id} files={agenda.reports}
+            clientId={clientId} onChanged={onChanged} setErr={setErr}
+            label="📝 Training report — the post-training write-up (kept separate from the agenda)" />
         </div>
       )}
       {edit && (

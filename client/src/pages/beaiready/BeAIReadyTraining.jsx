@@ -88,7 +88,18 @@ function TrainingRecord() {
                     </a>
                   </p>
                 )}
-                <FileLinks files={a.files} />
+                {a.files?.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={docLabel}>Agenda documents</div>
+                    <FileLinks files={a.files} />
+                  </div>
+                )}
+                {a.reports?.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={docLabel}>Training report</div>
+                    <FileLinks files={a.reports} />
+                  </div>
+                )}
                 {/* Materials linked to this training. */}
                 {(() => {
                   const mats = (myMaterials || []).filter((m) => m.agenda_id === a.id);
@@ -184,6 +195,8 @@ function TrainingRecord() {
     </>
   );
 }
+
+const docLabel = { fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076' };
 
 // Download links for an agenda's / material's attached files (tenant-scoped server-side).
 function FileLinks({ files }) {
