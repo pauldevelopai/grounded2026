@@ -283,34 +283,41 @@ function AgendaSection({ clientId, setErr }) {
   const api = useApi(clientId);
   const [agendas, setAgendas] = useState(null);
   const [draft, setDraft] = useState({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' });
-  const [pdfFile, setPdfFile] = useState(null);
-  const [fileKey, setFileKey] = useState(0);   // bump to clear the file input
+  const [pendingFiles, setPendingFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const load = useCallback(() => { api('/beaiready/training/agendas').then(setAgendas).catch((e) => setErr(e.message)); }, [api, setErr]);
   useEffect(() => { setAgendas(null); load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault();
-    if (!draft.title.trim()) return; setErr(''); setBusy(true);
+    if (!draft.title.trim()) { setErr('Enter an agenda title first.'); return; }
+    setErr(''); setBusy(true);
     let a;
     try {
       a = await api('/beaiready/training/agendas', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, title: draft.title, scheduled_for: draft.scheduled_for || null, location: draft.location || null, items: textToItems(draft.items) }) });
     } catch (e) { setErr(`Couldn't create the agenda: ${e.message}`); setBusy(false); return; }
-    // Agenda created — attach the optional document, but never lose the agenda if that step fails.
-    try {
-      if (draft.gdocUrl.trim()) {
-        await api(`/beaiready/training/agendas/${a.id}/doc/google`, { method: 'POST', body: JSON.stringify({ doc_url: draft.gdocUrl.trim() }) });
-      } else if (pdfFile) {
-        const fd = new FormData();
-        fd.append('entity_type', 'training_agenda');   // must precede the file (multer reads fields in order)
-        fd.append('file', pdfFile);
-        const res = await fetch(`/api/beaiready/training/agendas/${a.id}/doc/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
-        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || `upload failed (HTTP ${res.status})`); }
-      }
-    } catch (docErr) {
-      setErr(`Agenda created — but the document didn't attach: ${docErr.message}. Add it under “More documents” on the agenda below.`);
+    // The agenda exists now — capture the documents, clear the form, and SHOW it
+    // immediately. Documents attach afterwards (best-effort) so a slow/failed file
+    // never blocks the agenda from appearing.
+    const files = pendingFiles;
+    const gdoc = draft.gdocUrl.trim();
+    setDraft({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' });
+    setPendingFiles([]);
+    load();
+    const problems = [];
+    if (gdoc) {
+      try { await api(`/beaiready/training/agendas/${a.id}/doc/google`, { method: 'POST', body: JSON.stringify({ doc_url: gdoc }) }); }
+      catch (e) { problems.push(`Google Doc: ${e.message}`); }
     }
-    setDraft({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' }); setPdfFile(null); setFileKey((k) => k + 1); load();
+    for (const file of files) {
+      try {
+        const fd = new FormData(); fd.append('entity_type', 'training_agenda_file'); fd.append('entity_id', a.id); fd.append('file', file);
+        const res = await fetch('/api/beaiready/training/files', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
+        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || `HTTP ${res.status}`); }
+      } catch (e) { problems.push(`${file.name}: ${e.message}`); }
+    }
+    if (problems.length) setErr(`Agenda created — but some documents didn't attach: ${problems.join('; ')}. Add them under “Documents” on the agenda below.`);
+    load();
     setBusy(false);
   };
 
@@ -328,16 +335,21 @@ function AgendaSection({ clientId, setErr }) {
           <input value={draft.location} onChange={(e) => setDraft({ ...draft, location: e.target.value })} placeholder="Location" style={inp} />
         </div>
         <textarea value={draft.items} onChange={(e) => setDraft({ ...draft, items: e.target.value })} placeholder={'One item per line:  09:00 | Topic | detail (optional if you attach a doc)'} style={{ ...inp, minHeight: 64 }} />
-        {/* Optional document — a Google Doc (re-syncable) OR an uploaded PDF (mutually exclusive). */}
+        {/* Documents (optional) — the agenda PDF, a training report, handouts. Add as
+            many as you like; a Google Doc link can go here too. All show in the portal. */}
         <div style={{ borderTop: '1px solid #f0ebe3', paddingTop: 8, display: 'grid', gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>Attach a document (optional) — a Google Doc or a PDF. Shows in the client's portal.</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input value={draft.gdocUrl} onChange={(e) => setDraft({ ...draft, gdocUrl: e.target.value })} placeholder="Google Doc link (set to ‘anyone with the link’)" style={{ ...inp, minWidth: 240, flex: 1 }} disabled={!!pdfFile} />
-            <label style={{ ...tag, cursor: pdfFile || draft.gdocUrl.trim() ? 'default' : 'pointer', opacity: draft.gdocUrl.trim() ? 0.5 : 1 }}>
-              {pdfFile ? `PDF: ${pdfFile.name.slice(0, 22)}` : 'Choose PDF'}
-              <input key={fileKey} type="file" accept="application/pdf" style={{ display: 'none' }} disabled={!!draft.gdocUrl.trim()} onChange={(e) => setPdfFile(e.target.files?.[0] || null)} />
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>Documents (optional) — the agenda PDF, a training report, handouts. Add as many as you like.</div>
+          <input value={draft.gdocUrl} onChange={(e) => setDraft({ ...draft, gdocUrl: e.target.value })} placeholder="Google Doc link (set to ‘anyone with the link’) — optional" style={inp} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ ...tag, cursor: 'pointer' }}>
+              {pendingFiles.length ? `${pendingFiles.length} file${pendingFiles.length === 1 ? '' : 's'} — add more` : '+ Attach PDF(s) (agenda, report, handouts)'}
+              <input type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" multiple style={{ display: 'none' }}
+                onChange={(e) => { setPendingFiles((p) => [...p, ...Array.from(e.target.files || [])]); e.target.value = ''; }} />
             </label>
-            {pdfFile && <button type="button" onClick={() => { setPdfFile(null); setFileKey((k) => k + 1); }} style={tag}>Clear</button>}
+            {pendingFiles.length > 0 && (
+              <span style={{ fontSize: 12, color: '#6b6359' }}>{pendingFiles.map((f) => f.name).join(', ')}
+                {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button></span>
+            )}
           </div>
         </div>
         <button type="submit" disabled={busy} style={{ ...btn, justifySelf: 'start' }}>{busy ? 'Adding…' : 'Add agenda'}</button>
