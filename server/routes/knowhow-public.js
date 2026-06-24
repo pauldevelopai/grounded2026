@@ -6,13 +6,25 @@
 // stored without consent.
 import { Router } from 'express';
 import pool from '../db/pool.js';
-import { addCorpusItem } from '../knowhow/corpus.js';
+import { addCorpusItem, corpusSummary } from '../knowhow/corpus.js';
+import { askCorpus } from '../knowhow/agent.js';
 
 const router = Router();
 const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
   console.error('[knowhow-public]', err);
   res.status(500).json({ message: 'Something went wrong' });
 });
+
+// Light per-token hourly throttle for the public ask surface (each ask is a model
+// call). In-memory; resets on restart — fine at this scale. The token is the gate.
+const askThrottle = new Map();
+function askTooMany(token, cap = 60) {
+  const hour = Math.floor(Date.now() / 3600000);
+  const e = askThrottle.get(token);
+  if (!e || e.hour !== hour) { askThrottle.set(token, { hour, count: 1 }); return false; }
+  e.count += 1;
+  return e.count > cap;
+}
 
 async function promptsForToken(token) {
   const { rows } = await pool.query(
@@ -87,6 +99,35 @@ router.post('/answer', wrap(async (req, res) => {
     res.json({ ok: true, stored });
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
+}));
+
+// ── Junior-facing ASK surface (login-free, token-gated) ──────────────────────
+async function tenantByAskToken(token) {
+  const { rows } = await pool.query('SELECT id, name FROM knowhow.tenants WHERE ask_token = $1', [token]);
+  return rows[0] || null;
+}
+
+// Validate a team ask-link + report whether there's anything to draw on.
+router.get('/ask/:token', wrap(async (req, res) => {
+  const t = await tenantByAskToken(req.params.token);
+  if (!t) return res.status(404).json({ message: 'This link is not valid.' });
+  const sum = await corpusSummary(pool, t.id);
+  res.json({ tenant: t.name, hasCorpus: sum.pieces > 0 });
+}));
+
+// Ask the corpus from the junior surface. Defaults to coaching mode; grounded +
+// cited, honest decline when not covered (same agent as the admin ask).
+router.post('/ask', wrap(async (req, res) => {
+  const { token, question, mode } = req.body || {};
+  if (!token) return res.status(400).json({ message: 'This link is not valid.' });
+  const t = await tenantByAskToken(token);
+  if (!t) return res.status(404).json({ message: 'This link is not valid.' });
+  if (askTooMany(token)) return res.status(429).json({ message: 'That’s a lot of questions in a short time — give it a minute and try again.' });
+  const q = String(question || '').trim();
+  if (!q) return res.status(400).json({ message: 'Ask a question first.' });
+  if (q.length > 1000) return res.status(400).json({ message: 'That question is a bit long — try shortening it.' });
+  const out = await askCorpus({ id: t.id, name: t.name }, { question: q, mode: mode === 'answer' ? 'answer' : 'coach' });
+  res.json(out);
 }));
 
 export default router;

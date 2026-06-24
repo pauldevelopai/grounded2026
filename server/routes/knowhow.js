@@ -37,6 +37,16 @@ router.post('/tenants', wrap(async (req, res) => {
   res.status(201).json(rows[0]);
 }));
 
+// Generate (or rotate) the login-free team ask-link token, so juniors can ask the
+// corpus without an admin login. One link per tenant; rotating invalidates the old.
+router.post('/tenants/:tid/ask-token', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  const token = publicToken();
+  const { rows } = await pool.query('UPDATE knowhow.tenants SET ask_token=$2 WHERE id=$1 RETURNING ask_token', [t.id, token]);
+  res.json({ ask_token: rows[0].ask_token, path: `/knowhow/ask/${rows[0].ask_token}` });
+}));
+
 // A tenant's full capture picture: people, topics, prompts, responses count, corpus summary.
 router.get('/tenants/:tid/overview', wrap(async (req, res) => {
   const t = await tenant(req.params.tid);

@@ -80,6 +80,7 @@ import PulseCycleDetail from './pages/pulse/PulseCycleDetail.jsx';
 import PulseNewsroomDetail from './pages/pulse/PulseNewsroomDetail.jsx';
 import PulseAnswer from './pages/pulse/PulseAnswer.jsx';
 import KnowHowAnswer from './pages/knowhow/KnowHowAnswer.jsx';
+import KnowHowAsk from './pages/knowhow/KnowHowAsk.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
@@ -187,6 +188,9 @@ export default function App() {
           <Route path="/_preview" element={<Navigate to="/sections" replace />} />
           {/* Pulse public answer page — newsroom-facing, no login (Phase 4). */}
           <Route path="/pulse/:token" element={<PulseAnswer />} />
+          {/* KnowHow junior-facing ask/coach page — no login (team ask-link). More
+              specific than /knowhow/:token, so it's registered first. */}
+          <Route path="/knowhow/ask/:token" element={<KnowHowAsk />} />
           {/* KnowHow public answer page — employee-facing capture, no login (token-gated). */}
           <Route path="/knowhow/:token" element={<KnowHowAnswer />} />
 

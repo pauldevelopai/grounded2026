@@ -69,6 +69,7 @@ export default function BeAIReadyAdminKnowHow() {
       )}
 
       {ov && <AskCorpus tid={tid} topics={ov.topics} hasCorpus={ov.corpus.pieces > 0} fail={fail} />}
+      {ov && <TeamLink tid={tid} askToken={ov.tenant?.ask_token} reload={() => load(tid)} flash={flash} fail={fail} />}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
         {ov && <People tid={tid} people={ov.people} reload={() => load(tid)} flash={flash} fail={fail} />}
@@ -88,6 +89,37 @@ function Stat({ n, label }) {
       <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, color: '#e08a64' }}>{n ?? 0}</div>
       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#9a9087', marginTop: 3 }}>{label}</div>
     </div>
+  );
+}
+
+function TeamLink({ tid, askToken, reload, flash, fail }) {
+  const [busy, setBusy] = useState(false);
+  const url = askToken ? `${window.location.origin}/knowhow/ask/${askToken}` : '';
+  const make = async () => {
+    setBusy(true);
+    try { await apiFetch(`/knowhow/tenants/${tid}/ask-token`, { method: 'POST' }); flash(askToken ? 'New link created (old one no longer works)' : 'Team ask-link created'); reload(); }
+    catch (e) { fail(e); }
+    setBusy(false);
+  };
+  return (
+    <section style={{ ...card, marginBottom: 18, background: '#faf8f5' }}>
+      <h2 style={h2}>Share with your team</h2>
+      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 10px', maxWidth: '66ch' }}>
+        A login-free link your team can use to ask KnowHow and get coached from the captured knowledge — no
+        account needed. Anyone with the link can ask, so share it within the team only.
+      </p>
+      {url ? (
+        <>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input readOnly value={url} style={{ ...inp, flex: 1 }} onFocus={(e) => e.target.select()} />
+            <button style={btn} onClick={() => { navigator.clipboard?.writeText(url); flash('Copied'); }}>Copy</button>
+          </div>
+          <button style={{ ...linkBtn, marginTop: 8, color: '#a89e92' }} onClick={make} disabled={busy}>{busy ? 'Rotating…' : 'Rotate link (invalidates the old one)'}</button>
+        </>
+      ) : (
+        <button style={btn} onClick={make} disabled={busy}>{busy ? 'Creating…' : 'Create team ask-link'}</button>
+      )}
+    </section>
   );
 }
 
