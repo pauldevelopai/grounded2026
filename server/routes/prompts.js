@@ -11,13 +11,13 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
-import { resolveNewsroomId } from '../lib/tenancy.js';
+import { resolveNewsroomId, OFFICE_NEWSROOM_ID } from '../lib/tenancy.js';
 
 const router = Router();
 
 const TASK_TYPES = ['extract', 'summarise', 'draft', 'research', 'format', 'other'];
 const ROLES = ['researcher', 'boq_processor', 'admin', 'finance', 'it', 'general'];
-const SOURCES = ['vendor', 'wharton', 'develop_ai', 'user_promoted'];
+const SOURCES = ['vendor', 'wharton', 'develop_ai', 'user_promoted', 'client'];
 const MODELS = { claude: 'Claude', gpt: 'ChatGPT', gemini: 'Gemini', copilot: 'Copilot', meta: 'Meta AI', other: 'Other' };
 
 const cleanRoles = (roles) => (Array.isArray(roles) ? roles.filter((r) => ROLES.includes(r)) : []);
@@ -58,7 +58,9 @@ router.get('/prompts/:id', async (req, res) => {
   try {
     const newsroomId = await resolveNewsroomId(req);
     const { rows } = await pool.query(
-      `SELECT * FROM prompts WHERE id = $1 AND (newsroom_id IS NULL OR newsroom_id = $2)`,
+      `SELECT p.*, eb.name AS updated_by_name
+         FROM prompts p LEFT JOIN team_members eb ON eb.id = p.updated_by
+        WHERE p.id = $1 AND (p.newsroom_id IS NULL OR p.newsroom_id = $2)`,
       [req.params.id, newsroomId]
     );
     if (!rows.length) return res.status(404).json({ message: 'Prompt not found' });
@@ -128,6 +130,58 @@ router.delete('/prompts/:id', requireRole('admin'), async (req, res) => {
     if (!rowCount) return res.status(404).json({ message: 'Prompt not found' });
     res.json({ deleted: true });
   } catch (err) { console.error('[prompts:delete]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Company prompt wiki (any member of a company can add + edit; shared) ─────
+// A company prompt is scoped to the caller's newsroom. Global prompts (ours) stay
+// read-only to members; only the company's OWN prompts are editable here.
+router.post('/prompts/company', async (req, res) => {
+  try {
+    const newsroomId = await resolveNewsroomId(req);
+    if (!newsroomId || newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'You need to belong to a company to add a company prompt.' });
+    const b = req.body || {};
+    if (!b.title?.trim() || !b.body?.trim()) return res.status(400).json({ message: 'title and body are required' });
+    if (b.task_type && !TASK_TYPES.includes(b.task_type)) return res.status(400).json({ message: `task_type must be one of: ${TASK_TYPES.join(', ')}` });
+    const { rows } = await pool.query(
+      `INSERT INTO prompts (newsroom_id, title, body, description, task_type, roles, source, validation_status, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,COALESCE($5,'other'),$6,'client','draft',$7,$7) RETURNING *`,
+      [newsroomId, b.title, b.body, b.description || null, b.task_type || null, JSON.stringify(cleanRoles(b.roles)), req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[prompts:company:create]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/prompts/company/:id', async (req, res) => {
+  try {
+    const newsroomId = await resolveNewsroomId(req);
+    const b = req.body || {};
+    if (b.task_type && !TASK_TYPES.includes(b.task_type)) return res.status(400).json({ message: `task_type must be one of: ${TASK_TYPES.join(', ')}` });
+    // WHERE newsroom_id = caller's company → members can only edit their own
+    // company's prompts (global/ours won't match → 404). Wiki: records updated_by.
+    const { rows } = await pool.query(
+      `UPDATE prompts SET title = COALESCE($1,title), body = COALESCE($2,body), description = COALESCE($3,description),
+         task_type = COALESCE($4,task_type), roles = COALESCE($5,roles), updated_by = $6, updated_at = NOW()
+       WHERE id = $7 AND newsroom_id = $8 RETURNING *`,
+      [b.title || null, b.body || null, b.description ?? null, b.task_type || null,
+       b.roles ? JSON.stringify(cleanRoles(b.roles)) : null, req.user.id, req.params.id, newsroomId]);
+    if (!rows.length) return res.status(404).json({ message: 'Prompt not found, or it isn’t one of your company’s own prompts.' });
+    res.json(rows[0]);
+  } catch (err) { console.error('[prompts:company:update]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Admin: push a prompt we think is good directly to ONE company (a company-scoped
+// copy, source=develop_ai, that that company's members then see).
+router.post('/admin/prompts/:id/share', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroom_id } = req.body || {};
+    if (!newsroom_id) return res.status(400).json({ message: 'newsroom_id (the company) is required' });
+    const { rows: [src] } = await pool.query('SELECT * FROM prompts WHERE id = $1', [req.params.id]);
+    if (!src) return res.status(404).json({ message: 'Prompt not found' });
+    const { rows } = await pool.query(
+      `INSERT INTO prompts (newsroom_id, title, body, description, task_type, roles, source, attribution, example_input, example_output, validation_status, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,'develop_ai',$7,$8,$9,'draft',$10,$10) RETURNING *`,
+      [newsroom_id, src.title, src.body, src.description, src.task_type, JSON.stringify(src.roles || []), src.attribution, src.example_input, src.example_output, req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[prompts:share]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── A user's personal variants (the living cheat-sheet) ─────────────────────

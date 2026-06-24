@@ -1168,6 +1168,16 @@ router.get('/ai-news-today/history', async (req, res) => {
   catch (err) { console.error('[public/ai-news-today/history]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// Companies open for self-registration (those an admin has given an access code).
+// Public — names + ids only, no secrets — for the registration company picker.
+router.get('/companies', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name FROM newsrooms WHERE is_active = true AND kind = 'business' AND access_code_hash IS NOT NULL ORDER BY name`);
+    res.json(rows);
+  } catch (err) { console.error('[public/companies]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── AI Toolkit (imported from aikit) ─────────────────────────────────────────
 router.get('/toolkit', async (req, res) => {
   try {

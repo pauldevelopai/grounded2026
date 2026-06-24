@@ -61,12 +61,27 @@ router.post('/login', async (req, res) => {
 // ── Self-service registration (creates a 'member' account) ─────────────────
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, newsroom_id, access_code } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email and password are required' });
     }
     if (password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+
+    // Joining a specific company requires that company's access code — so nobody
+    // can register into a company they're not part of. Verified against the bcrypt
+    // hash; never compared in plaintext. No company → the shared office newsroom.
+    let targetNewsroom = OFFICE_NEWSROOM_ID;
+    if (newsroom_id) {
+      const { rows: [nr] } = await pool.query(
+        'SELECT id, access_code_hash FROM newsrooms WHERE id = $1 AND is_active = true', [newsroom_id]);
+      if (!nr) return res.status(400).json({ message: 'Unknown company.' });
+      if (!nr.access_code_hash) return res.status(400).json({ message: 'This company isn’t open for self-registration yet — ask your company admin.' });
+      if (!access_code || !(await bcrypt.compare(String(access_code), nr.access_code_hash))) {
+        return res.status(403).json({ message: 'That company access code is incorrect. Ask your company admin for it.' });
+      }
+      targetNewsroom = nr.id;
     }
 
     // Check if email already exists
@@ -77,15 +92,11 @@ router.post('/register', async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, 10);
 
-    // Self-registrations land in the office newsroom — the same shared space
-    // they effectively joined pre-multi-tenancy. Real partner newsrooms get
-    // their users via admin-managed onboarding (Phase 2d), which will also
-    // revisit this default (e.g. invite tokens).
     const { rows } = await pool.query(
       `INSERT INTO team_members (name, email, password_hash, role, tracker_access, is_active, newsroom_id)
        VALUES ($1, $2, $3, 'member', true, true, $4)
        RETURNING id, name, email, role, sector_ids, newsroom_id`,
-      [name, email, password_hash, OFFICE_NEWSROOM_ID]
+      [name, email, password_hash, targetNewsroom]
     );
 
     const user = rows[0];

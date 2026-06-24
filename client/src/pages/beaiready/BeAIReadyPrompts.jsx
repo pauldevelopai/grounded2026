@@ -49,8 +49,23 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
   const [taskType, setTaskType] = useState('');
   const [search, setSearch] = useState('');
   const [err, setErr] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ title: '', body: '', task_type: 'other' });
+  const [addBusy, setAddBusy] = useState(false);
 
   const setAndStoreModel = (m) => { setModel(m); try { localStorage.setItem('beaiready_prompt_model', m); } catch { /* ignore */ } };
+
+  const submitCompany = async (e) => {
+    e.preventDefault();
+    if (!draft.title.trim() || !draft.body.trim()) return;
+    setAddBusy(true); setErr('');
+    try {
+      const p = await apiFetch('/prompts/company', { method: 'POST', body: JSON.stringify(draft) });
+      setDraft({ title: '', body: '', task_type: 'other' }); setAdding(false);
+      navigate(`/dashboard/prompts/${p.id}`);
+    } catch (e) { setErr(e.message); }
+    setAddBusy(false);
+  };
 
   const load = useCallback(() => {
     const p = new URLSearchParams({ model });
@@ -69,9 +84,27 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
       <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>Prompt library</h1>
       <p style={{ color: '#6b6359', marginBottom: 18, maxWidth: '66ch' }}>
         Proven prompts, by the model you use. Pick your model to see which prompts are validated for it and how
-        well they score. <Link to="/dashboard/my-prompts">My prompts →</Link>
+        well they score. Add your company’s own — any teammate can edit them.
+        {' '}<Link to="/dashboard/my-prompts">My prompts →</Link>
       </p>
       {err && <div style={banner}>{err}</div>}
+
+      <div style={{ marginBottom: 16 }}>
+        {!adding ? (
+          <button onClick={() => setAdding(true)} style={btn}>＋ Add a company prompt</button>
+        ) : (
+          <form onSubmit={submitCompany} style={{ ...card, display: 'grid', gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT }}>New company prompt — shared with your team; any member can edit it</div>
+            <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Title (e.g. Tender summary)" style={inp} required />
+            <textarea value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} placeholder="The prompt…" style={{ ...inp, minHeight: 90, fontFamily: 'ui-monospace, Menlo, monospace' }} required />
+            <select value={draft.task_type} onChange={(e) => setDraft({ ...draft, task_type: e.target.value })} style={{ ...inp, maxWidth: 180 }}>{TASK_TYPES.map((t) => <option key={t}>{t}</option>)}</select>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" disabled={addBusy} style={btn}>{addBusy ? 'Adding…' : 'Add prompt'}</button>
+              <button type="button" onClick={() => setAdding(false)} style={btnGhost}>Cancel</button>
+            </div>
+          </form>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
         <Labelled label="Your model">
@@ -98,6 +131,7 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
               </div>
               {p.description && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 8px' }}>{p.description}</p>}
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                {p.newsroom_id && <span style={{ ...taskTag, background: '#eef2ff', color: '#3730a3' }}>{p.source === 'client' ? 'Company · editable' : 'Shared with you'}</span>}
                 <span style={taskTag}>{p.task_type}</span>
                 {(p.roles || []).map((r) => <span key={r} style={roleTag}>{r.replace('_', ' ')}</span>)}
               </div>
@@ -118,8 +152,18 @@ function PromptDetail({ id, model, setModel, onBack }) {
   const [fb, setFb] = useState({ rating: 0, comment: '', suggested_edit: '' });
   const [fbMsg, setFbMsg] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [ef, setEf] = useState({ title: '', body: '', description: '' });
 
-  useEffect(() => { apiFetch(`/prompts/${id}`).then(setP).catch((e) => setErr(e.message)); }, [id]);
+  const loadPrompt = () => apiFetch(`/prompts/${id}`).then(setP).catch((e) => setErr(e.message));
+  useEffect(() => { loadPrompt(); }, [id]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startEdit = () => { setEf({ title: p.title, body: p.body, description: p.description || '' }); setEditing(true); };
+  const saveEdit = async () => {
+    setErr('');
+    try { await apiFetch(`/prompts/company/${id}`, { method: 'PUT', body: JSON.stringify(ef) }); setEditing(false); await loadPrompt(); }
+    catch (e) { setErr(e.message); }
+  };
 
   const copy = () => { navigator.clipboard?.writeText(p.body).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); };
   const sendFeedback = async () => {
@@ -154,16 +198,31 @@ function PromptDetail({ id, model, setModel, onBack }) {
       </div>
       {err && <div style={banner}>{err}</div>}
 
-      {/* Body + copy */}
+      {/* Body + copy + (company prompts) shared wiki edit */}
       <div style={{ ...card, position: 'relative' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
           <span style={sectionLbl}>The prompt</span>
           <div style={{ display: 'flex', gap: 8 }}>
+            {p.newsroom_id && !editing && <button onClick={startEdit} style={btnGhost}>Edit</button>}
             <button onClick={copy} style={btn}>{copied ? '✓ Copied' : 'Copy'}</button>
             <button onClick={saveMine} style={btnGhost}>Save my version</button>
           </div>
         </div>
-        <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, fontFamily: 'ui-monospace, Menlo, monospace', background: '#faf8f5', border: '1px solid #f0ebe3', borderRadius: 8, padding: 12, margin: 0, lineHeight: 1.55 }}>{p.body}</pre>
+        {editing ? (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <input value={ef.title} onChange={(e) => setEf({ ...ef, title: e.target.value })} placeholder="Title" style={inp} />
+            <textarea value={ef.body} onChange={(e) => setEf({ ...ef, body: e.target.value })} style={{ ...inp, minHeight: 140, fontFamily: 'ui-monospace, Menlo, monospace' }} />
+            <input value={ef.description} onChange={(e) => setEf({ ...ef, description: e.target.value })} placeholder="Short description (optional)" style={inp} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={saveEdit} style={btn}>Save changes</button>
+              <button onClick={() => setEditing(false)} style={btnGhost}>Cancel</button>
+            </div>
+            <p style={{ fontSize: 11.5, color: '#8a8076', margin: 0 }}>Shared — your teammates see this version too.</p>
+          </div>
+        ) : (
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, fontFamily: 'ui-monospace, Menlo, monospace', background: '#faf8f5', border: '1px solid #f0ebe3', borderRadius: 8, padding: 12, margin: 0, lineHeight: 1.55 }}>{p.body}</pre>
+        )}
+        {!editing && p.updated_by_name && <p style={{ fontSize: 11.5, color: '#a89e92', margin: '8px 0 0' }}>Last edited by {p.updated_by_name}</p>}
         {savedMsg && <p style={{ color: '#166534', fontSize: 13, margin: '8px 0 0' }}>{savedMsg} <Link to="/dashboard/my-prompts">Open →</Link></p>}
       </div>
 

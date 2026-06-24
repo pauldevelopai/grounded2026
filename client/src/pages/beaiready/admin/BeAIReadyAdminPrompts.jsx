@@ -17,16 +17,27 @@ export default function BeAIReadyAdminPrompts() {
   const [draft, setDraft] = useState({ title: '', description: '', task_type: '', body: '' });
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  const [clients, setClients] = useState([]);
+  const [selectedClient, setSelectedClient] = useState('');   // '' = our global library
 
   const loadPrompts = () => {
     const p = new URLSearchParams();
     if (q) p.set('search', q);
     if (taskType) p.set('task_type', taskType);
-    apiFetch(`/prompts?${p}`).then(setPrompts).catch((e) => setErr(e.message));
+    const opts = selectedClient ? { headers: { 'X-Newsroom-Id': selectedClient } } : {};
+    apiFetch(`/prompts?${p}`, opts).then(setPrompts).catch((e) => setErr(e.message));
   };
   const loadQueue = () => apiFetch('/admin/feedback?status=new').then(setQueue).catch(() => setQueue([]));
-  useEffect(() => { loadPrompts(); /* eslint-disable-next-line */ }, [q, taskType]);
-  useEffect(() => { loadQueue(); }, []);
+  useEffect(() => { loadPrompts(); /* eslint-disable-next-line */ }, [q, taskType, selectedClient]);
+  useEffect(() => { loadQueue(); apiFetch('/beaiready/admin/clients').then(setClients).catch(() => setClients([])); }, []);
+
+  // Push a prompt we like directly to one company's library.
+  const share = async (id, newsroom_id) => {
+    if (!newsroom_id) return;
+    setErr(''); setMsg('');
+    try { await apiFetch(`/admin/prompts/${id}/share`, { method: 'POST', body: JSON.stringify({ newsroom_id }) }); setMsg('Shared to the company — it’s now in their library.'); }
+    catch (e) { setErr(e.message); }
+  };
 
   const addPrompt = async (e) => {
     e.preventDefault(); if (!draft.title.trim() || !draft.body.trim()) { setErr('Title and body are required'); return; }
@@ -47,14 +58,19 @@ export default function BeAIReadyAdminPrompts() {
     <div style={{ maxWidth: 880 }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Prompt library</h1>
       <p style={{ color: '#6b6359', marginBottom: 16, maxWidth: '66ch' }}>
-        The curated prompts behind the client prompt library — what your clients see at their dashboard.
-        Search, add or remove them here; user feedback to curate sits at the bottom.
+        Our recommended prompts, plus each client’s own. Pick a company below to see what their members have
+        added (tagged <strong>client</strong>) vs what we’ve shared with them — and push a good prompt straight
+        to a company.
       </p>
       {err && <div style={banner('#FEF2F2', '#B91C1C')}>{err}</div>}
       {msg && <div style={banner('#ECFDF5', '#065F46')}>{msg}</div>}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search prompts…" style={{ ...inp, flex: 1, minWidth: 200 }} />
+        <select value={selectedClient} onChange={(e) => setSelectedClient(e.target.value)} style={{ ...inp, fontWeight: 600 }}>
+          <option value="">Our library (global)</option>
+          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}’s prompts</option>)}
+        </select>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search prompts…" style={{ ...inp, flex: 1, minWidth: 160 }} />
         <select value={taskType} onChange={(e) => setTaskType(e.target.value)} style={inp}>
           <option value="">All types</option>
           {TASK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -81,7 +97,7 @@ export default function BeAIReadyAdminPrompts() {
         <>
           <div style={{ fontSize: 12, color: '#8a8076', marginBottom: 8 }}>{prompts.length} prompt{prompts.length === 1 ? '' : 's'}</div>
           <div style={{ display: 'grid', gap: 10 }}>
-            {prompts.map((p) => <PromptCard key={p.id} p={p} onRemove={removePrompt} />)}
+            {prompts.map((p) => <PromptCard key={p.id} p={p} clients={clients} onRemove={removePrompt} onShare={share} />)}
           </div>
         </>
       )}
@@ -115,9 +131,12 @@ export default function BeAIReadyAdminPrompts() {
   );
 }
 
-function PromptCard({ p, onRemove }) {
+function PromptCard({ p, clients, onRemove, onShare }) {
   const [open, setOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTo, setShareTo] = useState('');
   const [bg, fg] = STATUS_STYLE[p.validation_status] || STATUS_STYLE.draft;
+  const isClient = p.source === 'client';
   return (
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
@@ -125,13 +144,24 @@ function PromptCard({ p, onRemove }) {
           <strong>{p.title}</strong>
           <span style={{ ...pill, background: bg, color: fg, marginLeft: 6 }}>{p.validation_status || 'draft'}</span>
           {p.task_type && <span style={{ ...pill, background: '#eef2ff', color: '#3730a3', marginLeft: 6 }}>{p.task_type}</span>}
-          {p.source && <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359', marginLeft: 6 }}>{p.source}</span>}
+          <span style={{ ...pill, background: isClient ? '#fde9d8' : '#f1f0ec', color: isClient ? '#9a3412' : '#6b6359', marginLeft: 6 }}>{isClient ? 'client-added' : (p.source || 'ours')}</span>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {onShare && <button onClick={() => setShareOpen((s) => !s)} style={tag}>Share to…</button>}
           <button onClick={() => setOpen((o) => !o)} style={tag}>{open ? 'Hide' : 'View'}</button>
           <button onClick={() => onRemove(p.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
         </div>
       </div>
+      {shareOpen && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select value={shareTo} onChange={(e) => setShareTo(e.target.value)} style={inp}>
+            <option value="">Choose a company…</option>
+            {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button onClick={() => { onShare(p.id, shareTo); setShareOpen(false); setShareTo(''); }} disabled={!shareTo} style={btn}>Share</button>
+          <span style={{ fontSize: 12, color: '#8a8076' }}>Adds a copy to that company’s library.</span>
+        </div>
+      )}
       {p.description && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0' }}>{p.description}</p>}
       {open && (
         <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>

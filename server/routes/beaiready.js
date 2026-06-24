@@ -433,6 +433,7 @@ router.get('/admin/clients', requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT n.id, n.name, n.slug, n.is_active, n.created_at, o.website, o.country, s.name AS sector,
+              (n.access_code_hash IS NOT NULL) AS has_access_code,
               (SELECT COUNT(*)::int FROM team_members t WHERE t.newsroom_id = n.id) AS user_count,
               EXISTS (SELECT 1 FROM ai_policies p WHERE p.newsroom_id = n.id) AS has_policy,
               (SELECT COUNT(*)::int FROM visibility_checks v WHERE v.newsroom_id = n.id) AS visibility_checks,
@@ -447,6 +448,21 @@ router.get('/admin/clients', requireRole('admin'), async (req, res) => {
     );
     res.json(rows);
   } catch (err) { console.error('[beaiready/admin/clients]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Set / rotate / clear a company's self-registration access code (stored hashed).
+// Members of this company use it (with their own password) to register. Empty/null
+// clears it → the company is no longer open for self-registration.
+router.post('/admin/clients/:id/access-code', requireRole('admin'), async (req, res) => {
+  try {
+    const code = (req.body?.access_code ?? '').trim();
+    const hash = code ? await bcrypt.hash(code, 10) : null;
+    const { rowCount } = await pool.query(
+      `UPDATE newsrooms SET access_code_hash = $1, updated_at = NOW() WHERE id = $2 AND kind = 'business'`,
+      [hash, req.params.id]);
+    if (!rowCount) return res.status(404).json({ message: 'Company not found' });
+    res.json({ ok: true, has_access_code: !!hash });
+  } catch (err) { console.error('[beaiready/admin/clients/access-code]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // Create a client: organisation + business tenant + (optional) first login.

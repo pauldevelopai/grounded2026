@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -28,8 +28,19 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [company, setCompany] = useState('');           // BAIR registration: the company (newsroom_id)
+  const [accessCode, setAccessCode] = useState('');     // BAIR registration: that company's access code
+  const [companies, setCompanies] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Load the list of companies open for self-registration (those an admin has given
+  // an access code) when a BAIR visitor switches to register.
+  useEffect(() => {
+    if (IS_BEAIREADY && mode === 'register' && companies.length === 0) {
+      fetch('/api/public/companies').then((r) => (r.ok ? r.json() : [])).then(setCompanies).catch(() => setCompanies([]));
+    }
+  }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function switchMode() {
     setMode(m => m === 'login' ? 'register' : 'login');
@@ -44,6 +55,7 @@ export default function Login() {
       if (!name.trim()) { setError('Name is required'); return; }
       if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
       if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+      if (IS_BEAIREADY && (!company || !accessCode.trim())) { setError('Select your company and enter its access code'); return; }
     }
 
     setLoading(true);
@@ -67,8 +79,9 @@ export default function Login() {
           navigate(user.role === 'admin' ? '/dashboard' : '/lawsuits');
         }
       } else {
-        await register(name.trim(), email, password);
-        if (next) window.location.href = next;
+        await register(name.trim(), email, password, IS_BEAIREADY ? { newsroom_id: company, access_code: accessCode.trim() } : {});
+        if (IS_BEAIREADY) navigate(next || '/');
+        else if (next) window.location.href = next;
         else navigate('/lawsuits');
       }
     } catch (err) {
@@ -140,6 +153,31 @@ export default function Login() {
             </div>
           )}
 
+          {mode === 'register' && IS_BEAIREADY && (
+            <>
+              <div className="form-group">
+                <label>Your company</label>
+                <select value={company} onChange={e => setCompany(e.target.value)} required>
+                  <option value="">Select your company…</option>
+                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Company access code</label>
+                <input
+                  type="password"
+                  value={accessCode}
+                  onChange={e => setAccessCode(e.target.value)}
+                  placeholder="The code from your company admin"
+                  required
+                />
+                <p style={{ fontSize: 12, color: '#8a8076', margin: '4px 0 0' }}>
+                  This confirms you’re part of the company — your admin shares it with the team.
+                </p>
+              </div>
+            </>
+          )}
+
           <button
             type="submit"
             className="btn btn-primary"
@@ -153,12 +191,19 @@ export default function Login() {
           </button>
         </form>
 
-        {/* BE AI READY is invite-only — no self-registration. The same form
-            signs in Develop AI staff, who are routed to the admin console. */}
+        {/* BE AI READY self-registration: join your company with its access code. */}
         {IS_BEAIREADY ? (
           <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', color: '#8a8076' }}>
-            Clients and Develop&nbsp;AI staff sign in here.<br />
-            New client? <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready">Get in touch</a> to get set up.
+            {mode === 'login' ? (
+              <>New here?{' '}
+                <button type="button" onClick={switchMode} style={{ background: 'none', border: 'none', color: '#c75b39', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0, textDecoration: 'underline' }}>Create your account</button>
+              </>
+            ) : (
+              <>Already have an account?{' '}
+                <button type="button" onClick={switchMode} style={{ background: 'none', border: 'none', color: '#c75b39', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0, textDecoration: 'underline' }}>Sign in</button>
+              </>
+            )}
+            <div style={{ marginTop: 8 }}>Company not listed? <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready">Get in touch</a>.</div>
           </div>
         ) : (
         <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '14px', color: '#666' }}>

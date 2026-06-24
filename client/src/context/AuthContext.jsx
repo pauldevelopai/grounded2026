@@ -23,10 +23,12 @@ export function AuthProvider({ children }) {
     return data.user;
   }
 
-  async function register(name, email, password) {
+  async function register(name, email, password, opts = {}) {
+    // opts: { newsroom_id, access_code } — joining a specific company requires its
+    // access code (verified server-side).
     const data = await apiFetch('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, ...opts }),
     });
     setUser(data.user);
     return data.user;
