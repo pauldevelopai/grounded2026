@@ -292,9 +292,12 @@ function AgendaSection({ clientId, setErr }) {
   const create = async (e) => {
     e.preventDefault();
     if (!draft.title.trim()) return; setErr(''); setBusy(true);
+    let a;
     try {
-      // Create the agenda first, then attach the optional document to its id.
-      const a = await api('/beaiready/training/agendas', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, title: draft.title, scheduled_for: draft.scheduled_for || null, location: draft.location || null, items: textToItems(draft.items) }) });
+      a = await api('/beaiready/training/agendas', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, title: draft.title, scheduled_for: draft.scheduled_for || null, location: draft.location || null, items: textToItems(draft.items) }) });
+    } catch (e) { setErr(`Couldn't create the agenda: ${e.message}`); setBusy(false); return; }
+    // Agenda created — attach the optional document, but never lose the agenda if that step fails.
+    try {
       if (draft.gdocUrl.trim()) {
         await api(`/beaiready/training/agendas/${a.id}/doc/google`, { method: 'POST', body: JSON.stringify({ doc_url: draft.gdocUrl.trim() }) });
       } else if (pdfFile) {
@@ -302,10 +305,12 @@ function AgendaSection({ clientId, setErr }) {
         fd.append('entity_type', 'training_agenda');   // must precede the file (multer reads fields in order)
         fd.append('file', pdfFile);
         const res = await fetch(`/api/beaiready/training/agendas/${a.id}/doc/upload`, { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
-        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || 'Upload failed'); }
+        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || `upload failed (HTTP ${res.status})`); }
       }
-      setDraft({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' }); setPdfFile(null); setFileKey((k) => k + 1); load();
-    } catch (e) { setErr(e.message); }
+    } catch (docErr) {
+      setErr(`Agenda created — but the document didn't attach: ${docErr.message}. Add it under “More documents” on the agenda below.`);
+    }
+    setDraft({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' }); setPdfFile(null); setFileKey((k) => k + 1); load();
     setBusy(false);
   };
 
@@ -452,15 +457,19 @@ function MaterialsSection({ clientId, setErr }) {
   useEffect(() => { setRows(null); load(); }, [load]);
   const create = async (e) => {
     e.preventDefault(); if (!draft.title.trim()) return; setErr('');
+    let m;
+    try { m = await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) }); }
+    catch (e) { setErr(`Couldn't add the material: ${e.message}`); return; }
     try {
-      const m = await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) });
       for (const file of pendingFiles) {
         const fd = new FormData(); fd.append('entity_type', 'training_material_file'); fd.append('entity_id', m.id); fd.append('file', file);
         const res = await fetch('/api/beaiready/training/files', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
-        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || 'Upload failed'); }
+        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || `upload failed (HTTP ${res.status})`); }
       }
-      setDraft({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' }); setPendingFiles([]); load();
-    } catch (e) { setErr(e.message); }
+    } catch (fileErr) {
+      setErr(`Material added — but a PDF didn't upload: ${fileErr.message}. Add it on the material below.`);
+    }
+    setDraft({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' }); setPendingFiles([]); load();
   };
 
   return (
@@ -739,7 +748,7 @@ function Attachments({ entityType, entityId, files, clientId, onChanged, setErr,
         fd.append('entity_id', entityId);
         fd.append('file', file);
         const res = await fetch('/api/beaiready/training/files', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Upload failed'); }
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `upload failed (HTTP ${res.status})`); }
       }
       onChanged();
     } catch (e) { setErr(e.message); }

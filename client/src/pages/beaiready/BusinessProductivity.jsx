@@ -87,6 +87,15 @@ export default function BusinessProductivity() {
           The best AI tools for each function, scored for data safety. <Link to="/toolbox">Open the toolbox →</Link>
         </p>
       </section>
+
+      <section className="hub-band" style={{ marginTop: 16 }}>
+        <h2>Prompt library</h2>
+        <p style={{ margin: 0 }}>
+          The prompts we recommend for the AI model your team uses — scored per model — and your own saved
+          versions. Copy, rate, and build your library.
+          {' '}<Link to="/dashboard/prompts">Open the prompt library →</Link> · <Link to="/dashboard/my-prompts">My prompts</Link>
+        </p>
+      </section>
     </div>
   );
 }

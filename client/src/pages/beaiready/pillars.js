@@ -85,6 +85,8 @@ export const PILLARS = [
     features: [
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
+      { name: 'Prompt library', status: 'live', dash: '/dashboard/prompts', slug: 'prompt-library',
+        what: 'The prompts we recommend for the AI model your team uses — scored per model — plus your own saved versions. Copy, rate, and build your own library.' },
       { name: 'Nodes', status: 'live', to: '/nodes',
         what: 'Small AI tools your business runs and owns — like Extract PDF: drop in a document, get trusted structured data back. Run them here, or download and run on your own machine.' },
       { name: 'Track employee productivity', status: 'live', dash: '/dashboard/productivity', slug: 'productivity-tracking',
