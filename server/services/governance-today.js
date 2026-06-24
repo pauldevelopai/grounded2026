@@ -57,13 +57,16 @@ export async function generateGovernanceToday() {
   // Models pad and double-draft when asked to search AND write in one shot, so we split it.
   const researchSystem =
     'You are a research assistant for an AI-governance tracker. Use web search to find the most significant ' +
-    'AI data-governance and AI-news developments worldwide from the LAST ~10 DAYS — regulatory actions and ' +
-    'enforcement, major lawsuits/settlements/court rulings, AI models being suspended/withdrawn/restricted, ' +
-    'and big policy shifts. Prefer authoritative, recent sources. Never invent; if unsure, leave it out.';
+    'AI data-governance developments worldwide from the LAST ~7 DAYS — regulatory actions and enforcement, ' +
+    'major lawsuits/settlements/court rulings, AI models being suspended/withdrawn/restricted, and big policy ' +
+    'shifts. Each item must be a SPECIFIC, recently DATED event from an authoritative news source — NOT a ' +
+    'generic explainer, an undated overview, or a "where are they now / 2025 update" roundup page. Prefer the ' +
+    'newest sources. Never invent; if unsure, leave it out.';
   const researchUser =
     `Our tracker already follows:\n\n${context}\n\n` +
-    'List the 3–5 most important developments from the last ~10 days. For each: one factual line (what, who, ' +
-    'when) and the source. Bullet list, facts only — no analysis.';
+    'List the 3–5 most important developments from the LAST ~7 DAYS, newest first. For each: one factual line ' +
+    '(what, who, when — include the date) and the source. Skip anything you cannot date to the last week. ' +
+    'Bullet list, facts only — no analysis.';
   const { text: findings, citations } = await callClaudeWithWebSearch({
     system: researchSystem, userContent: researchUser, maxTokens: 1200, maxUses: 5,
   });
@@ -74,8 +77,9 @@ export async function generateGovernanceToday() {
     'the Be AI Ready platform. Audience: non-technical owners and managers. Tone: plain, calm, concrete — no ' +
     'hype, no jargon. Output ONLY the briefing prose and nothing else: 90–110 words, one or two short ' +
     'paragraphs. Name the most important developments specifically and say what each practically means for a ' +
-    'small business. Do NOT restate these instructions, do NOT write a preamble or heading, do NOT use ' +
-    'markdown or bullets, and do NOT produce more than one version.';
+    'small business. Use ONLY the developments in the verified findings — do not add, rename, merge or invent ' +
+    'any law, case, company, product or model name. Do NOT restate these instructions, do NOT write a preamble ' +
+    'or heading, do NOT use markdown or bullets, and do NOT produce more than one version.';
   const writeUser = `Today's verified developments:\n\n${findings}\n\nWrite the briefing now.`;
   const text = await callClaude({ system: writeSystem, userContent: writeUser, maxTokens: 320, temperature: 0.4 });
 

@@ -8,7 +8,7 @@
 // schedule (or from the admin Briefings page), never per page-load. Honest empty
 // state: if there are no recent items, it returns null rather than inventing news.
 import pool from '../db/pool.js';
-import { callClaude } from './claude.js';
+import { callClaude, callClaudeWithWebSearch } from './claude.js';
 
 const KEY = 'ai_news_today';
 
@@ -50,28 +50,57 @@ function dedupeCitations(cites) {
   return out;
 }
 
+// Fallback when no newsletters have been ingested: a LIVE web search for the day's
+// top AI-industry news (products, model releases, company moves, adoption — NOT law,
+// which the governance briefing covers). Returns { findings, headlines } or nulls.
+async function researchTopAINews() {
+  const researchSystem =
+    'You are a research assistant for an "AI news" briefing. Use web search to find the most significant ' +
+    'AI-INDUSTRY developments worldwide from the LAST ~5 DAYS — major model/product releases, big company ' +
+    'moves, funding, notable launches, and real-world adoption. Do NOT focus on law/regulation (that is a ' +
+    'separate briefing). Prefer authoritative, recent sources. Never invent; if unsure, leave it out.';
+  const researchUser =
+    'List the 4–6 most important AI-industry developments from the last ~5 days. For each: one factual line ' +
+    '(what, who, when) and the source. Bullet list, facts only — no analysis.';
+  const { text, citations } = await callClaudeWithWebSearch({ system: researchSystem, userContent: researchUser, maxTokens: 1200, maxUses: 5 });
+  return { findings: (text || '').trim(), citations: citations || [] };
+}
+
 export async function generateAINewsToday() {
   const items = await recentItems();
-  if (!items.length) return null;   // honest empty — never invent news
 
-  const sourceList = items.map((it) => {
-    const line = (it.summary || it.subject || '').replace(/\s+/g, ' ').trim().slice(0, 280);
-    return `- ${line}${it.source_url ? ` (${it.source_url})` : ''}`;
-  }).join('\n');
+  // Prefer the curated newsletters; fall back to a live web search when none have
+  // been ingested, so the briefing always has fresh material (never just empty).
+  let sourceList, headlines, sourceNote;
+  if (items.length) {
+    sourceList = items.map((it) => {
+      const line = (it.summary || it.subject || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+      return `- ${line}${it.source_url ? ` (${it.source_url})` : ''}`;
+    }).join('\n');
+    headlines = dedupeCitations(items.map((it) => ({ title: it.subject || it.sender, url: it.source_url }))).slice(0, 6);
+    sourceNote = 'from curated newsletters';
+  } else {
+    const research = await researchTopAINews();
+    if (!research.findings) return null;   // truly nothing to report — honest empty
+    sourceList = research.findings;
+    headlines = dedupeCitations(research.citations).slice(0, 6);
+    sourceNote = 'from a live web search of the last few days';
+  }
 
   const writeSystem =
     'You write a daily "Today in AI" news briefing for South African small and medium businesses on the ' +
     'Be AI Ready platform. Audience: non-technical owners and managers. Tone: plain, calm, concrete — no ' +
     'hype, no jargon. Output ONLY the briefing prose and nothing else: 90–110 words, one or two short ' +
     'paragraphs. Pick out the few most important AI developments from the source items and say, in ' +
-    'everyday terms, what each practically means for a small business. Do NOT restate these instructions, ' +
-    'do NOT write a preamble or heading, do NOT use markdown or bullets, and do NOT produce more than one version.';
-  const writeUser = `Today's AI-news items (from curated newsletters):\n\n${sourceList}\n\nWrite the briefing now.`;
+    'everyday terms, what each practically means for a small business. Use ONLY the developments named in ' +
+    'the source — do not add, rename or invent any product, company or model. Do NOT restate these ' +
+    'instructions, do NOT write a preamble or heading, do NOT use markdown or bullets, and do NOT produce more than one version.';
+  const writeUser = `Today's AI-news items (${sourceNote}):\n\n${sourceList}\n\nWrite the briefing now.`;
   const text = await callClaude({ system: writeSystem, userContent: writeUser, maxTokens: 320, temperature: 0.4 });
 
   const value = {
     summary: sanitizeSummary(text),
-    headlines: dedupeCitations(items.map((it) => ({ title: it.subject || it.sender, url: it.source_url }))).slice(0, 6),
+    headlines,
     generated_at: new Date().toISOString(),
   };
   await pool.query(

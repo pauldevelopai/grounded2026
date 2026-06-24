@@ -100,7 +100,7 @@ export const PILLARS = [
       'Hands-on, practical AI training — with a living record of it in your dashboard, a read on where ' +
       'your team needs support, and the tools to capture their hard-won know-how.',
     features: [
-      { name: 'Book a training', status: 'live', to: '/training',
+      { name: 'Book a training', status: 'live', to: '/training/book',
         what: 'A hands-on one-day on-site training + three mentoring sessions (R35k, up to 30 people) — the strongest place to start. See the full offer and book a date.' },
       { name: 'Course materials — past & upcoming', status: 'partial', to: '/training',
         what: 'Every training and mentoring session you’ve had, and what’s scheduled — with the materials, accessible to your staff at any time.' },

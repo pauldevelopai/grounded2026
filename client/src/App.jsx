@@ -122,6 +122,7 @@ import BeAIReadyNodes from './pages/beaiready/BeAIReadyNodes.jsx';
 import GatedFeature from './pages/beaiready/GatedFeature.jsx';
 import BeAIReadyFeature from './pages/beaiready/BeAIReadyFeature.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
+import BeAIReadyTrainingBook from './pages/beaiready/BeAIReadyTrainingBook.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
 import PublicLawsuitDetail from './pages/public/PublicLawsuitDetail.jsx';
 import PublicRegulationsList from './pages/public/PublicRegulationsList.jsx';
@@ -273,6 +274,8 @@ export default function App() {
             <Route index element={IS_BEAIREADY
               ? <GatedFeature {...GATE_TRAINING}><BeAIReadyTraining /></GatedFeature>
               : <Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
+            {/* The PUBLIC one-day-training advert ("Book a training") — never gated. */}
+            {IS_BEAIREADY && <Route path="book" element={<BeAIReadyTrainingBook />} />}
           </Route>
 
           {/* ── BE AI READY business authed area (spec Part C). On the beaiready
