@@ -9,6 +9,7 @@ import { publicToken } from '../pulse/ids.js';
 import { generateCaptureQuestions } from '../knowhow/generate.js';
 import { extractDocumentText, splitIntoPieces } from '../knowhow/extract.js';
 import { addCorpusItem, corpusSummary, corpusForTopic } from '../knowhow/corpus.js';
+import { askCorpus } from '../knowhow/agent.js';
 
 const router = Router();
 const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
@@ -201,6 +202,16 @@ router.post('/tenants/:tid/documents', wrap(async (req, res) => {
     res.status(201).json({ id: doc.id, pieces: pieces.length, flags });
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
+}));
+
+// ── Ask the corpus (Part C agent: answer + coach modes, grounded + cited) ─────
+router.post('/tenants/:tid/ask', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  const { question, mode, topic_id } = req.body || {};
+  if (!question?.trim()) return res.status(400).json({ message: 'question required' });
+  const out = await askCorpus({ id: t.id, name: t.name }, { question: question.trim(), mode: mode === 'coach' ? 'coach' : 'answer', topicId: topic_id || null });
+  res.json(out);
 }));
 
 export default router;

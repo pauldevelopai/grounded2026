@@ -68,6 +68,8 @@ export default function BeAIReadyAdminKnowHow() {
         </section>
       )}
 
+      {ov && <AskCorpus tid={tid} topics={ov.topics} hasCorpus={ov.corpus.pieces > 0} fail={fail} />}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
         {ov && <People tid={tid} people={ov.people} reload={() => load(tid)} flash={flash} fail={fail} />}
         {ov && <Topics tid={tid} topics={ov.topics} reload={() => load(tid)} flash={flash} fail={fail} />}
@@ -86,6 +88,77 @@ function Stat({ n, label }) {
       <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, color: '#e08a64' }}>{n ?? 0}</div>
       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#9a9087', marginTop: 3 }}>{label}</div>
     </div>
+  );
+}
+
+function AskCorpus({ tid, topics, hasCorpus, fail }) {
+  const [q, setQ] = useState('');
+  const [mode, setMode] = useState('answer');
+  const [topicId, setTopicId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+
+  const ask = async () => {
+    if (!q.trim()) return fail('Ask a question first');
+    setBusy(true); setRes(null);
+    try {
+      const r = await apiFetch(`/knowhow/tenants/${tid}/ask`, { method: 'POST', body: JSON.stringify({ question: q, mode, topic_id: topicId || null }) });
+      setRes(r);
+    } catch (e) { fail(e); }
+    setBusy(false);
+  };
+
+  return (
+    <section style={{ ...card, marginBottom: 18, borderTop: '3px solid #c75b39' }}>
+      <h2 style={h2}>Ask KnowHow <span style={{ ...count, background: '#1c1b1a', color: '#f3ede6' }}>the corpus, answering</span></h2>
+      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 10px', maxWidth: '66ch' }}>
+        Ask a question and KnowHow answers <em>only</em> from what your people have captured — with citations
+        back to who said it. {hasCorpus ? '' : 'Nothing’s captured yet, so it has nothing to draw on — capture an answer or two first.'}
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ display: 'inline-flex', border: '1px solid #e4dcd2', borderRadius: 8, overflow: 'hidden' }}>
+          {['answer', 'coach'].map((m) => (
+            <button key={m} onClick={() => setMode(m)} style={{ padding: '7px 14px', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: mode === m ? '#c75b39' : '#fff', color: mode === m ? '#fff' : '#6b6359' }}>
+              {m === 'answer' ? 'Answer' : 'Coach a junior'}
+            </button>
+          ))}
+        </div>
+        <select style={{ ...inp, minWidth: 160 }} value={topicId} onChange={(e) => setTopicId(e.target.value)}>
+          <option value="">All topics</option>
+          {topics.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input style={{ ...inp, flex: 1 }} placeholder={mode === 'coach' ? 'A junior’s question or scenario…' : 'e.g. How do we decide whether to chase a tender?'}
+          value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask()} />
+        <button style={btn} onClick={ask} disabled={busy}>{busy ? 'Thinking…' : 'Ask'}</button>
+      </div>
+
+      {res && (
+        <div style={{ marginTop: 12 }}>
+          {res.empty ? (
+            <p style={{ color: '#a89e92', fontSize: 13, margin: 0 }}>{res.message}</p>
+          ) : (
+            <>
+              <div style={{ background: '#faf8f5', border: '1px solid #efe7dd', borderRadius: 10, padding: '14px 16px', fontSize: 14.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: '#2a2724' }}>{res.answer}</div>
+              {res.citations?.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076', marginBottom: 4 }}>Sources</div>
+                  <ul style={{ ...list, gap: 5 }}>
+                    {res.citations.map((c) => (
+                      <li key={c.n} style={{ fontSize: 12.5, color: '#6b6359' }}>
+                        <strong style={{ color: '#c75b39' }}>[{c.n}] {c.source}</strong> — {c.snippet}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: '#a89e92', marginTop: 6 }}>Grounded in {res.usedPieces} captured piece{res.usedPieces === 1 ? '' : 's'} · {res.mode === 'coach' ? 'coaching mode' : 'answer mode'}</div>
+            </>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
