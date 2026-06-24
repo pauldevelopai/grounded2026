@@ -9,11 +9,9 @@ import { apiFetch } from '../../hooks/useApi.js';
 
 export default function BusinessStrategy() {
   const [strategy, setStrategy] = useState(null);
-  const [intake, setIntake] = useState(null);
 
   useEffect(() => {
     apiFetch('/beaiready/training/strategy').then(setStrategy).catch(() => setStrategy([]));
-    apiFetch('/beaiready/intake').then(setIntake).catch(() => setIntake([]));
   }, []);
 
   return (
@@ -21,8 +19,8 @@ export default function BusinessStrategy() {
       <div className="hub-eyebrow">Be AI Ready · strategy</div>
       <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>Your AI strategy</h1>
       <p style={{ color: '#6b6359', marginBottom: 24, maxWidth: '64ch' }}>
-        Your goals and a practical automation roadmap — what to take on first, sized by effort and payoff —
-        plus where your team stands on AI. <Link to="/dashboard">← Back to your dashboard</Link>
+        Your goals and a practical automation roadmap — what to take on first, sized by effort and payoff.
+        Built with your consultant. (Staff AI Needs now lives under <Link to="/dashboard/staff-needs">Training → Staff AI Needs</Link>.)
       </p>
 
       {/* ── Goals + automation roadmap (per-tenant; published items) ── */}
@@ -43,27 +41,6 @@ export default function BusinessStrategy() {
         )}
       </section>
 
-      {/* ── Staff AI Needs (from connected competency forms; feeds strategy) ── */}
-      <div className="hub-section-label">Staff AI Needs</div>
-      <section className="hub-band" style={{ marginBottom: 24 }}>
-        {intake == null ? (
-          <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
-        ) : intake.length === 0 ? (
-          <p style={{ margin: 0 }}>
-            No competency forms connected yet. Your team’s form responses feed a read on where they stand,
-            so your strategy and training target the real gaps.
-          </p>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {intake.map((f) => (
-              <li key={f.form_name} style={{ fontSize: 13.5 }}>
-                <strong>{f.form_name}</strong> — {f.response_count} response{f.response_count === 1 ? '' : 's'}
-                {f.last_synced_at && <span style={{ color: '#8a8076' }}> · synced {new Date(f.last_synced_at).toLocaleDateString()}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

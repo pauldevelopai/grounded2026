@@ -199,13 +199,29 @@ function TrainingRecord() {
 const docLabel = { fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076' };
 
 // Download links for an agenda's / material's attached files (tenant-scoped server-side).
+// The `download` attribute forces a direct download (same-origin); "Download all"
+// triggers each with a small stagger so the browser doesn't block the batch.
 function FileLinks({ files }) {
   if (!files || files.length === 0) return null;
+  const url = (f) => `/api/beaiready/training/files/${f.id}/download`;
+  const downloadAll = () => {
+    files.forEach((f, i) => setTimeout(() => {
+      const a = document.createElement('a'); a.href = url(f); a.download = f.name || '';
+      document.body.appendChild(a); a.click(); a.remove();
+    }, i * 400));
+  };
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 4 }}>
-      {files.map((f) => (
-        <a key={f.id} href={`/api/beaiready/training/files/${f.id}/download`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5 }}>📎 {f.name} ↗</a>
-      ))}
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+        {files.map((f) => (
+          <a key={f.id} href={url(f)} download={f.name} style={{ fontSize: 12.5 }}>📎 {f.name} ↓</a>
+        ))}
+      </div>
+      {files.length > 1 && (
+        <button onClick={downloadAll} style={{ marginTop: 4, fontSize: 12, color: '#c75b39', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}>
+          ⬇ Download all ({files.length})
+        </button>
+      )}
     </div>
   );
 }

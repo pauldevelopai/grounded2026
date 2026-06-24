@@ -121,7 +121,7 @@ export const PILLARS = [
     features: [
       { name: 'Goals, workflow & automation roadmap', status: 'partial', dash: '/dashboard/strategy', slug: 'strategy-roadmap',
         what: 'A clear map of how your business runs — every step and hand-off — and which parts AI should take on first, sized by effort and payoff: your practical automation roadmap, built with your team.' },
-      { name: 'Staff AI Needs', status: 'partial', dash: '/dashboard/strategy', slug: 'staff-needs',
+      { name: 'Staff AI Needs', status: 'partial', dash: '/dashboard/staff-needs', slug: 'staff-needs',
         what: 'A read on where your team stands and what they need, drawn from the competency forms they complete — so your AI strategy targets the real gaps.' },
     ],
   },

@@ -350,14 +350,18 @@ export async function chatWithGroundedHelp({ history = [], message, contextItems
  * Returns { text, citations } where citations is an array of {url, title}
  * objects the model cited (may be empty if no search was needed).
  */
-export async function callClaudeWithWebSearch({ system, userContent, maxTokens = 1500, maxUses = 5, finalTextOnly = false }) {
+export async function callClaudeWithWebSearch({ system, userContent, maxTokens = 1500, maxUses = 5, finalTextOnly = false, allowedDomains = null }) {
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  // allowedDomains restricts the search to a reliable-sources allowlist (kills
+  // AI-generated / speculative "news" sites — the source of fabricated stories).
+  const webSearch = { type: 'web_search_20250305', name: 'web_search', max_uses: maxUses };
+  if (Array.isArray(allowedDomains) && allowedDomains.length) webSearch.allowed_domains = allowedDomains;
   const params = {
     model: MODEL,
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: userContent }],
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses }],
+    tools: [webSearch],
   };
   const message = await client.messages.create(params);
 

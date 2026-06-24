@@ -59,9 +59,11 @@ export default function BeAIReadyLayout() {
             <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginLeft: 22 }}>
               {user ? (
                 <>
-                  <Link to={user.role === 'admin' ? '/admin' : '/dashboard'} style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>
-                    {user.role === 'admin' ? 'Admin' : 'My dashboard'}
-                  </Link>
+                  {/* Clients navigate via the pillar tabs — no separate "My dashboard"
+                      (it just repeats the tabs). Only admins get a portal button. */}
+                  {user.role === 'admin' && (
+                    <Link to="/admin" style={{ ...linkStyle, color: '#fff', background: TERRACOTTA, borderRadius: 6, fontWeight: 600 }}>Admin</Link>
+                  )}
                   <button onClick={signOut} title={`Signed in as ${user.email || user.name || ''}`}
                     style={{ ...linkStyle, background: 'none', border: '1px solid rgba(231,224,216,0.35)', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
                     Sign out

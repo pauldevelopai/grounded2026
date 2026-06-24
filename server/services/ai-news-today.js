@@ -54,17 +54,39 @@ function dedupeCitations(cites) {
 // Fallback when no newsletters have been ingested: a LIVE web search for the day's
 // top AI-industry news (products, model releases, company moves, adoption — NOT law,
 // which the governance briefing covers). Returns { findings, headlines } or nulls.
+// Reputable outlets + official company blogs that allow Anthropic's search crawler
+// (many big news sites — Reuters, AP, FT, the Verge, Wired — BLOCK it, and including
+// a blocked domain 400s the whole call, so they're left out). Restricting to these
+// is what stops AI-generated / speculative "news" sites producing fabricated stories
+// (e.g. the invented "Claude Fable 5 export-control / double pricing" item).
+const RELIABLE_AI_DOMAINS = [
+  'techcrunch.com', 'technologyreview.com', 'venturebeat.com', 'axios.com', 'theinformation.com',
+  'engadget.com', 'bloomberg.com', 'cnbc.com', 'semafor.com', 'theregister.com',
+  'anthropic.com', 'openai.com', 'blog.google', 'deepmind.google', 'microsoft.com', 'ai.meta.com', 'mistral.ai', 'nvidia.com', 'huggingface.co',
+];
+
 async function researchTopAINews(focus) {
   const what = focus || 'major model/product releases, big company moves, funding, notable launches, and real-world adoption';
   const researchSystem =
-    'You are a research assistant for an "AI news" briefing. Use web search to find the most significant ' +
-    `AI-INDUSTRY developments worldwide from the LAST ~5 DAYS — ${what}. Do NOT focus on law/regulation (that ` +
-    'is a separate briefing). Prefer authoritative, recent sources. Never invent; if unsure, leave it out.';
+    'You are a careful research assistant for an "AI news" briefing. Use web search to find the most significant ' +
+    `AI-INDUSTRY developments worldwide from the LAST ~5 DAYS — ${what}. Do NOT focus on law/regulation (a separate ` +
+    'briefing). STRICT SOURCING: report ONLY developments you can confirm from a reputable outlet in the search ' +
+    'results, each tied to a specific cited source URL. Do NOT include rumours, speculation, or any pricing/' +
+    'shutdown/launch claim you cannot directly attribute to a cited reputable article. If you cannot confirm an ' +
+    'item, leave it out. Never invent, embellish or guess.';
   const researchUser =
-    'List the 4–6 most important AI-industry developments from the last ~5 days. For each: one factual line ' +
-    '(what, who, when) and the source. Bullet list, facts only — no analysis.';
-  const { text, citations } = await callClaudeWithWebSearch({ system: researchSystem, userContent: researchUser, maxTokens: 1200, maxUses: 5 });
-  return { findings: (text || '').trim(), citations: citations || [] };
+    'List the 3–6 most important, CONFIRMED AI-industry developments from the last ~5 days. For each: one factual ' +
+    'line (what, who, when) and the source URL. Bullet list, facts only — nothing you cannot cite.';
+  const call = (allowedDomains) => callClaudeWithWebSearch({ system: researchSystem, userContent: researchUser, maxTokens: 1200, maxUses: 6, allowedDomains });
+  let r;
+  try { r = await call(RELIABLE_AI_DOMAINS); }
+  catch (e) {
+    // A domain that blocks the crawler 400s the whole request — fall back to an
+    // open search (still bound by the strict prompt) so the briefing never dies.
+    console.warn('[ai-news:research] allowlist search failed, retrying open:', e.message);
+    r = await call(null);
+  }
+  return { findings: (r.text || '').trim(), citations: r.citations || [] };
 }
 
 export async function generateAINewsToday() {
