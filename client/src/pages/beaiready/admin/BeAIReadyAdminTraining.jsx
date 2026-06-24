@@ -24,8 +24,9 @@ export default function BeAIReadyAdminTraining() {
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Training</h1>
       <p style={{ color: '#6b6359', marginBottom: 16, maxWidth: '66ch' }}>
         The client's intake, training agenda, materials and your training recommendations. Strategy (goals +
-        automation roadmap) is now its own page. Shareable materials feed the BE AI READY knowledge base so
-        future clients build on this work.
+        automation roadmap) is now its own page. Every survey, agenda, report and handout is read into text the
+        AI uses to decide what this client needs next — and shareable materials feed the BE AI READY knowledge
+        base so future clients build on this work.
       </p>
       {err && <div style={banner}>{err}</div>}
 
@@ -39,6 +40,7 @@ export default function BeAIReadyAdminTraining() {
 
       {clientId && (
         <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'minmax(0, 1fr)' }}>
+          <HarvestSection clientId={clientId} setErr={setErr} />
           <IntakeSection clientId={clientId} setErr={setErr} />
           <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
           <AgendaSection clientId={clientId} setErr={setErr} />
@@ -62,6 +64,61 @@ function Section({ title, hint, children }) {
       </div>
       {children}
     </section>
+  );
+}
+
+// ── Training-data harvest — extract & index every PDF so the AI uses it ───────────
+// New uploads (agenda PDFs, reports, material handouts) are read into text on
+// arrival; this panel shows how much of the corpus is indexed and lets the
+// consultant (re)read anything added before harvesting existed, or that failed.
+function HarvestSection({ clientId, setErr }) {
+  const api = useApi(clientId);
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const load = useCallback(() => { api('/beaiready/training/harvest/status').then(setSt).catch((e) => setErr(e.message)); }, [api, setErr]);
+  useEffect(() => { setSt(null); setNote(''); load(); }, [load]);
+
+  const backfill = async () => {
+    setBusy(true); setErr(''); setNote('');
+    try {
+      const r = await api('/beaiready/training/harvest/backfill', { method: 'POST' });
+      setNote(r.processed === 0
+        ? 'Everything is already harvested.'
+        : `Harvested ${r.harvested} of ${r.processed} document${r.processed === 1 ? '' : 's'}` +
+          `${r.failed ? ` · ${r.failed} couldn't be read` : ''}` +
+          `${r.reindexed_materials ? ` · re-indexed ${r.reindexed_materials} material${r.reindexed_materials === 1 ? '' : 's'}` : ''}.`);
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const total = st?.total ?? 0, harvested = st?.harvested ?? 0, pending = st?.pending ?? 0, failed = st?.failed ?? 0;
+  const pct = total ? Math.round((harvested / total) * 100) : 0;
+  return (
+    <Section title="Training-data harvest" hint="Every agenda, report and handout is read into text the AI uses for this client's decisions">
+      <div style={{ ...card, display: 'grid', gap: 10 }}>
+        {st == null ? <p style={muted}>Loading…</p> : total === 0 ? (
+          <p style={muted}>No training documents uploaded yet. Agendas, reports and material PDFs are harvested automatically as you add them.</p>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={statPill}><strong>{harvested}</strong>/{total} indexed</span>
+              {pending > 0 && <span style={{ ...pill, background: '#fef3c7', color: '#92400e', fontSize: 11, padding: '4px 10px' }}>{pending} not yet read</span>}
+              {failed > 0 && <span style={{ ...pill, background: '#fee2e2', color: '#991b1b', fontSize: 11, padding: '4px 10px' }}>{failed} couldn't be read</span>}
+            </div>
+            <div style={{ height: 8, background: '#f1ece5', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: '#c75b39' }} />
+            </div>
+          </>
+        )}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" onClick={backfill} disabled={busy || total === 0} style={btn}>{busy ? 'Harvesting…' : 'Harvest now'}</button>
+          <span style={{ ...muted, fontSize: 12 }}>New uploads are read automatically — use this to (re)read anything added before, or that failed.</span>
+        </div>
+        {note && <p style={{ fontSize: 13, color: '#166534', margin: 0 }}>{note}</p>}
+      </div>
+    </Section>
   );
 }
 

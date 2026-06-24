@@ -78,6 +78,50 @@ async function syncToRag({ table, row, tenant, category, shouldIngest }) {
   row.knowledge_id = knowledgeId; row.rag_synced = true;   // reflect post-sync state in the response
 }
 
+// Harvest: pull the text out of an uploaded training file (agenda PDF, report,
+// material handout) and store it on the row so the system can REASON over it —
+// it can't just sit on disk as an opaque PDF. Best-effort: a stubborn or
+// unsupported file is marked 'failed' but never breaks the upload. Returns the
+// extracted text (or null) so callers can chain a RAG re-sync.
+async function harvestFileText(docId) {
+  try {
+    const { rows: [doc] } = await pool.query('SELECT file_path, mime_type FROM uploaded_documents WHERE id = $1', [docId]);
+    if (!doc || !doc.file_path) return null;
+    await pool.query("UPDATE uploaded_documents SET extraction_status = 'extracting' WHERE id = $1", [docId]);
+    const text = await extractText(doc.file_path, doc.mime_type);
+    await pool.query(
+      "UPDATE uploaded_documents SET extracted_text = $1, extraction_status = 'extracted', updated_at = NOW() WHERE id = $2",
+      [text || '', docId]);
+    return text || '';
+  } catch (e) {
+    console.error('[bair-train/harvest]', docId, e.message);
+    await pool.query(
+      "UPDATE uploaded_documents SET extraction_status = 'failed', extraction_error = $1 WHERE id = $2",
+      [e.message, docId]).catch(() => {});
+    return null;
+  }
+}
+
+// Ingest a material into the SECTOR knowledge base using its typed content AND the
+// harvested text of its attached files — so what was actually taught (the slides /
+// handouts), not just the summary, informs future same-sector engagements. Replaces
+// the plain syncToRag call for materials.
+async function syncMaterialToRag(materialId, tenant) {
+  const { rows: [m] } = await pool.query('SELECT * FROM training_materials WHERE id = $1', [materialId]);
+  if (!m) return;
+  const { rows: files } = await pool.query(
+    `SELECT original_name, extracted_text FROM uploaded_documents
+       WHERE entity_type = 'training_material_file' AND entity_id = $1
+         AND extracted_text IS NOT NULL AND length(extracted_text) > 0
+       ORDER BY created_at`, [materialId]);
+  const fileText = files.map((f) => `— ${f.original_name}:\n${f.extracted_text}`).join('\n\n');
+  const combined = [m.content, fileText].filter(Boolean).join('\n\n').slice(0, 24000);
+  await syncToRag({
+    table: 'training_materials', row: { ...m, content: combined }, tenant,
+    category: 'training_material', shouldIngest: m.rag_shareable && !!combined,
+  });
+}
+
 // ── Intake (Google form) — reuse intake_forms/responses + the hourly sync ───────
 router.post('/intake-forms', requireRole('admin'), async (req, res) => {
   try {
@@ -241,6 +285,9 @@ router.post('/agendas/:id/doc/upload', requireRole('admin'), upload.single('file
       `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
        VALUES ($1,$2,$3,$4,$5,'training_agenda',$6,$7) RETURNING id`,
       [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, req.params.id, req.user.id]);
+    // Harvest the agenda's text immediately so the strategy AI can read what was
+    // planned/delivered rather than treating the PDF as opaque.
+    await harvestFileText(doc.id);
     const { rows } = await pool.query(
       `UPDATE training_agendas SET doc_kind='pdf', doc_file_id=$1, doc_name=$2, doc_url=NULL,
          doc_synced_text=NULL, doc_synced_at=NULL, updated_at=NOW() WHERE id=$3 RETURNING *`,
@@ -310,8 +357,7 @@ router.post('/materials', requireRole('admin'), async (req, res) => {
        order_index ?? null, typeof published === 'boolean' ? published : null,
        typeof rag_shareable === 'boolean' ? rag_shareable : null, agenda_id || null, req.user.id]);
     const row = rows[0];
-    const tenant = await tenantContext(req);
-    await syncToRag({ table: 'training_materials', row, tenant, category: 'training_material', shouldIngest: row.rag_shareable && !!row.content });
+    await syncMaterialToRag(row.id, await tenantContext(req));
     res.status(201).json(row);
   } catch (err) { console.error('[bair-train/materials:post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -334,8 +380,7 @@ router.put('/materials/:id', requireRole('admin'), async (req, res) => {
        typeof rag_shareable === 'boolean' ? rag_shareable : null, hasAgenda, agenda_id || null, req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Material not found' });
     const row = rows[0];
-    const tenant = await tenantContext(req);
-    await syncToRag({ table: 'training_materials', row, tenant, category: 'training_material', shouldIngest: row.rag_shareable && !!row.content });
+    await syncMaterialToRag(row.id, await tenantContext(req));
     res.json(row);
   } catch (err) { console.error('[bair-train/materials:put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -374,7 +419,14 @@ router.post('/files', requireRole('admin'), upload.single('file'), async (req, r
       `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, original_name AS name, file_size AS size`,
       [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, entity_type, entity_id, req.user.id]);
-    res.status(201).json(doc);
+    // Harvest the file's text so reports/handouts feed the AI; for shareable
+    // material files, fold that text into the sector knowledge base too.
+    const text = await harvestFileText(doc.id);
+    if (entity_type === 'training_material_file' && text) {
+      try { await syncMaterialToRag(entity_id, await tenantContext(req)); }
+      catch (e) { console.error('[bair-train/files:post rag]', e.message); }
+    }
+    res.status(201).json({ ...doc, harvested: text != null });
   } catch (err) { console.error('[bair-train/files:post]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
 });
 
@@ -390,6 +442,11 @@ router.delete('/files/:docId', requireRole('admin'), async (req, res) => {
     }
     await pool.query('DELETE FROM uploaded_documents WHERE id = $1', [req.params.docId]);
     if (doc.file_path) fs.unlink(doc.file_path, () => {});
+    // Re-index the material so the knowledge base drops the removed file's text.
+    if (doc.entity_type === 'training_material_file') {
+      try { await syncMaterialToRag(doc.entity_id, await tenantContext(req)); }
+      catch (e) { console.error('[bair-train/files:del rag]', e.message); }
+    }
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/files:del]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -638,10 +695,48 @@ async function gatherBusinessContext(newsroomId) {
   for (const s of srcs) {
     if (s.extracted_text) parts.push(`[${s.kind}] ${s.title || ''}:\n${s.extracted_text.slice(0, 3000)}`);
   }
+
+  // What we've actually delivered to this client — the harvested training record.
+  // Agendas (what was planned/run, incl. the PDF/Google-Doc text), training reports
+  // (what happened + recommendations), and the materials themselves (incl. the text
+  // pulled from their handouts). This is the difference between deciding from a real
+  // engagement history and guessing from a survey.
+  const { rows: agendas } = await pool.query(
+    `SELECT a.title, a.scheduled_for, a.doc_synced_text,
+            (SELECT string_agg(
+                      CASE WHEN i.time_label IS NOT NULL THEN i.time_label || ' — ' ELSE '' END || i.topic ||
+                      CASE WHEN i.detail IS NOT NULL THEN ': ' || i.detail ELSE '' END, E'\n' ORDER BY i.order_index)
+               FROM training_agenda_items i WHERE i.agenda_id = a.id) AS items,
+            (SELECT ud.extracted_text FROM uploaded_documents ud WHERE ud.id = a.doc_file_id) AS doc_text
+       FROM training_agendas a WHERE a.newsroom_id = $1
+      ORDER BY a.scheduled_for DESC NULLS LAST LIMIT 12`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const a of agendas) {
+    const body = [a.items, a.doc_synced_text || a.doc_text].filter(Boolean).join('\n');
+    if (a.title || body) parts.push(`Training session — ${a.title || 'session'}${a.scheduled_for ? ` (${new Date(a.scheduled_for).toISOString().slice(0, 10)})` : ''}:\n${body.slice(0, 2500)}`);
+  }
+  const { rows: reports } = await pool.query(
+    `SELECT a.title, ud.original_name, ud.extracted_text
+       FROM uploaded_documents ud JOIN training_agendas a ON a.id = ud.entity_id
+      WHERE ud.entity_type = 'training_report_file' AND a.newsroom_id = $1
+        AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 0
+      ORDER BY ud.created_at DESC LIMIT 10`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const r of reports) parts.push(`Training report (${r.original_name}) for "${r.title}":\n${r.extracted_text.slice(0, 3000)}`);
+  const { rows: mats } = await pool.query(
+    `SELECT m.title, m.content,
+            (SELECT string_agg(ud.extracted_text, E'\n\n' ORDER BY ud.created_at)
+               FROM uploaded_documents ud
+              WHERE ud.entity_type = 'training_material_file' AND ud.entity_id = m.id
+                AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 0) AS file_text
+       FROM training_materials m WHERE m.newsroom_id = $1 ORDER BY m.order_index, m.created_at LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const m of mats) {
+    const body = [m.content, m.file_text].filter(Boolean).join('\n');
+    if (body) parts.push(`Training material — ${m.title}:\n${body.slice(0, 2500)}`);
+  }
+
   const { rows: existing } = await pool.query(
     `SELECT kind, title FROM training_strategy_items WHERE newsroom_id = $1`, [newsroomId]).catch(() => ({ rows: [] }));
   if (existing.length) parts.push(`Existing strategy items (do not duplicate):\n${existing.map((e) => `- [${e.kind}] ${e.title}`).join('\n')}`);
-  return parts.join('\n\n').slice(0, 14000);
+  return parts.join('\n\n').slice(0, 24000);
 }
 
 function parseSuggestions(text) {
@@ -687,6 +782,65 @@ router.post('/strategy/suggest', requireRole('admin'), async (req, res) => {
     const suggestions = parseSuggestions(raw).filter((s) => s && s.title).slice(0, 8);
     res.json({ suggestions, sector_lessons_used: lessonsUsed });
   } catch (err) { console.error('[bair-train/strategy:suggest]', err); res.status(500).json({ message: err.message || 'Suggestion failed' }); }
+});
+
+// ── Training-data harvest: extract & index everything, backfill old uploads ───────
+// Resolves every training file (agenda PDF, second doc, report, material handout)
+// to the client that owns it, so status/backfill are tenant-scoped like the rest.
+const HARVEST_FILE_TYPES = ['training_agenda', 'training_agenda_file', 'training_report_file', 'training_material_file'];
+const HARVEST_CTE = `
+  WITH training_files AS (
+    SELECT ud.id, ud.entity_type, ud.entity_id, ud.original_name, ud.mime_type,
+           ud.extracted_text, ud.extraction_status,
+           COALESCE(ta.newsroom_id, tm.newsroom_id) AS newsroom_id
+      FROM uploaded_documents ud
+      LEFT JOIN training_agendas   ta ON ta.id = ud.entity_id
+             AND ud.entity_type IN ('training_agenda','training_agenda_file','training_report_file')
+      LEFT JOIN training_materials tm ON tm.id = ud.entity_id
+             AND ud.entity_type = 'training_material_file'
+     WHERE ud.entity_type = ANY($1)
+  )`;
+
+// How much of this client's training corpus has been harvested into text the AI uses.
+router.get('/harvest/status', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: [c] } = await pool.query(
+      `${HARVEST_CTE}
+       SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE extracted_text IS NOT NULL AND length(extracted_text) > 0)::int AS harvested,
+              COUNT(*) FILTER (WHERE extraction_status = 'failed')::int AS failed,
+              COUNT(*) FILTER (WHERE (extracted_text IS NULL OR length(extracted_text) = 0) AND COALESCE(extraction_status,'pending') <> 'failed')::int AS pending
+         FROM training_files WHERE newsroom_id = $2`,
+      [HARVEST_FILE_TYPES, newsroomId]);
+    res.json(c || { total: 0, harvested: 0, failed: 0, pending: 0 });
+  } catch (err) { console.error('[bair-train/harvest:status]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Backfill: extract text for this client's training files that were uploaded before
+// harvesting existed (or that previously failed), then re-index affected materials.
+router.post('/harvest/backfill', requireRole('admin'), async (req, res) => {
+  try {
+    const tenant = await tenantContext(req);
+    const { rows: pending } = await pool.query(
+      `${HARVEST_CTE}
+       SELECT id, entity_type, entity_id FROM training_files
+        WHERE newsroom_id = $2
+          AND (extracted_text IS NULL OR length(extracted_text) = 0)
+        ORDER BY id LIMIT 100`,
+      [HARVEST_FILE_TYPES, tenant.newsroomId]);
+    let harvested = 0, failed = 0;
+    const materialsToResync = new Set();
+    for (const f of pending) {
+      const text = await harvestFileText(f.id);
+      if (text != null) { harvested++; if (f.entity_type === 'training_material_file') materialsToResync.add(f.entity_id); }
+      else failed++;
+    }
+    for (const mid of materialsToResync) {
+      try { await syncMaterialToRag(mid, tenant); } catch (e) { console.error('[bair-train/harvest:backfill rag]', e.message); }
+    }
+    res.json({ processed: pending.length, harvested, failed, reindexed_materials: materialsToResync.size });
+  } catch (err) { console.error('[bair-train/harvest:backfill]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;
