@@ -88,6 +88,7 @@ function TrainingRecord() {
                     </a>
                   </p>
                 )}
+                <FileLinks files={a.files} />
                 {/* Materials linked to this training. */}
                 {(() => {
                   const mats = (myMaterials || []).filter((m) => m.agenda_id === a.id);
@@ -99,6 +100,7 @@ function TrainingRecord() {
                           <li key={m.id} style={{ fontSize: 13 }}>
                             <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#c75b39', marginRight: 6 }}>{m.kind}</span>
                             {m.url ? <a href={m.url} target="_blank" rel="noreferrer">{m.title}</a> : m.title}
+                            <FileLinks files={m.files} />
                           </li>
                         ))}
                       </ul>
@@ -124,6 +126,7 @@ function TrainingRecord() {
                 <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#c75b39', background: '#f7ece7', padding: '1px 7px', borderRadius: 999, marginRight: 6 }}>{m.kind}</span>
                 {m.url ? <a href={m.url} target="_blank" rel="noreferrer"><strong>{m.title}</strong></a> : <strong>{m.title}</strong>}
                 {m.description && <div style={{ color: '#6b6359', marginTop: 2 }}>{m.description}</div>}
+                <FileLinks files={m.files} />
               </li>
             ))}
           </ul>
@@ -179,6 +182,18 @@ function TrainingRecord() {
         </p>
       </section>
     </>
+  );
+}
+
+// Download links for an agenda's / material's attached files (tenant-scoped server-side).
+function FileLinks({ files }) {
+  if (!files || files.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 4 }}>
+      {files.map((f) => (
+        <a key={f.id} href={`/api/beaiready/training/files/${f.id}/download`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5 }}>📎 {f.name} ↗</a>
+      ))}
+    </div>
   );
 }
 

@@ -21,11 +21,11 @@ export default function BeAIReadyAdminTraining() {
 
   return (
     <div style={{ maxWidth: 920 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Training &amp; Strategy</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Training</h1>
       <p style={{ color: '#6b6359', marginBottom: 16, maxWidth: '66ch' }}>
-        Everything a client gets in their portal — their intake, training agenda, materials, the AI-strategy
-        outcome document, and your recommendations. Shareable materials feed the BE AI READY knowledge base
-        so future clients build on this work.
+        The client's intake, training agenda, materials and your training recommendations. Strategy (goals +
+        automation roadmap) is now its own page. Shareable materials feed the BE AI READY knowledge base so
+        future clients build on this work.
       </p>
       {err && <div style={banner}>{err}</div>}
 
@@ -43,8 +43,7 @@ export default function BeAIReadyAdminTraining() {
           <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
           <AgendaSection clientId={clientId} setErr={setErr} />
           <MaterialsSection clientId={clientId} setErr={setErr} />
-          <StrategySection clientId={clientId} setErr={setErr} />
-          <RecommendationsSection clientId={clientId} setErr={setErr} />
+          <RecommendationsSection clientId={clientId} setErr={setErr} pillars={['training']} />
         </div>
       )}
     </div>
@@ -414,6 +413,15 @@ function AgendaCard({ agenda, api, clientId, onChanged, setErr }) {
           )}
         </div>
       )}
+      {/* Extra documents beyond the primary one — a second agenda PDF, the training
+          report, handouts. Add as many as needed; each shows in the client's portal. */}
+      {!edit && (
+        <div style={{ marginTop: 10, borderTop: '1px solid #f0ebe3', paddingTop: 10 }}>
+          <Attachments entityType="training_agenda_file" entityId={agenda.id} files={agenda.files}
+            clientId={clientId} onChanged={onChanged} setErr={setErr}
+            label="More documents — second agenda PDF, training report, handouts (add as many as you need)" />
+        </div>
+      )}
       {edit && (
         <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
           <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} style={inp} />
@@ -436,18 +444,30 @@ function MaterialsSection({ clientId, setErr }) {
   const [rows, setRows] = useState(null);
   const [agendas, setAgendas] = useState([]);
   const [draft, setDraft] = useState({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' });
+  const [pendingFiles, setPendingFiles] = useState([]);
   const load = useCallback(() => {
     api('/beaiready/training/materials').then(setRows).catch((e) => setErr(e.message));
     api('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
   }, [api, setErr]);
   useEffect(() => { setRows(null); load(); }, [load]);
-  const create = async (e) => { e.preventDefault(); if (!draft.title.trim()) return; setErr(''); try { await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) }); setDraft({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' }); load(); } catch (e) { setErr(e.message); } };
+  const create = async (e) => {
+    e.preventDefault(); if (!draft.title.trim()) return; setErr('');
+    try {
+      const m = await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) });
+      for (const file of pendingFiles) {
+        const fd = new FormData(); fd.append('entity_type', 'training_material_file'); fd.append('entity_id', m.id); fd.append('file', file);
+        const res = await fetch('/api/beaiready/training/files', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
+        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || 'Upload failed'); }
+      }
+      setDraft({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' }); setPendingFiles([]); load();
+    } catch (e) { setErr(e.message); }
+  };
 
   return (
-    <Section title="Training materials" hint="Published materials appear in the client's portal — link each to its training">
+    <Section title="Training materials" hint="Published materials appear in the client's portal — attach the PDFs for each session and link each to its training">
       <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
         {rows == null ? <p style={muted}>Loading…</p> : rows.length === 0 ? <p style={muted}>No materials yet.</p> :
-          rows.map((m) => <MaterialCard key={m.id} m={m} api={api} agendas={agendas} onChanged={load} setErr={setErr} />)}
+          rows.map((m) => <MaterialCard key={m.id} m={m} api={api} clientId={clientId} agendas={agendas} onChanged={load} setErr={setErr} />)}
       </div>
       <form onSubmit={create} style={{ ...card, display: 'grid', gap: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 13 }}>New material</div>
@@ -458,6 +478,18 @@ function MaterialsSection({ clientId, setErr }) {
         </div>
         <input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Short description" style={inp} />
         <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} placeholder="Body / notes (this is what the knowledge base learns from)" style={{ ...inp, minHeight: 64 }} />
+        {/* Attach the session's PDFs (slides, handouts) — as many as you like. */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ ...tag, cursor: 'pointer' }}>
+            {pendingFiles.length ? `${pendingFiles.length} PDF${pendingFiles.length === 1 ? '' : 's'} to attach — add more` : '+ Attach PDF(s)'}
+            <input type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" multiple style={{ display: 'none' }}
+              onChange={(e) => { setPendingFiles((p) => [...p, ...Array.from(e.target.files || [])]); e.target.value = ''; }} />
+          </label>
+          {pendingFiles.length > 0 && (
+            <span style={{ fontSize: 12, color: '#6b6359' }}>{pendingFiles.map((f) => f.name).join(', ')}
+              {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button></span>
+          )}
+        </div>
         <AgendaSelect agendas={agendas} value={draft.agenda_id} onChange={(v) => setDraft({ ...draft, agenda_id: v })} />
         <label style={chk}><input type="checkbox" checked={draft.rag_shareable} onChange={(e) => setDraft({ ...draft, rag_shareable: e.target.checked })} /> Share with the BE AI READY knowledge base (sector-scoped)</label>
         <button type="submit" style={{ ...btn, justifySelf: 'start' }}>Add material</button>
@@ -466,7 +498,7 @@ function MaterialsSection({ clientId, setErr }) {
   );
 }
 
-function MaterialCard({ m, api, agendas, onChanged, setErr }) {
+function MaterialCard({ m, api, clientId, agendas, onChanged, setErr }) {
   const [edit, setEdit] = useState(false);
   const [f, setF] = useState({ title: m.title, kind: m.kind, url: m.url || '', description: m.description || '', content: m.content || '', published: m.published, rag_shareable: m.rag_shareable, agenda_id: m.agenda_id || '' });
   const save = async () => { setErr(''); try { await api(`/beaiready/training/materials/${m.id}`, { method: 'PUT', body: JSON.stringify(f) }); setEdit(false); onChanged(); } catch (e) { setErr(e.message); } };
@@ -485,6 +517,12 @@ function MaterialCard({ m, api, agendas, onChanged, setErr }) {
       </div>
       {!edit && m.description && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0' }}>{m.description}</p>}
       {!edit && m.url && <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: '#c75b39' }}>{m.url} ↗</a>}
+      {!edit && (
+        <div style={{ marginTop: 8 }}>
+          <Attachments entityType="training_material_file" entityId={m.id} files={m.files}
+            clientId={clientId} onChanged={onChanged} setErr={setErr} label="PDFs (slides, handouts) — add as many as you need" />
+        </div>
+      )}
       {edit && (
         <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
           <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} style={inp} />
@@ -511,7 +549,7 @@ function MaterialCard({ m, api, agendas, onChanged, setErr }) {
 // wants from AI) and an Automation roadmap (what to automate, sized by effort/payoff).
 // Clients see PUBLISHED items in their dashboard.
 const SIZE_OPTS = ['', 'low', 'medium', 'high'];
-function StrategySection({ clientId, setErr }) {
+export function StrategySection({ clientId, setErr }) {
   const api = useApi(clientId);
   const [items, setItems] = useState(null);
   const [agendas, setAgendas] = useState([]);
@@ -684,8 +722,62 @@ function AgendaSelect({ agendas, value, onChange }) {
   );
 }
 
+// ── Attachments — multiple files on an agenda or material ────────────────────────
+// entityType is 'training_agenda_file' | 'training_material_file'. Members download
+// via the same route once the parent is published; admins always can.
+const fmtSize = (b) => (b > 1e6 ? `${(b / 1e6).toFixed(1)}MB` : `${Math.max(1, Math.round(b / 1e3))}KB`);
+function Attachments({ entityType, entityId, files, clientId, onChanged, setErr, label }) {
+  const [busy, setBusy] = useState(false);
+  const upload = async (fileList) => {
+    const arr = Array.from(fileList || []);
+    if (!arr.length) return;
+    setBusy(true); setErr('');
+    try {
+      for (const file of arr) {
+        const fd = new FormData();
+        fd.append('entity_type', entityType);   // before file (multer reads the dir from it)
+        fd.append('entity_id', entityId);
+        fd.append('file', file);
+        const res = await fetch('/api/beaiready/training/files', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Upload failed'); }
+      }
+      onChanged();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const remove = async (id) => {
+    setErr('');
+    try {
+      const res = await fetch(`/api/beaiready/training/files/${id}`, { method: 'DELETE', credentials: 'include', headers: { 'X-Newsroom-Id': clientId } });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Delete failed'); }
+      onChanged();
+    } catch (e) { setErr(e.message); }
+  };
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {label && <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>{label}</div>}
+      {(files || []).length > 0 && (
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 4 }}>
+          {files.map((f) => (
+            <li key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, flexWrap: 'wrap' }}>
+              <span>📎 {f.name}</span>
+              <span style={muted}>{fmtSize(f.size)}</span>
+              <a href={`/api/beaiready/training/files/${f.id}/download`} target="_blank" rel="noreferrer" style={{ color: '#c75b39' }}>Open ↗</a>
+              <button onClick={() => remove(f.id)} style={{ ...tag, color: '#b91c1c', padding: '2px 8px' }}>Remove</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label style={{ ...tag, cursor: 'pointer', justifySelf: 'start' }}>
+        {busy ? 'Uploading…' : '+ Add PDF(s)'}
+        <input type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" multiple style={{ display: 'none' }} onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
+      </label>
+    </div>
+  );
+}
+
 // ── Recommendations (Training + Strategy pillars) ────────────────────────────────
-function RecommendationsSection({ clientId, setErr }) {
+export function RecommendationsSection({ clientId, setErr, pillars = ['training', 'strategy'] }) {
   const api = useApi(clientId);
   const [recs, setRecs] = useState(null);
   const load = useCallback(() => { api('/beaiready/recommendations').then(setRecs).catch((e) => setErr(e.message)); }, [api, setErr]);
@@ -693,7 +785,7 @@ function RecommendationsSection({ clientId, setErr }) {
   return (
     <Section title="Recommendations" hint="Prioritised actions shown in the client's dashboard">
       <div style={{ display: 'grid', gap: 12 }}>
-        {['training', 'strategy'].map((k) => {
+        {pillars.map((k) => {
           const p = findPillar(k); if (!p) return null;
           return <PillarBlock key={k} pillar={p} clientId={clientId} recs={(recs || []).filter((r) => r.pillar === k)} onChanged={load} setErr={setErr} />;
         })}

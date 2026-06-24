@@ -136,7 +136,9 @@ router.get('/agendas', async (req, res) => {
     const pub = isAdmin(req) ? '' : `AND status = 'published'`;
     const { rows: agendas } = await pool.query(
       `SELECT id, newsroom_id, title, scheduled_for, location, status, notes, created_at, updated_at,
-              doc_kind, doc_url, doc_name, doc_file_id, doc_synced_at, (doc_synced_text IS NOT NULL) AS doc_synced
+              doc_kind, doc_url, doc_name, doc_file_id, doc_synced_at, (doc_synced_text IS NOT NULL) AS doc_synced,
+              (SELECT COALESCE(json_agg(json_build_object('id', ud.id, 'name', ud.original_name, 'size', ud.file_size) ORDER BY ud.created_at), '[]'::json)
+                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_agenda_file' AND ud.entity_id = training_agendas.id) AS files
          FROM training_agendas WHERE newsroom_id = $1 ${pub} ORDER BY scheduled_for DESC NULLS LAST, created_at DESC`, [newsroomId]);
     for (const a of agendas) {
       const { rows: items } = await pool.query(
@@ -285,7 +287,9 @@ router.get('/materials', async (req, res) => {
     const { newsroomId } = await tenantContext(req);
     const pub = isAdmin(req) ? '' : 'AND m.published = true';
     const { rows } = await pool.query(
-      `SELECT m.*, a.title AS agenda_title, a.scheduled_for AS agenda_date
+      `SELECT m.*, a.title AS agenda_title, a.scheduled_for AS agenda_date,
+              (SELECT COALESCE(json_agg(json_build_object('id', ud.id, 'name', ud.original_name, 'size', ud.file_size) ORDER BY ud.created_at), '[]'::json)
+                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_material_file' AND ud.entity_id = m.id) AS files
          FROM training_materials m LEFT JOIN training_agendas a ON a.id = m.agenda_id
         WHERE m.newsroom_id = $1 ${pub} ORDER BY m.order_index, m.created_at`, [newsroomId]);
     res.json(rows);
@@ -341,6 +345,71 @@ router.delete('/materials/:id', requireRole('admin'), async (req, res) => {
     if (rows[0].knowledge_id) await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [rows[0].knowledge_id]).catch(() => {});
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/materials:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Attachments (multiple files per agenda or material) ──────────────────────────
+// Agendas can carry several documents (the agenda PDF, a second PDF, a training
+// report); materials can carry many PDFs (slides/handouts per session). Stored in
+// uploaded_documents under a *_file entity_type so they don't collide with the
+// agenda's single primary doc. Tenant-scoped; members can download only when the
+// parent (agenda/material) is published.
+const FILE_SCOPES = {
+  training_agenda_file:   { table: 'training_agendas',   pub: "status = 'published'" },
+  training_material_file: { table: 'training_materials', pub: 'published = true' },
+};
+
+router.post('/files', requireRole('admin'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const { entity_type, entity_id } = req.body || {};
+    const scope = FILE_SCOPES[entity_type];
+    if (!scope || !entity_id) { fs.unlink(req.file.path, () => {}); return res.status(400).json({ message: 'entity_type + entity_id required' }); }
+    const { newsroomId } = await tenantContext(req);
+    const { rows: [ent] } = await pool.query(`SELECT id FROM ${scope.table} WHERE id = $1 AND newsroom_id = $2`, [entity_id, newsroomId]);
+    if (!ent) { fs.unlink(req.file.path, () => {}); return res.status(404).json({ message: 'Not found for this client' }); }
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, original_name AS name, file_size AS size`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, entity_type, entity_id, req.user.id]);
+    res.status(201).json(doc);
+  } catch (err) { console.error('[bair-train/files:post]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+router.delete('/files/:docId', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows: [doc] } = await pool.query('SELECT * FROM uploaded_documents WHERE id = $1', [req.params.docId]);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    const scope = FILE_SCOPES[doc.entity_type];
+    if (scope) {
+      const { newsroomId } = await tenantContext(req);
+      const { rows: [ent] } = await pool.query(`SELECT id FROM ${scope.table} WHERE id = $1 AND newsroom_id = $2`, [doc.entity_id, newsroomId]);
+      if (!ent) return res.status(404).json({ message: 'Not found for this client' });
+    }
+    await pool.query('DELETE FROM uploaded_documents WHERE id = $1', [req.params.docId]);
+    if (doc.file_path) fs.unlink(doc.file_path, () => {});
+    res.json({ deleted: true });
+  } catch (err) { console.error('[bair-train/files:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Download an attachment. Member-reachable but tenant-scoped — members only get a
+// file whose parent agenda/material is published.
+router.get('/files/:docId/download', async (req, res) => {
+  try {
+    const { rows: [doc] } = await pool.query('SELECT * FROM uploaded_documents WHERE id = $1', [req.params.docId]);
+    const scope = doc && FILE_SCOPES[doc.entity_type];
+    if (!doc || !scope || !doc.file_path || !fs.existsSync(doc.file_path)) return res.status(404).json({ message: 'Not found' });
+    // Admins (who manage every client) reach any training attachment — an <a> GET
+    // can't carry the X-Newsroom-Id header. Members get only their own tenant's
+    // PUBLISHED parent agenda/material.
+    if (!isAdmin(req)) {
+      const { newsroomId } = await tenantContext(req);
+      const { rows: [ent] } = await pool.query(`SELECT id FROM ${scope.table} WHERE id = $1 AND newsroom_id = $2 AND ${scope.pub}`, [doc.entity_id, newsroomId]);
+      if (!ent) return res.status(404).json({ message: 'Not found' });
+    }
+    res.setHeader('Content-Disposition', `inline; filename="${doc.original_name}"`);
+    res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+    fs.createReadStream(doc.file_path).pipe(res);
+  } catch (err) { console.error('[bair-train/files:download]', err); res.status(500).json({ message: 'Download failed' }); }
 });
 
 // ── Outcome documents (linked to strategy; RAG-ingested when FINAL) ──────────────
