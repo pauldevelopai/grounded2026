@@ -285,20 +285,19 @@ function AgendaSection({ clientId, setErr }) {
   const [draft, setDraft] = useState({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' });
   const [pendingFiles, setPendingFiles] = useState([]);
   const [busy, setBusy] = useState(false);
-  const load = useCallback(() => { api('/beaiready/training/agendas').then(setAgendas).catch((e) => setErr(e.message)); }, [api, setErr]);
+  const [note, setNote] = useState(null);   // feedback shown AT the form — the page is long, a top banner is easy to miss
+  const load = useCallback(() => { api('/beaiready/training/agendas').then(setAgendas).catch((e) => setNote({ ok: false, text: `Couldn't load agendas: ${e.message}` })); }, [api]);
   useEffect(() => { setAgendas(null); load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault();
-    if (!draft.title.trim()) { setErr('Enter an agenda title first.'); return; }
-    setErr(''); setBusy(true);
+    if (!draft.title.trim()) { setNote({ ok: false, text: 'Enter an agenda title first.' }); return; }
+    setNote({ ok: true, text: 'Adding…' }); setBusy(true);
     let a;
     try {
       a = await api('/beaiready/training/agendas', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, title: draft.title, scheduled_for: draft.scheduled_for || null, location: draft.location || null, items: textToItems(draft.items) }) });
-    } catch (e) { setErr(`Couldn't create the agenda: ${e.message}`); setBusy(false); return; }
-    // The agenda exists now — capture the documents, clear the form, and SHOW it
-    // immediately. Documents attach afterwards (best-effort) so a slow/failed file
-    // never blocks the agenda from appearing.
+    } catch (e) { setNote({ ok: false, text: `Couldn't create the agenda: ${e.message}` }); setBusy(false); return; }
+    // The agenda exists now — capture the documents, clear the form, SHOW it immediately.
     const files = pendingFiles;
     const gdoc = draft.gdocUrl.trim();
     setDraft({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' });
@@ -316,7 +315,9 @@ function AgendaSection({ clientId, setErr }) {
         if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || `HTTP ${res.status}`); }
       } catch (e) { problems.push(`${file.name}: ${e.message}`); }
     }
-    if (problems.length) setErr(`Agenda created — but some documents didn't attach: ${problems.join('; ')}. Add them under “Documents” on the agenda below.`);
+    setNote(problems.length
+      ? { ok: false, text: `Agenda “${a.title}” added — but some documents didn't attach: ${problems.join('; ')}. Add them under “Documents” on the agenda above.` }
+      : { ok: true, text: `Agenda “${a.title}” added ✓` });
     load();
     setBusy(false);
   };
@@ -352,6 +353,7 @@ function AgendaSection({ clientId, setErr }) {
             )}
           </div>
         </div>
+        {note && <div style={{ fontSize: 13, padding: '8px 12px', borderRadius: 8, background: note.ok ? '#f0fdf4' : '#FEF2F2', color: note.ok ? '#166534' : '#B91C1C', border: `1px solid ${note.ok ? '#bbf7d0' : '#fecaca'}` }}>{note.text}</div>}
         <button type="submit" disabled={busy} style={{ ...btn, justifySelf: 'start' }}>{busy ? 'Adding…' : 'Add agenda'}</button>
       </form>
     </Section>
@@ -749,10 +751,11 @@ function AgendaSelect({ agendas, value, onChange }) {
 const fmtSize = (b) => (b > 1e6 ? `${(b / 1e6).toFixed(1)}MB` : `${Math.max(1, Math.round(b / 1e3))}KB`);
 function Attachments({ entityType, entityId, files, clientId, onChanged, setErr, label }) {
   const [busy, setBusy] = useState(false);
+  const [localErr, setLocalErr] = useState('');
   const upload = async (fileList) => {
     const arr = Array.from(fileList || []);
     if (!arr.length) return;
-    setBusy(true); setErr('');
+    setBusy(true); setLocalErr('');
     try {
       for (const file of arr) {
         const fd = new FormData();
@@ -763,20 +766,21 @@ function Attachments({ entityType, entityId, files, clientId, onChanged, setErr,
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `upload failed (HTTP ${res.status})`); }
       }
       onChanged();
-    } catch (e) { setErr(e.message); }
+    } catch (e) { setLocalErr(e.message); }
     setBusy(false);
   };
   const remove = async (id) => {
-    setErr('');
+    setLocalErr('');
     try {
       const res = await fetch(`/api/beaiready/training/files/${id}`, { method: 'DELETE', credentials: 'include', headers: { 'X-Newsroom-Id': clientId } });
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Delete failed'); }
       onChanged();
-    } catch (e) { setErr(e.message); }
+    } catch (e) { setLocalErr(e.message); }
   };
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       {label && <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>{label}</div>}
+      {localErr && <div style={{ fontSize: 12.5, padding: '6px 10px', borderRadius: 6, background: '#FEF2F2', color: '#B91C1C', border: '1px solid #fecaca' }}>{localErr}</div>}
       {(files || []).length > 0 && (
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 4 }}>
           {files.map((f) => (
