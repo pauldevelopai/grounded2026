@@ -37,7 +37,10 @@ async function hybridVectorSearch({ queryEmbedding, searchTerms, categories, sec
   }
   if (orgId) {
     params.push(orgId);
-    conditions.push(`(ke.organisation_id = $${params.length} OR ke.organisation_id IS NULL)`);
+    // Tenant isolation: the caller's own org (any visibility) + platform-curated
+    // 'global' + anonymised 'pattern' entries — NEVER another organisation's private
+    // content. This is what keeps one business's knowledge from leaking to another.
+    conditions.push(`(ke.organisation_id = $${params.length} OR ke.visibility IN ('global', 'pattern'))`);
   }
   if (courseId) {
     params.push(courseId);
@@ -78,7 +81,10 @@ async function textSearch({ searchTerms, categories, sectorId, orgId, courseId, 
   }
   if (orgId) {
     params.push(orgId);
-    conditions.push(`(ke.organisation_id = $${params.length} OR ke.organisation_id IS NULL)`);
+    // Tenant isolation: the caller's own org (any visibility) + platform-curated
+    // 'global' + anonymised 'pattern' entries — NEVER another organisation's private
+    // content. This is what keeps one business's knowledge from leaking to another.
+    conditions.push(`(ke.organisation_id = $${params.length} OR ke.visibility IN ('global', 'pattern'))`);
   }
   if (courseId) {
     params.push(courseId);
@@ -215,11 +221,15 @@ export async function recordInteraction({ interactionType, sectorId, entityType,
 /**
  * Create a knowledge entry from any source.
  */
-export async function createKnowledgeEntry({ category, subcategory, title, content, sectorId, organisationId, courseId, sourceType, sourceId, sourceDescription, confidence, tags }) {
+export async function createKnowledgeEntry({ category, subcategory, title, content, sectorId, organisationId, courseId, sourceType, sourceId, sourceDescription, confidence, tags, visibility }) {
+  // Default visibility from scope: org-scoped entries are private to that org; entries
+  // with no org are platform-curated ('global'). Anonymised cross-business patterns
+  // pass visibility:'pattern' explicitly. Raw client content must pass an organisationId.
+  const vis = visibility || (organisationId ? 'private' : 'global');
   const { rows } = await pool.query(
-    `INSERT INTO knowledge_entries (category, subcategory, title, content, sector_id, organisation_id, course_id, source_type, source_id, source_description, confidence)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
-    [category, subcategory || null, title, content, sectorId || null, organisationId || null, courseId || null, sourceType, sourceId || null, sourceDescription || null, confidence || 0.5]
+    `INSERT INTO knowledge_entries (category, subcategory, title, content, sector_id, organisation_id, course_id, source_type, source_id, source_description, confidence, visibility)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+    [category, subcategory || null, title, content, sectorId || null, organisationId || null, courseId || null, sourceType, sourceId || null, sourceDescription || null, confidence || 0.5, vis]
   );
   const knowledgeId = rows[0].id;
 

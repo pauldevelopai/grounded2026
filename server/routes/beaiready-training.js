@@ -69,7 +69,9 @@ async function syncToRag({ table, row, tenant, category, shouldIngest }) {
   const knowledgeId = await createKnowledgeEntry({
     category, subcategory: row.kind || null,
     title: row.title, content: row.content || row.detail || row.title,
-    sectorId: tenant.sectorId, organisationId: null,    // sector-shared, not locked to one client
+    // PRIVATE to this client's organisation. Raw client content never crosses the
+    // tenant boundary — cross-business value comes only via anonymised patterns.
+    sectorId: tenant.sectorId, organisationId: tenant.organisationId, visibility: 'private',
     sourceType: 'beaiready_training', sourceId: row.id,
     sourceDescription: RAG_SOURCE_DESC[category] || 'BE AI READY',
     confidence: 0.6,
@@ -752,16 +754,17 @@ router.post('/strategy/suggest', requireRole('admin'), async (req, res) => {
   try {
     const { kind } = req.body || {};
     if (!STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
-    const { newsroomId, sectorId } = await tenantContext(req);
+    const { newsroomId, organisationId, sectorId } = await tenantContext(req);
     const context = await gatherBusinessContext(newsroomId);
     if (!context.trim()) return res.json({ suggestions: [], note: 'No company knowledge yet — add intake responses, a website or a doc first.' });
     const auto = kind === 'automation';
 
-    // Cross-company RAG: pull what's worked for similar (same-sector) businesses from
-    // the shared knowledge base (training outcomes, strategies, industry insights).
+    // Cross-company learning: pull platform-curated guidance + ANONYMISED patterns from
+    // similar (same-sector) businesses. Passing orgId enforces tenant isolation — this
+    // never returns another client's private content, only 'global' + 'pattern' entries.
     let sectorLessons = '', lessonsUsed = 0;
     try {
-      const kb = await getRelevantKnowledge({ sectorId, searchTerms: `AI ${auto ? 'automation workflow' : 'goals strategy'} ${context.slice(0, 400)}`, limit: 6 });
+      const kb = await getRelevantKnowledge({ orgId: organisationId, sectorId, searchTerms: `AI ${auto ? 'automation workflow' : 'goals strategy'} ${context.slice(0, 400)}`, limit: 6 });
       if (kb && kb.length) {
         lessonsUsed = kb.length;
         sectorLessons = '\n\nWhat has worked for similar businesses in this sector (draw on these patterns — adapt, do not copy blindly):\n' +

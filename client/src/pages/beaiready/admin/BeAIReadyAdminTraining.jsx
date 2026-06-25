@@ -574,7 +574,7 @@ function MaterialsSection({ clientId, setErr }) {
           )}
         </div>
         <AgendaSelect agendas={agendas} value={draft.agenda_id} onChange={(v) => setDraft({ ...draft, agenda_id: v })} />
-        <label style={chk}><input type="checkbox" checked={draft.rag_shareable} onChange={(e) => setDraft({ ...draft, rag_shareable: e.target.checked })} /> Share with the BE AI READY knowledge base (sector-scoped)</label>
+        <label style={chk}><input type="checkbox" checked={draft.rag_shareable} onChange={(e) => setDraft({ ...draft, rag_shareable: e.target.checked })} /> Feed this client's private AI knowledge (used only for them)</label>
         <button type="submit" style={{ ...btn, justifySelf: 'start' }}>Add material</button>
       </form>
     </Section>
@@ -618,7 +618,7 @@ function MaterialCard({ m, api, clientId, agendas, onChanged, setErr }) {
           <AgendaSelect agendas={agendas} value={f.agenda_id} onChange={(v) => setF({ ...f, agenda_id: v })} />
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <label style={chk}><input type="checkbox" checked={f.published} onChange={(e) => setF({ ...f, published: e.target.checked })} /> Published to client</label>
-            <label style={chk}><input type="checkbox" checked={f.rag_shareable} onChange={(e) => setF({ ...f, rag_shareable: e.target.checked })} /> Share with knowledge base</label>
+            <label style={chk}><input type="checkbox" checked={f.rag_shareable} onChange={(e) => setF({ ...f, rag_shareable: e.target.checked })} /> Feed this client's private AI knowledge</label>
           </div>
           <button onClick={save} style={{ ...btn, justifySelf: 'start' }}>Save</button>
         </div>
