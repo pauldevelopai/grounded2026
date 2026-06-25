@@ -34,7 +34,6 @@ export default function BusinessWorkspace() {
   };
   const act = async (fn) => { setErr(''); try { await fn(); load(); } catch (e) { setErr(e.message); } };
   const pin = (id) => act(() => apiFetch(`/beaiready/workspace/interactions/${id}/pin`, { method: 'POST' }));
-  const promote = (id) => act(() => apiFetch(`/beaiready/workspace/interactions/${id}/promote`, { method: 'POST' }));
   const del = (id) => act(() => apiFetch(`/beaiready/workspace/interactions/${id}`, { method: 'DELETE' }));
 
   return (
@@ -44,7 +43,8 @@ export default function BusinessWorkspace() {
       <p style={{ color: '#6b6359', marginBottom: 20, maxWidth: '66ch' }}>
         Ask your company's AI. Every answer is grounded in <b>your own</b> knowledge — your documents, your
         training, and the team's earlier answers — and kept here so the whole business builds on it. Nothing
-        leaves your company.
+        leaves your company. <b>Pin</b> the answers worth keeping; your Be AI Ready consultant reviews pinned
+        answers and adds the good ones to your durable knowledge.
       </p>
 
       {err && <div style={banner}>{err}</div>}
@@ -77,8 +77,7 @@ export default function BusinessWorkspace() {
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5 }}>{it.is_pinned && <span title="Pinned" style={{ color: '#c75b39' }}>★ </span>}{it.question}</div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  <button onClick={() => pin(it.id)} style={tag} title="Pin as useful">{it.is_pinned ? 'Unpin' : 'Pin'}</button>
-                  {!it.promoted && <button onClick={() => promote(it.id)} style={tag} title="Save into company knowledge">Save to knowledge</button>}
+                  <button onClick={() => pin(it.id)} style={tag} title="Pin as useful — your consultant reviews pinned answers">{it.is_pinned ? 'Unpin' : 'Pin'}</button>
                   {it.promoted && <span style={{ ...tag, background: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' }}>✓ in knowledge</span>}
                   <button onClick={() => del(it.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
                 </div>

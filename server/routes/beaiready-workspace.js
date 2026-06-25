@@ -71,8 +71,11 @@ router.post('/interactions/:id/pin', async (req, res) => {
 
 // Promote a pooled answer into durable, private company knowledge — the loop turning
 // an ephemeral interaction into something the AI reliably draws on going forward.
+// CONSULTANT-GATED: only an admin promotes, so a team member can't turn an unvetted
+// answer into "truth". Members pin useful answers; the consultant reviews + promotes.
 router.post('/interactions/:id/promote', async (req, res) => {
   try {
+    if (!isAdmin(req)) return res.status(403).json({ message: 'Only your Be AI Ready consultant can add answers to your knowledge. Pin the ones you find useful and they’ll review them.' });
     const { newsroomId, organisationId, sectorId } = await tenant(req);
     const { rows: [it] } = await pool.query(
       'SELECT id, question, answer, promoted_knowledge_id FROM bair_interactions WHERE id = $1 AND newsroom_id = $2',

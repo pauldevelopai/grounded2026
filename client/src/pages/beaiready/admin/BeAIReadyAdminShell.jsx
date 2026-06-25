@@ -20,6 +20,7 @@ const NAV = [
   { to: '/admin/prompts', label: 'Prompt library' },
   { to: '/admin/briefings', label: 'Briefings' },
   { to: '/admin/knowhow', label: 'KnowHow' },
+  { to: '/admin/workspace', label: 'Workspace' },
   { to: '/admin/data', label: 'Data' },
   { to: '/admin/models', label: 'Models' },
 ];

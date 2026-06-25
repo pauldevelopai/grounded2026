@@ -21,18 +21,20 @@ export default function BeAIReadyAdminKnowHow() {
     apiFetch(`/knowhow/tenants/${id}/responses`).then(setResponses).catch(() => setResponses([]));
   }, []);
 
-  useEffect(() => {
+  const loadTenants = useCallback(() => {
     apiFetch('/knowhow/tenants').then((rows) => {
       setTenants(rows);
-      if (rows.length) { setTid(rows[0].id); }
+      setTid((cur) => cur || (rows[0]?.id || ''));
     }).catch((e) => setErr(e.message));
   }, []);
+  useEffect(() => { loadTenants(); }, [loadTenants]);
   useEffect(() => { load(tid); }, [tid, load]);
 
   const flash = (m) => { setMsg(m); setErr(''); setTimeout(() => setMsg(''), 4000); };
   const fail = (e) => setErr(typeof e === 'string' ? e : e.message);
 
   if (tenants == null) return <div style={{ padding: 4 }}>Loading…</div>;
+  const currentTenant = tenants.find((t) => t.id === tid) || null;
 
   return (
     <div style={{ maxWidth: 920 }}>
@@ -47,6 +49,8 @@ export default function BeAIReadyAdminKnowHow() {
         capture questions, send each person a login-free link, and watch the corpus fill. (The corpus is the asset
         — answering questions over it, and coaching juniors, comes next.)
       </p>
+
+      {currentTenant && <LinkClient tenant={currentTenant} reload={loadTenants} flash={flash} fail={fail} />}
 
       {err && <div style={banner('#FEF2F2', '#B91C1C')}>{err}</div>}
       {msg && <div style={banner('#ECFDF5', '#065F46')}>{msg}</div>}
@@ -78,7 +82,7 @@ export default function BeAIReadyAdminKnowHow() {
 
       {ov && <Capture tid={tid} ov={ov} reload={() => load(tid)} flash={flash} fail={fail} />}
       {ov && <Documents tid={tid} topics={ov.topics} reload={() => load(tid)} flash={flash} fail={fail} />}
-      <Answers responses={responses} />
+      <Answers responses={responses} tid={tid} linked={!!currentTenant?.newsroom_id} reload={() => load(tid)} flash={flash} fail={fail} />
     </div>
   );
 }
@@ -377,7 +381,14 @@ function Documents({ tid, topics, reload, flash, fail }) {
   );
 }
 
-function Answers({ responses }) {
+function Answers({ responses, tid, linked, reload, flash, fail }) {
+  const [busy, setBusy] = useState('');
+  const promote = async (rid) => {
+    setBusy(rid);
+    try { await apiFetch(`/knowhow/tenants/${tid}/responses/${rid}/promote`, { method: 'POST' }); flash('Added to the client’s company knowledge — their AI will use it.'); reload(); }
+    catch (e) { fail(e); }
+    setBusy('');
+  };
   return (
     <section style={{ ...card, marginTop: 16 }}>
       <h2 style={h2}>Recent answers <span style={count}>{responses.length}</span></h2>
@@ -386,9 +397,18 @@ function Answers({ responses }) {
       ) : (
         <ul style={list}>
           {responses.map((r) => (
-            <li key={r.id} style={{ ...row, alignItems: 'flex-start', flexDirection: 'column', gap: 2 }}>
+            <li key={r.id} style={{ ...row, alignItems: 'flex-start', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 12, color: '#8a8076' }}>{r.person_name || 'someone'}{r.topic_label ? ` · ${r.topic_label}` : ''} — {r.prompt_text}</span>
               <span style={{ fontSize: 13.5 }}>{r.body}</span>
+              <div>
+                {r.promoted ? (
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#166534' }}>✓ in company knowledge</span>
+                ) : linked ? (
+                  <button onClick={() => promote(r.id)} disabled={busy === r.id} style={promoteBtn}>{busy === r.id ? 'Adding…' : 'Add to company knowledge'}</button>
+                ) : (
+                  <span style={{ fontSize: 11.5, color: '#a89e92' }}>Link this KnowHow to a client to use its answers</span>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -396,6 +416,34 @@ function Answers({ responses }) {
     </section>
   );
 }
+
+// Link a KnowHow tenant to the BAIR client it's about, so its vetted answers can be
+// promoted into that client's company knowledge (consultant-controlled).
+function LinkClient({ tenant, reload, flash, fail }) {
+  const [clients, setClients] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { apiFetch('/beaiready/admin/clients').then(setClients).catch(() => setClients([])); }, []);
+  const setLink = async (newsroom_id) => {
+    setBusy(true);
+    try { await apiFetch(`/knowhow/tenants/${tenant.id}/link`, { method: 'POST', body: JSON.stringify({ newsroom_id: newsroom_id || null }) }); flash(newsroom_id ? 'Linked to client.' : 'Unlinked.'); reload(); }
+    catch (e) { fail(e); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14, background: tenant.newsroom_id ? '#f0fdf4' : '#fffbeb', borderColor: tenant.newsroom_id ? '#bbf7d0' : '#fde68a' }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: '#5b5249' }}>Linked client:</span>
+      <select value={tenant.newsroom_id || ''} onChange={(e) => setLink(e.target.value)} disabled={busy} style={sel}>
+        <option value="">— Not linked —</option>
+        {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <span style={{ fontSize: 12, color: '#8a8076' }}>
+        {tenant.newsroom_id ? 'Its answers can be added to this client’s company knowledge.' : 'Link a client to feed its answers into that business’s AI.'}
+      </span>
+    </div>
+  );
+}
+
+const promoteBtn = { fontSize: 12, padding: '4px 10px', borderRadius: 6, border: '1px solid #e4dcd2', background: '#faf8f5', color: '#6b6359', cursor: 'pointer', fontWeight: 600 };
 
 const card = { background: '#fff', border: '1px solid #eee5da', borderRadius: 12, padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' };
 const h2 = { fontSize: 15, fontWeight: 700, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 8 };

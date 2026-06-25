@@ -112,6 +112,7 @@ import BeAIReadyAdminStrategy from './pages/beaiready/admin/BeAIReadyAdminStrate
 import BeAIReadyAdminPrompts from './pages/beaiready/admin/BeAIReadyAdminPrompts.jsx';
 import BeAIReadyAdminData from './pages/beaiready/admin/BeAIReadyAdminData.jsx';
 import BeAIReadyAdminInsights from './pages/beaiready/admin/BeAIReadyAdminInsights.jsx';
+import BeAIReadyAdminWorkspace from './pages/beaiready/admin/BeAIReadyAdminWorkspace.jsx';
 import BeAIReadyAdminBriefings from './pages/beaiready/admin/BeAIReadyAdminBriefings.jsx';
 import BeAIReadyAdminKnowHow from './pages/beaiready/admin/BeAIReadyAdminKnowHow.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
@@ -303,6 +304,7 @@ export default function App() {
                   <Route path="/admin/prompts" element={<BeAIReadyAdminPrompts />} />
                   <Route path="/admin/briefings" element={<BeAIReadyAdminBriefings />} />
                   <Route path="/admin/knowhow" element={<BeAIReadyAdminKnowHow />} />
+                  <Route path="/admin/workspace" element={<BeAIReadyAdminWorkspace />} />
                   <Route path="/admin/data" element={<BeAIReadyAdminData />} />
                   <Route path="/admin/models" element={<BeAIReadyAdminModels />} />
                 </Route>

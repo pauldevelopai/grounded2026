@@ -24,8 +24,21 @@ async function tenant(tid) {
 
 // ── Tenants ──────────────────────────────────────────────────────────────────
 router.get('/tenants', wrap(async (req, res) => {
-  const { rows } = await pool.query('SELECT id, name, product, created_at FROM knowhow.tenants ORDER BY created_at');
+  const { rows } = await pool.query(
+    `SELECT t.id, t.name, t.product, t.created_at, t.newsroom_id, n.name AS newsroom_name
+       FROM knowhow.tenants t LEFT JOIN newsrooms n ON n.id = t.newsroom_id
+      ORDER BY t.created_at`);
   res.json(rows);
+}));
+
+// Link a KnowHow tenant to the BAIR client it's about, so its promoted knowledge can
+// flow into that client's company knowledge. newsroom_id: null unlinks.
+router.post('/tenants/:tid/link', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  const newsroomId = req.body?.newsroom_id || null;
+  const { rows } = await pool.query('UPDATE knowhow.tenants SET newsroom_id=$2 WHERE id=$1 RETURNING id, newsroom_id', [t.id, newsroomId]);
+  res.json(rows[0]);
 }));
 
 router.post('/tenants', wrap(async (req, res) => {
@@ -179,13 +192,39 @@ router.get('/tenants/:tid/responses', wrap(async (req, res) => {
   const t = await tenant(req.params.tid);
   if (!t) return res.status(404).json({ message: 'Unknown tenant' });
   const { rows } = await pool.query(
-    `SELECT r.id, r.body, r.source, r.created_at, pr.text AS prompt_text, pe.name AS person_name, tp.label AS topic_label
+    `SELECT r.id, r.body, r.source, r.created_at, r.promoted_source_id IS NOT NULL AS promoted,
+            pr.text AS prompt_text, pe.name AS person_name, tp.label AS topic_label
        FROM knowhow.responses r
        JOIN knowhow.prompts pr ON pr.id = r.prompt_id
        LEFT JOIN knowhow.people pe ON pe.id = r.person_id
        LEFT JOIN knowhow.topics tp ON tp.id = pr.topic_id
       WHERE pr.tenant_id = $1 ORDER BY r.created_at DESC LIMIT 100`, [t.id]);
   res.json(rows);
+}));
+
+// Promote a vetted response into the LINKED client's company knowledge — the store the
+// workspace + strategy AI already read. Consultant-gated (this whole router is admin),
+// a deliberate per-response act so the corpus stays truthful + relevant, and tracked
+// so the same response isn't promoted twice.
+router.post('/tenants/:tid/responses/:rid/promote', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  if (!t.newsroom_id) return res.status(400).json({ message: 'Link this KnowHow tenant to a client first.' });
+  const { rows: [r] } = await pool.query(
+    `SELECT r.id, r.body, r.promoted_source_id, pr.text AS prompt_text, tp.label AS topic_label
+       FROM knowhow.responses r JOIN knowhow.prompts pr ON pr.id = r.prompt_id
+       LEFT JOIN knowhow.topics tp ON tp.id = pr.topic_id
+      WHERE r.id = $1 AND pr.tenant_id = $2`, [req.params.rid, t.id]);
+  if (!r) return res.status(404).json({ message: 'Response not found' });
+  if (r.promoted_source_id) return res.json({ already: true, source_id: r.promoted_source_id });
+  if (!r.body || !r.body.trim()) return res.status(400).json({ message: 'Empty response — nothing to promote.' });
+  const title = `KnowHow — ${(r.topic_label || r.prompt_text || 'captured knowledge').slice(0, 160)}`;
+  const { rows: [src] } = await pool.query(
+    `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
+     VALUES ($1,'note',$2,$3,$4) RETURNING id`,
+    [t.newsroom_id, title, r.body, req.user.id]);
+  await pool.query('UPDATE knowhow.responses SET promoted_source_id = $1 WHERE id = $2', [src.id, r.id]);
+  res.json({ source_id: src.id });
 }));
 
 // ── Documents: ingest text → document + corpus_items ─────────────────────────
