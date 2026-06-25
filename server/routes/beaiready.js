@@ -133,6 +133,87 @@ router.post('/metrics', requireRole('admin'), async (req, res) => {
   } catch (err) { console.error('[beaiready/metrics/post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Goals (the Measurement pillar) ───────────────────────────────────────────
+// Measurable targets agreed at the start, then tracked against the metrics. The
+// consultant sets them (control stays with them); the client sees them + progress.
+const METRIC_KEYS = ['deliverables', 'revenue', 'time_spent', 'ai_hours_saved', 'client_outcomes'];
+const GOAL_STATUS = ['active', 'achieved', 'archived'];
+const toNum = (v) => (v == null || v === '' ? null : Number(v));
+function withProgress(g) {
+  const baseline = g.baseline == null ? null : Number(g.baseline);
+  const target = g.target == null ? null : Number(g.target);
+  const current = g.current == null ? null : Number(g.current);
+  let progress = null;
+  if (baseline != null && target != null && current != null) {
+    const span = target - baseline;
+    progress = span === 0 ? (current >= target ? 1 : 0) : (current - baseline) / span;
+    progress = Math.max(0, Math.min(1, progress));
+  }
+  return { ...g, baseline, target, current, progress };
+}
+
+// Tenant reads its own goals, newest first, with current measured off the latest metric.
+router.get('/goals', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT g.id, g.title, g.detail, g.metric, g.unit, g.baseline, g.target, g.target_date, g.status, g.created_at,
+              COALESCE(g.current_value,
+                (SELECT bm.value FROM business_metrics bm
+                  WHERE bm.newsroom_id = g.newsroom_id AND bm.metric = g.metric
+                  ORDER BY bm.created_at DESC LIMIT 1)) AS current
+         FROM bair_goals g
+        WHERE g.newsroom_id = $1 AND g.status <> 'archived'
+        ORDER BY CASE g.status WHEN 'active' THEN 0 ELSE 1 END, g.created_at DESC`,
+      [newsroomId]);
+    res.json(rows.map(withProgress));
+  } catch (err) { console.error('[beaiready/goals:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/goals', requireRole('admin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.newsroom_id || !b.title?.trim()) return res.status(400).json({ message: 'newsroom_id, title required' });
+    if (b.metric && !METRIC_KEYS.includes(b.metric)) return res.status(400).json({ message: 'unknown metric' });
+    const { rows } = await pool.query(
+      `INSERT INTO bair_goals (newsroom_id, title, detail, metric, unit, baseline, target, current_value, target_date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [b.newsroom_id, b.title.trim(), b.detail || null, b.metric || null, b.unit || null,
+       toNum(b.baseline), toNum(b.target), toNum(b.current_value), b.target_date || null, req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/goals:post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/goals/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b.metric && !METRIC_KEYS.includes(b.metric)) return res.status(400).json({ message: 'unknown metric' });
+    if (b.status && !GOAL_STATUS.includes(b.status)) return res.status(400).json({ message: 'unknown status' });
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `UPDATE bair_goals SET
+         title = COALESCE($1,title), detail = COALESCE($2,detail), metric = COALESCE($3,metric),
+         unit = COALESCE($4,unit), baseline = COALESCE($5,baseline), target = COALESCE($6,target),
+         current_value = COALESCE($7,current_value), target_date = COALESCE($8,target_date),
+         status = COALESCE($9,status), updated_at = NOW()
+       WHERE id = $10 AND newsroom_id = $11 RETURNING *`,
+      [b.title || null, b.detail ?? null, b.metric || null, b.unit ?? null,
+       toNum(b.baseline), toNum(b.target), toNum(b.current_value), b.target_date || null,
+       b.status || null, req.params.id, newsroomId]);
+    if (!rows.length) return res.status(404).json({ message: 'Goal not found' });
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready/goals:put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/goals/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rowCount } = await pool.query('DELETE FROM bair_goals WHERE id = $1 AND newsroom_id = $2', [req.params.id, newsroomId]);
+    if (!rowCount) return res.status(404).json({ message: 'Goal not found' });
+    res.json({ deleted: true });
+  } catch (err) { console.error('[beaiready/goals:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Trainings (read-only over the CRM, by the tenant's organisation) ────────
 router.get('/trainings', async (req, res) => {
   try {

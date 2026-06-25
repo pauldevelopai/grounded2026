@@ -48,6 +48,18 @@ const main = async () => {
       [primary.id, 'We draft the monthly client report in Google Docs (account manager → MD review → PDF). It takes ~6 hours. We use Claude for first drafts. Late deliveries get a 10% credit and a personal call from the account manager.']);
   }
 
+  // A sample measurable goal + one metric reading, so the Measurement pillar shows
+  // real progress (6→3 hours, currently at 4.5 = 50%).
+  const { rows: existingGoal } = await pool.query(
+    `SELECT id FROM bair_goals WHERE newsroom_id=$1 AND title='[sample] Cut monthly report time in half' LIMIT 1`, [primary.id]);
+  if (!existingGoal.length) {
+    await pool.query(
+      `INSERT INTO bair_goals (newsroom_id, title, metric, unit, baseline, target, target_date)
+       VALUES ($1,'[sample] Cut monthly report time in half','time_spent','hours/month',6,3,'2026-09-30')`, [primary.id]);
+    await pool.query(
+      `INSERT INTO business_metrics (newsroom_id, metric, value, period) VALUES ($1,'time_spent',4.5,'2026-07')`, [primary.id]);
+  }
+
   console.log('\n✓ Local BE AI READY test fixtures ready.\n');
   console.log('  Consultant (admin):   admin@local   / ' + PASS);
   console.log('  Client teammate:      member@local  / ' + PASS + '   (' + primary.name + ')');

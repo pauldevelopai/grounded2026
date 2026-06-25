@@ -162,8 +162,8 @@ export const PILLARS = [
       'the business has become — then measure the results against them, so you can see in concrete terms that ' +
       'the work was worth doing.',
     features: [
-      { name: 'Goals & results', status: 'building', slug: 'goals-results',
-        what: 'Set measurable goals at the start of the engagement, then track progress against them over time — the proof that the work paid off.' },
+      { name: 'Goals & results', status: 'live', dash: '/dashboard/productivity', slug: 'goals-results',
+        what: 'Measurable goals agreed at the start of the engagement — baseline to target — tracked against your real metrics, so the value of the work is something you can see, not just claim.' },
     ],
   },
 ];
