@@ -93,6 +93,7 @@ import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
 import BusinessStrategy from './pages/beaiready/BusinessStrategy.jsx';
+import BusinessWorkspace from './pages/beaiready/BusinessWorkspace.jsx';
 import BusinessStaffNeeds from './pages/beaiready/BusinessStaffNeeds.jsx';
 import BeAIReadyPrompts from './pages/beaiready/BeAIReadyPrompts.jsx';
 import BeAIReadyMyPrompts from './pages/beaiready/BeAIReadyMyPrompts.jsx';
@@ -318,6 +319,7 @@ export default function App() {
                 {/* /dashboard/training merged into the public /training page (shown when signed in). */}
                 <Route path="/dashboard/training" element={<Navigate to="/training" replace />} />
                 <Route path="/dashboard/strategy" element={<BusinessStrategy />} />
+                <Route path="/dashboard/workspace" element={<BusinessWorkspace />} />
                 <Route path="/dashboard/staff-needs" element={<BusinessStaffNeeds />} />
                 <Route path="/dashboard/prompts" element={<BeAIReadyPrompts mode="library" />} />
                 <Route path="/dashboard/prompts/:id" element={<BeAIReadyPrompts mode="detail" />} />

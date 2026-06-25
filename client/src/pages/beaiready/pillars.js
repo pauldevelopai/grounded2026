@@ -80,9 +80,12 @@ export const PILLARS = [
     label: 'Tools',
     tagline: 'The AI tools your team actually uses.',
     intro:
-      'The practical AI tools for getting work done — a continuously scored toolbox, the Nodes your business ' +
-      'runs and owns, and a fair, no-surveillance view of productivity.',
+      'The practical AI tools for getting work done — and one shared place where the team\'s AI work is pooled ' +
+      'and kept, so every useful question and answer builds the business up instead of vanishing. Plus a ' +
+      'continuously scored toolbox and the Nodes your business runs and owns.',
     features: [
+      { name: 'Team AI workspace', status: 'live', dash: '/dashboard/workspace', slug: 'team-workspace',
+        what: 'Where your whole team asks AI — every answer grounded in your own knowledge, and every question and answer pooled in one shared place so the business builds on it. The more it\'s used, the smarter it gets, and good answers can be saved into your knowledge.' },
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
       { name: 'Prompt library', status: 'live', dash: '/dashboard/prompts', slug: 'prompt-library',

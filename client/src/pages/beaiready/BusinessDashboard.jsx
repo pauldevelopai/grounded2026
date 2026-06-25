@@ -122,6 +122,15 @@ export default function BusinessDashboard() {
         })}
       </section>
 
+      {/* ── Team AI workspace — the pooled, knowledge-grounded company AI ── */}
+      <div className="hub-section-label">Team AI workspace</div>
+      <section className="hub-band" style={{ marginBottom: 24, background: '#fbf7f4', border: '1px solid #eaddd3' }}>
+        <p style={{ margin: 0 }}>
+          Your team's shared AI — ask anything, grounded in your own knowledge, and every answer is pooled so the
+          business builds on it instead of losing it. <Link to="/dashboard/workspace">Open the workspace →</Link>
+        </p>
+      </section>
+
       {/* ── Toolbox + roadmap ── */}
       <div className="hub-section-label">Active AI toolbox</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>

@@ -49,7 +49,7 @@ async function hybridVectorSearch({ queryEmbedding, searchTerms, categories, sec
 
   const query = `
     SELECT ke.id, ke.category, ke.title, ke.content, ke.confidence, ke.is_verified,
-      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id,
+      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id, ke.visibility,
       CASE WHEN ke.embedding IS NOT NULL THEN 1 - (ke.embedding <=> $1::vector) ELSE 0 END AS vector_score,
       ts_rank(to_tsvector('english', coalesce(ke.title, '') || ' ' || coalesce(ke.content, '')), plainto_tsquery('english', $2)) AS text_score
     FROM knowledge_entries ke
@@ -101,7 +101,7 @@ async function textSearch({ searchTerms, categories, sectorId, orgId, courseId, 
 
   const query = `
     SELECT ke.id, ke.category, ke.title, ke.content, ke.confidence, ke.is_verified,
-      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id,
+      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id, ke.visibility,
       ${rankSelect}
     FROM knowledge_entries ke
     WHERE ${conditions.join(' AND ')}
