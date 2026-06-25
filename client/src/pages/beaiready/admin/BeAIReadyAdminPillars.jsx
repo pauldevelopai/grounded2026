@@ -1,8 +1,9 @@
-// BeAIReadyAdminPillars — the BE AI READY admin's Pillars page (the four audit
-// pillars). The per-client, per-pillar recommendations UI is the reusable
-// PillarsWorkspace below, also used by the Training & Strategy page. Pick a
-// client, then for each pillar record the audit's recommendations; they appear
-// in that client's dashboard. Reads/writes via the admin's X-Newsroom-Id override.
+// BeAIReadyAdminPillars — the BE AI READY admin's Pillars page (Knowledge,
+// Governance, Tools, Measurement; Training & Strategy have their own pages). The
+// per-client, per-pillar recommendations UI is the reusable PillarsWorkspace below,
+// also used by the Training & Strategy pages. Pick a client, then for each pillar
+// record the audit's recommendations; they appear in that client's dashboard.
+// Reads/writes via the admin's X-Newsroom-Id override.
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../../hooks/useApi.js';
 import { PILLARS } from '../pillars.js';
@@ -51,7 +52,7 @@ export function PillarsWorkspace({ pillarKeys, heading, blurb }) {
 
       {client && (
         <div style={{ display: 'grid', gap: 14 }}>
-          {PILLARS.filter((p) => pillarKeys.includes(p.key)).map((p) => (
+          {pillarKeys.map((k) => PILLARS.find((p) => p.key === k)).filter(Boolean).map((p) => (
             <PillarBlock key={p.key} pillar={p} clientId={clientId}
               recs={(recs || []).filter((r) => r.pillar === p.key)} onChanged={loadRecs} setErr={setErr} />
           ))}
@@ -61,13 +62,17 @@ export function PillarsWorkspace({ pillarKeys, heading, blurb }) {
   );
 }
 
-// The Pillars page: the four audit pillars (Training + Strategy live on their own page).
+// The Pillars page authors recommendations for the pillars that don't have their own
+// page: Knowledge, Governance, Tools, Measurement (Training + Strategy live on their
+// own pages). Matches the six-part Be AI Ready model (Paul, 2026-06-24). Legacy
+// Visibility/Data-Security recs still surface — the client dashboard folds them into
+// Knowledge/Governance.
 export default function BeAIReadyAdminPillars() {
   return (
     <PillarsWorkspace
-      pillarKeys={['visibility', 'governance', 'data-security', 'productivity']}
+      pillarKeys={['knowledge', 'governance', 'productivity', 'measurement']}
       heading="Pillars"
-      blurb="Work each audit pillar for a client — record the audit's prioritised recommendations; they appear in that client's dashboard. (Materials upload + deeper progress tracking come next.)"
+      blurb="Work each pillar for a client — record the audit's prioritised recommendations; they appear in that client's dashboard. Training and Strategy have their own pages."
     />
   );
 }
