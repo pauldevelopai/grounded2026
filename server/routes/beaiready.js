@@ -438,6 +438,7 @@ router.get('/admin/clients', requireRole('admin'), async (req, res) => {
     const { rows } = await pool.query(
       `SELECT n.id, n.name, n.slug, n.is_active, n.created_at, o.website, o.country, s.name AS sector,
               (n.access_code_hash IS NOT NULL) AS has_access_code,
+              n.shares_anonymised_insights,
               (SELECT COUNT(*)::int FROM team_members t WHERE t.newsroom_id = n.id) AS user_count,
               EXISTS (SELECT 1 FROM ai_policies p WHERE p.newsroom_id = n.id) AS has_policy,
               (SELECT COUNT(*)::int FROM visibility_checks v WHERE v.newsroom_id = n.id) AS visibility_checks,
@@ -467,6 +468,19 @@ router.post('/admin/clients/:id/access-code', requireRole('admin'), async (req, 
     if (!rowCount) return res.status(404).json({ message: 'Company not found' });
     res.json({ ok: true, has_access_code: !!hash });
   } catch (err) { console.error('[beaiready/admin/clients/access-code]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Per-company consent to contribute to the anonymised cross-business insight pool.
+// Off by default; nothing of a business's crosses the boundary unless it opts in.
+router.post('/admin/clients/:id/insights-consent', requireRole('admin'), async (req, res) => {
+  try {
+    const consent = !!req.body?.consent;
+    const { rowCount } = await pool.query(
+      `UPDATE newsrooms SET shares_anonymised_insights = $1, updated_at = NOW() WHERE id = $2 AND kind = 'business'`,
+      [consent, req.params.id]);
+    if (!rowCount) return res.status(404).json({ message: 'Company not found' });
+    res.json({ ok: true, shares_anonymised_insights: consent });
+  } catch (err) { console.error('[beaiready/admin/clients/insights-consent]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // Create a client: organisation + business tenant + (optional) first login.

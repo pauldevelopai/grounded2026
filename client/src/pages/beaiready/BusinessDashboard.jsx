@@ -44,11 +44,13 @@ export default function BusinessDashboard() {
   const [recs, setRecs] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [policy, setPolicy] = useState(undefined);
+  const [insights, setInsights] = useState(null);
 
   useEffect(() => {
     apiFetch('/beaiready/recommendations').then(setRecs).catch(() => setRecs([]));
     apiFetch('/beaiready/metrics').then(setMetrics).catch(() => setMetrics([]));
     apiFetch('/beaiready/policy').then(setPolicy).catch(() => setPolicy(null));
+    apiFetch('/beaiready/insights/mine').then(setInsights).catch(() => setInsights([]));
   }, []);
 
   const metricVal = (key) => {
@@ -130,6 +132,25 @@ export default function BusinessDashboard() {
           business builds on it instead of losing it. <Link to="/dashboard/workspace">Open the workspace →</Link>
         </p>
       </section>
+
+      {/* ── What works for businesses like yours — anonymised cross-business patterns ── */}
+      {insights && insights.length > 0 && (
+        <>
+          <div className="hub-section-label">What works for businesses like yours</div>
+          <p style={{ color: '#8a8076', fontSize: 13, margin: '-2px 0 10px', maxWidth: '64ch' }}>
+            Patterns learned across similar businesses that chose to share — anonymised, never traceable to any one company.
+          </p>
+          <section style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
+            {insights.slice(0, 5).map((it) => (
+              <div key={it.id} style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 10, padding: '12px 14px' }}>
+                <strong style={{ fontSize: 14 }}>{it.title}</strong>
+                <p style={{ fontSize: 13, color: '#5b5249', margin: '4px 0 0', lineHeight: 1.5 }}>{it.insight}</p>
+                <div style={{ fontSize: 11, color: '#a89e92', marginTop: 4 }}>from {it.supporting_orgs} similar businesses</div>
+              </div>
+            ))}
+          </section>
+        </>
+      )}
 
       {/* ── Toolbox + roadmap ── */}
       <div className="hub-section-label">Active AI toolbox</div>

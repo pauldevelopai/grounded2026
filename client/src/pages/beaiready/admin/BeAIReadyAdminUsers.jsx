@@ -84,6 +84,7 @@ export default function BeAIReadyAdminUsers() {
               })}
             </div>
             <AccessCodeControl client={c} onChanged={load} setErr={setErr} />
+            <InsightsConsentControl client={c} onChanged={load} setErr={setErr} />
             {openId === c.id && <LoginsPanel client={c} onChanged={load} setErr={setErr} />}
           </div>
         ))}
@@ -171,6 +172,29 @@ function AccessCodeControl({ client, onChanged, setErr }) {
         </div>
       )}
       {msg && <p style={{ fontSize: 12.5, color: '#166534', margin: '6px 0 0' }}>{msg}</p>}
+    </div>
+  );
+}
+
+// Per-company consent to contribute to the anonymised cross-business insight pool.
+// Off by default. When on, this business's de-identified patterns can be aggregated
+// with others (only ever where >=2 businesses contribute) — never its raw content.
+function InsightsConsentControl({ client, onChanged, setErr }) {
+  const [busy, setBusy] = useState(false);
+  const on = !!client.shares_anonymised_insights;
+  const toggle = async () => {
+    setBusy(true); setErr('');
+    try { await apiFetch(`/beaiready/admin/clients/${client.id}/insights-consent`, { method: 'POST', body: JSON.stringify({ consent: !on }) }); onChanged(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid #f4efe8', paddingTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ ...flag, background: on ? '#dcfce7' : '#f1f0ec', color: on ? '#166534' : '#a89e92' }}>
+        {on ? '✓ contributes anonymised insights' : '○ not contributing insights'}
+      </span>
+      <button type="button" onClick={toggle} disabled={busy} style={btnGhost}>{busy ? '…' : (on ? 'Turn off' : 'Turn on')}</button>
+      <span style={{ fontSize: 12, color: '#8a8076' }}>De-identified patterns only — never their raw content, and only pooled with ≥2 businesses.</span>
     </div>
   );
 }
