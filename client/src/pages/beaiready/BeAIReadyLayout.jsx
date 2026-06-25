@@ -51,7 +51,7 @@ export default function BeAIReadyLayout() {
             <span style={{ fontSize: 10.5, color: TERRACOTTA, fontWeight: 600 }}>by Develop&nbsp;AI</span>
           </Link>
           <nav style={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* The live pillar tabs (Training, Governance, Tools, Strategy). */}
+            {/* The six pillar tabs (Knowledge, Training, Governance, Tools, Strategy, Measurement). */}
             {VISIBLE_PILLARS.map((p) => (
               <Link key={p.key} to={`/pillar/${p.key}`} style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>{p.nav}</Link>
             ))}

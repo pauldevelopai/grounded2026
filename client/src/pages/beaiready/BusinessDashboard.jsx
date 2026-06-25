@@ -19,14 +19,19 @@ const METRICS = [
   ['client_outcomes', 'Client outcomes'],
 ];
 
-// The client-facing pillars, each with the tool it opens (Paul, 2026-06-23):
-// Training, Governance, Tools, Strategy. Visibility + Data Security now live under
-// Strategy (reachable from the Strategy pillar page), so they're not separate cards.
+// The client-facing pillars, each with the tool it opens — the six-part Be AI Ready
+// model (Paul, 2026-06-24): Knowledge (the foundation, holds the visibility scan +
+// KnowHow), Training, Governance (holds the data-security tools log + acceptable
+// use), Tools, Strategy, Measurement (the productivity metrics + goals).
+// `absorbs` lists legacy recommendation pillar keys this card should also show, so
+// recs authored before the re-map still surface under their new home.
 const PILLARS = [
+  { key: 'knowledge', label: 'Knowledge', to: '/dashboard/visibility', cta: 'How AI sees your business', absorbs: ['visibility'] },
   { key: 'training', label: 'Training', to: '/training', cta: 'Agenda & materials' },
-  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Build your AI policy' },
-  { key: 'productivity', label: 'Tools', to: '/dashboard/productivity', cta: 'Toolbox, Nodes & productivity' },
-  { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals, automation roadmap & more' },
+  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Policy, tools log & acceptable use', absorbs: ['data-security'] },
+  { key: 'productivity', label: 'Tools', to: '/toolbox', cta: 'Toolbox, prompts & Nodes' },
+  { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals & automation roadmap' },
+  { key: 'measurement', label: 'Measurement', to: '/dashboard/productivity', cta: 'Goals & productivity' },
 ];
 
 const PRIORITY_STYLE = {
@@ -82,7 +87,7 @@ export default function BusinessDashboard() {
       <div className="hub-section-label" id="pillars">Your pillars</div>
       <section className="hub-grid" style={{ marginBottom: 28 }}>
         {PILLARS.map((p) => {
-          const list = recsFor(p.key);
+          const list = recsFor(p.key, ...(p.absorbs || []));
           return (
             <div key={p.key} className="hub-card hub-card-section" style={{ '--accent': '#c75b39' }}>
               <div className="hub-card-kicker">{p.label}</div>

@@ -34,8 +34,12 @@ async function tenantContext(req) {
   };
 }
 
-// The six pillar keys (match client/src/pages/beaiready/pillars.js).
-const PILLARS = ['visibility', 'governance', 'data-security', 'productivity', 'training', 'strategy'];
+// Accepted recommendation pillar keys. The Be AI Ready model now surfaces six
+// pillars — knowledge, training, governance, productivity (Tools), strategy,
+// measurement — but the legacy keys 'visibility' and 'data-security' are kept so
+// existing recommendations stay valid; the client dashboard folds those into
+// Knowledge and Governance respectively (match client/.../pillars.js).
+const PILLARS = ['knowledge', 'training', 'governance', 'productivity', 'strategy', 'measurement', 'visibility', 'data-security'];
 
 // ── Recommendations ────────────────────────────────────────────────────────
 router.get('/recommendations', async (req, res) => {

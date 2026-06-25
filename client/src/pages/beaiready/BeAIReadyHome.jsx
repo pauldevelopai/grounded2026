@@ -35,8 +35,9 @@ export default function BeAIReadyHome() {
         <div className="hub-eyebrow">Be AI Ready · for organisations of every size, public or private</div>
         <h1>Is your organisation ready for an AI‑first world?</h1>
         <p className="hub-lede">
-          One structured programme to get any organisation AI ready — across <b>how you govern it</b>, <b>how
-          productively your team works with it</b>, and <b>how they’re trained</b>. A living dashboard, included
+          One structured programme that works from the inside out — <b>starting with what your business already
+          knows</b>. We capture the knowledge trapped in your people and documents, train your team, keep it safe
+          and legal, put the right AI tools in their hands, and prove the results. A living dashboard, included
           for life.
         </p>
         <div className="hub-hero-cta">
@@ -64,6 +65,10 @@ export default function BeAIReadyHome() {
 
       {/* ── The pillars — the whole offering, one card each ── */}
       <div className="hub-section-label">The pillars of being AI ready</div>
+      <p style={{ color: '#6b6359', fontSize: 14, margin: '-4px 0 14px', maxWidth: '64ch' }}>
+        Six parts that reinforce each other — and they begin with your own knowledge. The more your team’s AI work
+        is pooled here, the more the business learns and the sharper everything else gets.
+      </p>
       <section className="hub-grid">
         {VISIBLE_PILLARS.map((p) => (
           <Link key={p.key} to={`/pillar/${p.key}`} className="hub-card" style={{ textDecoration: 'none', color: 'inherit' }}>

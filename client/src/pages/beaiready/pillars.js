@@ -116,44 +116,105 @@ export const PILLARS = [
     label: 'Strategy',
     tagline: 'The bigger picture — and what’s next.',
     intro:
-      'The strategic and emerging parts of being AI ready: your goals and automation roadmap, how AI sees ' +
-      'your business, and your data security.',
+      'Once your knowledge shows how the business really runs, this is where we advise on using AI to your ' +
+      'advantage: where it genuinely saves time and money, and which friction is worth fixing first.',
     features: [
       { name: 'Goals, workflow & automation roadmap', status: 'partial', dash: '/dashboard/strategy', slug: 'strategy-roadmap',
         what: 'A clear map of how your business runs — every step and hand-off — and which parts AI should take on first, sized by effort and payoff: your practical automation roadmap, built with your team.' },
+      // Defined here for continuity, but re-homed to Training by the block below.
       { name: 'Staff AI Needs', status: 'partial', dash: '/dashboard/staff-needs', slug: 'staff-needs',
         what: 'A read on where your team stands and what they need, drawn from the competency forms they complete — so your AI strategy targets the real gaps.' },
     ],
   },
+
+  // ── Knowledge (the foundation) ──────────────────────────────────────────────────
+  // Be AI Ready starts here: capture the hard-won knowledge in people's heads and
+  // scattered files, organise it into something the business can actually use (kept
+  // private), and surface the right parts of it to the world. Features assembled in
+  // the consolidation block below: KnowHow (capture) + the two Visibility features
+  // (knowledge surfaced outward, Paul 2026-06-24).
+  {
+    key: 'knowledge',
+    nav: 'Knowledge',
+    label: 'Knowledge',
+    tagline: 'Start with what you already know.',
+    intro:
+      'Most businesses sit on hard-won knowledge that lives in people’s heads and scattered files, and is easily ' +
+      'lost when they’re busy or leave. Be AI Ready begins by capturing it and organising it into something you ' +
+      'can actually use — kept private to your business — and surfacing the right parts of it so AI systems ' +
+      'describe you correctly.',
+    features: [],   // assembled in the consolidation block below
+  },
+
+  // ── Measurement ─────────────────────────────────────────────────────────────────
+  // Agree the goals up front, then prove the results against them. Takes productivity
+  // tracking (moved from Tools) plus the goals-and-results flow.
+  {
+    key: 'measurement',
+    nav: 'Measurement',
+    label: 'Measurement',
+    tagline: 'Agree the goals. Prove the results.',
+    intro:
+      'We agree clear goals at the start — how much time will be saved, how much cost cut, how much more capable ' +
+      'the business has become — then measure the results against them, so you can see in concrete terms that ' +
+      'the work was worth doing.',
+    features: [
+      { name: 'Goals & results', status: 'building', slug: 'goals-results',
+        what: 'Set measurable goals at the start of the engagement, then track progress against them over time — the proof that the work paid off.' },
+    ],
+  },
 ];
 
-// Training keeps KnowHow and gains Staff AI Needs (moved from Strategy, Paul
-// 2026-06-23). Strategy still absorbs the Visibility + Data Security features —
-// those become sub-areas of Strategy rather than their own tabs — done by
-// reference so there's one source of truth per feature (the Visibility / Data
-// Security pillar defs + their /dashboard tools stay intact, just unlinked).
+// Re-home features so the six visible pillars match the Be AI Ready model (Paul,
+// 2026-06-24). One source of truth per feature: the original pillar defs (Visibility,
+// Data Security) stay intact and their /dashboard tools keep working — features are
+// just moved by reference into the pillar that now owns them.
+//   • Knowledge (foundation) absorbs KnowHow (capture) + Visibility (knowledge
+//     surfaced to the world).
+//   • Governance absorbs Data Security (keeping that knowledge safe to use & share).
+//   • Measurement takes productivity tracking (from Tools).
+//   • Staff AI Needs sits with Training (a training-needs read).
 (() => {
   const byKey = (k) => PILLARS.find((p) => p.key === k);
+  const pull = (pillarKey, slug) => {
+    const p = byKey(pillarKey);
+    const f = p && p.features.find((x) => x.slug === slug);
+    if (f) p.features = p.features.filter((x) => x.slug !== slug);
+    return f;
+  };
   const training = byKey('training');
-  const strategy = byKey('strategy');
-  // Staff AI Needs moves Strategy → Training (KnowHow already lives in Training).
-  const staffNeeds = strategy.features.find((f) => f.slug === 'staff-needs');
-  if (staffNeeds) {
-    strategy.features = strategy.features.filter((f) => f.slug !== 'staff-needs');
-    training.features = [...training.features, staffNeeds];
-  }
-  // Strategy = its own roadmap, plus the (otherwise hidden) Visibility + Data Security features.
-  strategy.features = [
-    ...strategy.features,
-    ...byKey('visibility').features,
-    ...byKey('data-security').features,
+  const knowledge = byKey('knowledge');
+  const governance = byKey('governance');
+  const measurement = byKey('measurement');
+
+  // Knowledge = capture (KnowHow) + surface outward (the two Visibility features).
+  knowledge.features = [
+    pull('training', 'knowhow'),
+    pull('visibility', 'visibility-scan'),
+    pull('visibility', 'visibility-data'),
   ].filter(Boolean);
+
+  // Staff AI Needs: Strategy → Training.
+  const staffNeeds = pull('strategy', 'staff-needs');
+  if (staffNeeds) training.features = [...training.features, staffNeeds];
+
+  // Governance absorbs Data Security.
+  governance.features = [
+    ...governance.features,
+    pull('data-security', 'ai-tools-log'),
+    pull('data-security', 'acceptable-use'),
+  ].filter(Boolean);
+
+  // Measurement takes productivity tracking (ahead of the Goals & results stub).
+  const productivity = pull('productivity', 'productivity-tracking');
+  if (productivity) measurement.features = [productivity, ...measurement.features];
 })();
 
-// Pillars shown in the nav + on the home page (Paul, 2026-06-23): Training,
-// Governance, Tools (Nodes under it), Strategy (which now holds KnowHow, Visibility
-// and Data Security). The array order here is the displayed order.
-const VISIBLE_KEYS = ['training', 'governance', 'productivity', 'strategy'];
+// Pillars shown in the nav + on the home page, in the Be AI Ready order (Paul,
+// 2026-06-24): Knowledge leads (the inside-out foundation), then Training,
+// Governance, Tools, Strategy, Measurement. The array order here is the displayed
+// order — flip 'knowledge'/'training' to lead with Training instead.
+const VISIBLE_KEYS = ['knowledge', 'training', 'governance', 'productivity', 'strategy', 'measurement'];
 export const VISIBLE_PILLARS = VISIBLE_KEYS.map((k) => PILLARS.find((p) => p.key === k)).filter(Boolean);
 
 export function findPillar(key) {
