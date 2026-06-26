@@ -49,6 +49,18 @@ client (Leads 2 Business).
 - **Self-registration**: sign out → Create account → pick the client → access code
   `joinus`.
 
+## Login not working in the browser?
+
+The login code/API is fine — this is almost always a **stale local dev server** or a
+**stale browser cache**, not your credentials:
+
+1. Re-run `bash test-local.sh` (it now kills any old `:3001`/`:5173` server first and
+   starts fresh).
+2. **Hard-refresh** the page (⌘⇧R) or open it in a private window — the long-running
+   vite server can leave an old JS bundle cached in the browser.
+3. Confirm you're using a seeded login (`admin@local` / `member@local`, `localtest123`)
+   — your real production account's password isn't in the local database.
+
 ## Manual (if you'd rather)
 
 ```bash

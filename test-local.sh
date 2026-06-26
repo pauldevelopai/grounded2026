@@ -5,6 +5,13 @@
 set -e
 cd "$(dirname "$0")"
 
+# Stop any stale server/client from a previous run. A long-running vite dev server
+# (left up across many edits) serves a degraded bundle — the usual cause of "login
+# works via API but fails in the browser". Always start clean.
+echo "→ Clearing any old local servers on :3001 / :5173…"
+lsof -ti:3001 2>/dev/null | xargs kill -9 2>/dev/null || true
+lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
+
 echo "→ Applying migrations…"
 ( cd server && node db/migrate.js )
 
