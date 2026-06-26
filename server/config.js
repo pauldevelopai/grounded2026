@@ -12,6 +12,7 @@ export default {
   adminEmail: process.env.ADMIN_EMAIL || 'paul@developai.co.za',
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  knowledgeEncryptionKey: process.env.KNOWLEDGE_ENCRYPTION_KEY || '',  // 32-byte base64/hex; encryption-at-rest is off if unset
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',

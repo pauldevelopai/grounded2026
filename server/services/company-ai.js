@@ -10,6 +10,7 @@ import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
 import { getRelevantKnowledge } from './knowledge.js';
+import { decryptFor } from './crypto.js';
 
 // Prior team interactions most relevant to this question — hybrid (vector when an
 // embedding service is configured, else full-text). Scoped to the company; shared only.
@@ -50,12 +51,14 @@ async function gatherCorpus({ newsroomId, organisationId, sectorId, question }) 
 
   // 1. The company's captured knowledge sources (docs, website, notes).
   const { rows: srcs } = await pool.query(
-    `SELECT kind, title, left(extracted_text, 2400) AS text
+    `SELECT kind, title, extracted_text
        FROM beaiready_company_sources
       WHERE newsroom_id = $1 AND extracted_text IS NOT NULL AND length(extracted_text) > 0
       ORDER BY created_at DESC LIMIT 8`, [newsroomId]).catch(() => ({ rows: [] }));
   for (const s of srcs) {
-    parts.push(`[Company ${s.kind}] ${s.title || ''}:\n${s.text}`);
+    const text = (decryptFor(newsroomId, s.extracted_text) || '').slice(0, 2400);   // decrypted in memory only
+    if (!text) continue;
+    parts.push(`[Company ${s.kind}] ${s.title || ''}:\n${text}`);
     sources.push({ type: 'document', title: s.title || s.kind });
   }
 

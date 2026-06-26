@@ -49,6 +49,24 @@ client (Leads 2 Business).
 - **Self-registration**: sign out → Create account → pick the client → access code
   `joinus`.
 
+## Encryption at rest (client knowledge)
+
+The company's captured knowledge (`beaiready_company_sources` — your uploaded docs,
+notes, scraped sites, and promoted KnowHow answers) is **encrypted at rest** with
+AES‑256‑GCM, using a per‑client key derived from one master key. It's only decrypted in
+memory when the AI reads it.
+
+- Set the master key in `.env`:
+  ```
+  KNOWLEDGE_ENCRYPTION_KEY=<32 bytes, base64>
+  ```
+  generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+  `test-local.sh` does not need it; if it's unset, encryption is simply **off**
+  (plaintext, nothing breaks).
+- **On the box:** add the same line to `/home/ubuntu/tracker/.env`. ⚠️ **Keep it safe —
+  if the key is lost, encrypted knowledge can't be decrypted.** Setting a key later only
+  encrypts *new* writes; existing plaintext keeps working.
+
 ## Login not working in the browser?
 
 The login code/API is fine — this is almost always a **stale local dev server** or a

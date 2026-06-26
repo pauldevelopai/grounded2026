@@ -10,6 +10,7 @@ import { generateCaptureQuestions } from '../knowhow/generate.js';
 import { extractDocumentText, splitIntoPieces } from '../knowhow/extract.js';
 import { addCorpusItem, corpusSummary, corpusForTopic } from '../knowhow/corpus.js';
 import { askCorpus } from '../knowhow/agent.js';
+import { encryptFor } from '../services/crypto.js';
 
 const router = Router();
 const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
@@ -222,7 +223,7 @@ router.post('/tenants/:tid/responses/:rid/promote', wrap(async (req, res) => {
   const { rows: [src] } = await pool.query(
     `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
      VALUES ($1,'note',$2,$3,$4) RETURNING id`,
-    [t.newsroom_id, title, r.body, req.user.id]);
+    [t.newsroom_id, title, encryptFor(t.newsroom_id, r.body), req.user.id]);
   await pool.query('UPDATE knowhow.responses SET promoted_source_id = $1 WHERE id = $2', [src.id, r.id]);
   res.json({ source_id: src.id });
 }));

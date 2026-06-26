@@ -17,6 +17,7 @@ import { syncOneForm, syncFormsForTenant, toCsvUrl } from '../services/forms-syn
 import { upload } from '../middleware/upload.js';
 import { scrapeArticle } from '../services/web-scraper.js';
 import { extractText } from '../services/document-processor.js';
+import { encryptFor, decryptFor } from '../services/crypto.js';
 import { callClaude } from '../services/claude.js';
 
 const router = Router();
@@ -615,11 +616,15 @@ router.get('/company-knowledge', async (req, res) => {
   try {
     if (!isAdmin(req)) return res.json([]);   // internal context only
     const { newsroomId } = await tenantContext(req);
+    // Fetch the full (possibly encrypted) text and decrypt in memory — we can't
+    // SQL-truncate ciphertext, so the snippet is built after decryption.
     const { rows } = await pool.query(
-      `SELECT id, kind, title, url, file_id, left(extracted_text, 220) AS snippet,
-              (extracted_text IS NOT NULL AND length(extracted_text) > 0) AS has_text, created_at
+      `SELECT id, kind, title, url, file_id, extracted_text, created_at
          FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]);
-    res.json(rows);
+    res.json(rows.map((r) => {
+      const text = decryptFor(newsroomId, r.extracted_text) || '';
+      return { id: r.id, kind: r.kind, title: r.title, url: r.url, file_id: r.file_id, created_at: r.created_at, snippet: text.slice(0, 220), has_text: text.length > 0 };
+    }));
   } catch (err) { console.error('[bair-train/company-knowledge:get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
@@ -632,7 +637,7 @@ router.post('/company-knowledge/website', requireRole('admin'), async (req, res)
     const { rows } = await pool.query(
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
        VALUES ($1,'website',$2,$3,$4,$5) RETURNING id, kind, title, url, created_at`,
-      [newsroom_id, scraped.title || url, url, scraped.text, req.user.id]);
+      [newsroom_id, scraped.title || url, url, encryptFor(newsroom_id, scraped.text), req.user.id]);
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[bair-train/company-knowledge:website]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -651,7 +656,7 @@ router.post('/company-knowledge/upload', requireRole('admin'), upload.single('fi
     const { rows } = await pool.query(
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by)
        VALUES ($1,'doc',$2,$3,$4,$5) RETURNING id, kind, title, file_id, created_at`,
-      [newsroom_id, req.file.originalname, doc.id, (text || '').slice(0, 20000), req.user.id]);
+      [newsroom_id, req.file.originalname, doc.id, encryptFor(newsroom_id, (text || '').slice(0, 20000)), req.user.id]);
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[bair-train/company-knowledge:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
 });
@@ -663,7 +668,7 @@ router.post('/company-knowledge/note', requireRole('admin'), async (req, res) =>
     const { rows } = await pool.query(
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
        VALUES ($1,'note',$2,$3,$4) RETURNING id, kind, title, created_at`,
-      [newsroom_id, title || 'Note', text.trim(), req.user.id]);
+      [newsroom_id, title || 'Note', encryptFor(newsroom_id, text.trim()), req.user.id]);
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[bair-train/company-knowledge:note]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -695,7 +700,8 @@ async function gatherBusinessContext(newsroomId) {
   const { rows: srcs } = await pool.query(
     `SELECT kind, title, extracted_text FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC LIMIT 20`, [newsroomId]).catch(() => ({ rows: [] }));
   for (const s of srcs) {
-    if (s.extracted_text) parts.push(`[${s.kind}] ${s.title || ''}:\n${s.extracted_text.slice(0, 3000)}`);
+    const text = decryptFor(newsroomId, s.extracted_text);
+    if (text) parts.push(`[${s.kind}] ${s.title || ''}:\n${text.slice(0, 3000)}`);
   }
 
   // What we've actually delivered to this client — the harvested training record.
