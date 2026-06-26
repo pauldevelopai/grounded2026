@@ -38,15 +38,25 @@ export async function resolveNewsroomId(req) {
   let own = req.user?.newsroom_id;
   if (!own && req.user?.id) {
     const { rows } = await pool.query('SELECT newsroom_id FROM team_members WHERE id = $1', [req.user.id]);
-    own = rows[0]?.newsroom_id || OFFICE_NEWSROOM_ID;
+    own = rows[0]?.newsroom_id || null;
   }
 
-  let active = own;
+  // Fail closed. A non-admin (a client team member) MUST have a home newsroom — silently
+  // falling through to the office tenant would scope a mis-configured business user onto
+  // Develop AI's own data. Deny instead. Admins (and the ambient office service context)
+  // may still default to office and switch via X-Newsroom-Id.
+  if (!own && req.user?.role !== 'admin') {
+    const err = new Error('No tenant resolved for this account — contact your Be AI Ready consultant.');
+    err.status = 403;
+    throw err;
+  }
+
+  let active = own || OFFICE_NEWSROOM_ID;
   if (req.user?.role === 'admin') {
     const requested = req.headers['x-newsroom-id'];
     if (requested && /^[0-9a-f-]{36}$/i.test(requested)) active = requested;
   }
 
-  req._newsroomId = active || OFFICE_NEWSROOM_ID;
+  req._newsroomId = active;
   return req._newsroomId;
 }

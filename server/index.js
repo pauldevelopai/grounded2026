@@ -409,6 +409,9 @@ app.use('/api', admin);
 
 // ── Error handler ──────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
+  // Errors that carry an explicit status (e.g. the fail-closed tenancy guard's 403)
+  // surface with that status + message; everything else is an opaque 500.
+  if (err && err.status) return res.status(err.status).json({ message: err.message || 'Request failed' });
   console.error(err.stack);
   res.status(500).json({ message: 'Internal server error' });
 });
