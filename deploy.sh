@@ -32,5 +32,7 @@ echo "==> Restarting the server under pm2"
 pm2 restart tracker-server && (pm2 save >/dev/null 2>&1 || true)
 
 echo ""
-echo "Done. Live at https://grounded.developai.co.za/"
+echo "Done. One build + server serves both doors:"
+echo "  • Grounded (main):  https://grounded.developai.co.za/"
+echo "  • Be AI Ready:      https://beaiready.developai.co.za/"
 echo "If a front-end change still looks stale, hard-refresh the browser (Cmd/Ctrl+Shift+R)."
