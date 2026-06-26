@@ -42,6 +42,37 @@ export async function gatherSectorAggregate(sectorId) {
   const { rows: recs } = await pool.query(
     `SELECT pillar, count(*)::int AS n FROM recommendations WHERE newsroom_id = ANY($1) GROUP BY pillar ORDER BY n DESC`, [newsroomIds]).catch(() => ({ rows: [] }));
 
+  // Measurable goals + their OUTCOMES — the Measurement→insight loop the vision
+  // describes ("the same measuring that proves value also builds the shared insight").
+  // Aggregate only, and only when >= MIN_ORGS businesses actually set goals (k-anonymity
+  // for this dimension too — not just for the consenting set overall).
+  const { rows: goalRows } = await pool.query(
+    `SELECT g.metric, g.title, g.baseline, g.target, g.status, n.organisation_id
+       FROM bair_goals g JOIN newsrooms n ON n.id = g.newsroom_id
+      WHERE g.newsroom_id = ANY($1) ORDER BY md5(g.id::text)`, [newsroomIds]).catch(() => ({ rows: [] }));
+  let goalOutcomes = null;
+  const goalOrgs = new Set(goalRows.map((g) => g.organisation_id));
+  if (goalRows.length && goalOrgs.size >= MIN_ORGS) {
+    const byMetric = {};
+    let achieved = 0, impSum = 0, impN = 0;
+    for (const g of goalRows) {
+      byMetric[g.metric || 'other'] = (byMetric[g.metric || 'other'] || 0) + 1;
+      if (g.status === 'achieved') achieved++;
+      const b = Number(g.baseline), t = Number(g.target);
+      if (g.baseline != null && g.target != null && b !== 0 && isFinite(b) && isFinite(t)) {
+        impSum += Math.abs((t - b) / b) * 100; impN++;
+      }
+    }
+    goalOutcomes = {
+      contributingOrgs: goalOrgs.size,
+      count: goalRows.length,
+      byMetric,
+      achievementRate: Math.round((achieved / goalRows.length) * 100),
+      typicalImprovementPct: impN ? Math.round(impSum / impN) : null,
+      aims: goalRows.map((g) => g.title).slice(0, 40),   // pooled, shuffled, unattributed
+    };
+  }
+
   return {
     orgCount,
     automations: strat.filter((s) => s.kind === 'automation').map((s) => s.title).slice(0, 40),
@@ -49,6 +80,7 @@ export async function gatherSectorAggregate(sectorId) {
     effortPayoff: dist,
     metrics,
     recsByPillar: recs,
+    goalOutcomes,
   };
 }
 
@@ -74,6 +106,8 @@ export async function deriveSectorInsights(sectorId) {
     'or single out any individual business — write only in aggregate ("businesses like yours tend to…", "a common ' +
     'pitfall is…", "what works…"). Output ONLY a JSON array, 3–5 elements, each ' +
     '{"pattern_type":"automation"|"goal"|"pitfall"|"adoption"|"measurement","title":string,"insight":string}. ' +
+    'When goal-outcome data is provided, include a "measurement" pattern about what businesses like this ' +
+    'typically target, the size of improvement they aim for, and how often they reach it. ' +
     'Ground every insight in the provided aggregate; if the data is thin, return fewer items rather than inventing.';
   const userContent =
     `De-identified aggregate across ${agg.orgCount} ${sectorName ? sectorName + ' ' : ''}businesses that have opted in:\n\n` +
@@ -82,6 +116,13 @@ export async function deriveSectorInsights(sectorId) {
     `Automation sizing distribution (kind/effort/payoff → count): ${JSON.stringify(agg.effortPayoff)}\n\n` +
     `Measurement (aggregate only): ${JSON.stringify(agg.metrics)}\n\n` +
     `Where recommendations cluster (pillar → count): ${JSON.stringify(agg.recsByPillar)}\n\n` +
+    (agg.goalOutcomes
+      ? `Measurable goals & their outcomes (across ${agg.goalOutcomes.contributingOrgs} businesses): ` +
+        `${agg.goalOutcomes.count} goals; by metric ${JSON.stringify(agg.goalOutcomes.byMetric)}; ` +
+        `${agg.goalOutcomes.achievementRate}% reached 'achieved'` +
+        `${agg.goalOutcomes.typicalImprovementPct != null ? `; typical target is a ~${agg.goalOutcomes.typicalImprovementPct}% change` : ''}. ` +
+        `What they aim for (pooled, unattributed): ${agg.goalOutcomes.aims.join('; ')}\n\n`
+      : '') +
     `Write the anonymised patterns now as a JSON array.`;
   const raw = await callClaude({ system, userContent, maxTokens: 1200, temperature: 0.4 });
   const patterns = parseJsonArray(raw).filter((p) => p && p.title && p.insight).slice(0, 6);
@@ -92,7 +133,7 @@ export async function deriveSectorInsights(sectorId) {
   for (const o of old) if (o.knowledge_id) await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [o.knowledge_id]).catch(() => {});
   await pool.query('DELETE FROM bair_insights WHERE sector_id IS NOT DISTINCT FROM $1', [sectorId || null]);
 
-  const evidence = { org_count: agg.orgCount, effort_payoff: agg.effortPayoff, metrics: agg.metrics, recs_by_pillar: agg.recsByPillar };
+  const evidence = { org_count: agg.orgCount, effort_payoff: agg.effortPayoff, metrics: agg.metrics, recs_by_pillar: agg.recsByPillar, goal_outcomes: agg.goalOutcomes || null };
   const created = [];
   for (const p of patterns) {
     const { rows: [ins] } = await pool.query(
