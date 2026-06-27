@@ -74,6 +74,7 @@ import { getAINewsToday, generateAINewsToday } from './services/ai-news-today.js
 import { getGovernanceToday, generateGovernanceToday } from './services/governance-today.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
+import { resolveTenant } from './middleware/resolve-tenant.js';
 
 const app = express();
 
@@ -326,10 +327,10 @@ app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
 // Feedback: all authenticated users can submit; admin can view/manage
 app.use('/api/feedback', requireAuth, feedbackRoutes);
 // BE AI READY business dashboard data — reads scoped to the caller's own tenant.
-app.use('/api/beaiready/training', requireAuth, beaireadyTrainingRoutes);
-app.use('/api/beaiready/workspace', requireAuth, beaireadyWorkspaceRoutes);
-app.use('/api/beaiready/insights', requireAuth, beaireadyInsightsRoutes);
-app.use('/api/beaiready', requireAuth, beaireadyRoutes);
+app.use('/api/beaiready/training', requireAuth, resolveTenant, beaireadyTrainingRoutes);
+app.use('/api/beaiready/workspace', requireAuth, resolveTenant, beaireadyWorkspaceRoutes);
+app.use('/api/beaiready/insights', requireAuth, resolveTenant, beaireadyInsightsRoutes);
+app.use('/api/beaiready', requireAuth, resolveTenant, beaireadyRoutes);
 // Toolbox catalogue management (the `tools` table behind /toolbox). Admin-only;
 // mounted before the generic /api admin router so this exact prefix is handled here.
 app.use('/api/toolkit-admin', requireAuth, requireRole('admin'), toolkitAdminRoutes);

@@ -133,6 +133,15 @@ export default function BusinessDashboard() {
         </p>
       </section>
 
+      {/* ── Your documents — a member's private extraction space (Tier 1) ── */}
+      <div className="hub-section-label">Your documents</div>
+      <section className="hub-band" style={{ marginBottom: 24 }}>
+        <p style={{ margin: 0 }}>
+          Drop in a contract, report or spreadsheet and get the text, a plain‑language summary and the key
+          facts pulled out — private to you. <Link to="/dashboard/extraction">Open your documents →</Link>
+        </p>
+      </section>
+
       {/* ── What works for businesses like yours — anonymised cross-business patterns ── */}
       {insights && insights.length > 0 && (
         <>
