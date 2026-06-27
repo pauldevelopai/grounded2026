@@ -10,6 +10,9 @@ import { resolveNewsroomId } from '../lib/tenancy.js';
 import { callClaude } from '../services/claude.js';
 import { runVisibilityScan } from '../services/visibility-scan.js';
 import { providerStatus, getModelConfig, saveModelConfig, saveProviderSecret, FUNCTIONS, PROVIDERS } from '../lib/models.js';
+import fs from 'node:fs';
+import { upload } from '../middleware/upload.js';
+import { processUpload } from '../services/document-processor.js';
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -302,10 +305,44 @@ router.get('/policy', async (req, res) => {
 // the client reviews, edits and saves with PUT). Business-framed, ZA/POPIA aware.
 router.post('/policy/generate', async (req, res) => {
   try {
-    const { businessName = '', sector = '', aiUses = '', existingPolicy = '' } = req.body || {};
-    if (existingPolicy && existingPolicy.length > 20000) {
+    const body = req.body || {};
+    const existingPolicy = body.existingPolicy || '';
+    if (existingPolicy.length > 20000) {
       return res.status(400).json({ message: 'Policy text is too long (max ~20,000 characters).' });
     }
+
+    // Ground the policy in what we actually know about THIS business (tenant-scoped),
+    // so it's specific, not boilerplate. Body fields stay as optional overrides.
+    const newsroomId = await resolveNewsroomId(req);
+    const knownLines = [];
+    let tName = '', tSector = '';
+    try {
+      const { rows: [t] } = await pool.query(
+        `SELECT o.name AS org, o.country, s.name AS sector FROM newsrooms n
+           LEFT JOIN organisations o ON o.id = n.organisation_id
+           LEFT JOIN sectors s ON s.id = o.sector_id WHERE n.id = $1`, [newsroomId]);
+      tName = t?.org || ''; tSector = t?.sector || '';
+      if (t?.org) knownLines.push(`Business: ${t.org}${t.sector ? ` (sector: ${t.sector})` : ''}${t.country ? `, ${t.country}` : ''}`);
+      const { rows: tools } = await pool.query(
+        `SELECT tool_name, data_shared FROM ai_tool_inventory WHERE newsroom_id = $1 ORDER BY created_at DESC LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
+      if (tools.length) knownLines.push(`AI tools the team actually uses: ${tools.map((x) => `${x.tool_name}${x.data_shared ? ` (data put in: ${x.data_shared})` : ''}`).join('; ')}`);
+      const { rows: intake } = await pool.query(
+        `SELECT response FROM intake_responses WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 20`, [newsroomId]).catch(() => ({ rows: [] }));
+      if (intake.length) {
+        const ans = intake.map((r) => Object.entries(r.response || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')).filter(Boolean);
+        knownLines.push(`Staff AI-readiness survey (${intake.length} responses):\n${ans.join('\n').slice(0, 3500)}`);
+      }
+    } catch (e) { console.error('[policy/generate context]', e.message); }
+    const businessName = body.businessName || tName || '';
+    const sector = body.sector || tSector || '';
+    const aiUses = body.aiUses || '';
+    // Auto-grounding is for the tenant's OWN policy (empty/light body). If the caller
+    // names a different business explicitly, respect that override and don't inject
+    // this tenant's identity/intake — it would contradict the brief.
+    const known = (!body.businessName && knownLines.length)
+      ? `\n\nWHAT WE KNOW ABOUT THIS BUSINESS (ground the policy in this — be specific to them, never generic):\n${knownLines.join('\n')}`
+      : '';
+
     const system = `You are an AI-governance adviser helping a SMALL OR MEDIUM BUSINESS (not a newsroom) write its AI-use policy. Be concrete and practical for a business — covering: acceptable AI use by staff, what company/client/personal data may and may not be put into AI tools, approved vs unapproved tools, accountability (who approves AI use, who answers when something goes wrong), POPIA and emerging AI-regulation alignment, and review cadence. Plain language a manager can adopt and defend — never generic boilerplate.
 
 Respond in TWO parts, in this exact order:
@@ -319,9 +356,9 @@ PART 2 — a line containing exactly:
 ---POLICY---
 …then the full policy as markdown (clear sections, concrete rules a business can actually follow). Put NO JSON here.`;
 
-    const brief = existingPolicy && existingPolicy.trim().length >= 40
+    const brief = (existingPolicy && existingPolicy.trim().length >= 40
       ? `MODE: review and improve this existing policy for a business.\nBusiness: ${businessName || '(unspecified)'}\nSector: ${sector || '(unspecified)'}\n\nEXISTING POLICY:\n${existingPolicy}`
-      : `MODE: draft a new AI-use policy from this brief.\nBusiness: ${businessName || 'a small/medium business'}\nSector: ${sector || '(unspecified)'}\nHow they use (or plan to use) AI: ${aiUses || '(unspecified — cover common SME uses: drafting, summarising, customer comms, analysis)'}\nJurisdiction: South Africa (POPIA).`;
+      : `MODE: draft a new AI-use policy from this brief.\nBusiness: ${businessName || 'a small/medium business'}\nSector: ${sector || '(unspecified)'}\nHow they use (or plan to use) AI: ${aiUses || '(unspecified — cover common SME uses: drafting, summarising, customer comms, analysis)'}\nJurisdiction: South Africa (POPIA).`) + known;
 
     const raw = String(await callClaude({ system, userContent: brief, maxTokens: 3000, temperature: 0.3 }));
     const [metaPart, ...rest] = raw.split('---POLICY---');
@@ -679,6 +716,67 @@ router.put('/admin/provider-key', requireRole('admin'), async (req, res) => {
     await saveProviderSecret(provider, String(value).trim(), req.user?.id);
     res.json({ ok: true, provider });
   } catch (err) { console.error('[beaiready/admin/provider-key]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Client self-serve extraction (Tier 1 — private to the member) ────────────
+// A client team member uploads their OWN documents and gets text + an AI summary +
+// structured data back, in a space that is THEIRS. It does NOT flow into the company
+// knowledge the AI reasons over — only an admin promotion (the Gate-1 pattern) lifts a
+// doc to the company tier. Reuses the shared engine (processUpload), which skips the
+// knowledge-base step for this entity_type. Tenant-scoped + owner-scoped.
+const CLIENT_EXTRACTION = 'bair_client_extraction';
+
+router.post('/extraction', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const newsroomId = await resolveNewsroomId(req);
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by, newsroom_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id, original_name, mime_type, file_size, extraction_status, created_at`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, CLIENT_EXTRACTION, newsroomId, req.user.id, newsroomId]);
+    // Extract + summarise in the background; the client polls GET /extraction/:id.
+    processUpload(doc.id).catch((e) => console.error('[bair/extraction processUpload]', e.message));
+    res.status(201).json(doc);
+  } catch (err) { console.error('[beaiready/extraction:post]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+router.get('/extraction', async (req, res) => {
+  try {
+    const newsroomId = await resolveNewsroomId(req);
+    const { rows } = await pool.query(
+      `SELECT id, original_name, mime_type, file_size, extraction_status, ai_analysis_status, ai_summary, created_at
+         FROM uploaded_documents
+        WHERE entity_type = $1 AND newsroom_id = $2 AND uploaded_by = $3
+        ORDER BY created_at DESC LIMIT 100`, [CLIENT_EXTRACTION, newsroomId, req.user.id]);
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/extraction:list]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.get('/extraction/:id', async (req, res) => {
+  try {
+    const newsroomId = await resolveNewsroomId(req);
+    const { rows: [doc] } = await pool.query(
+      `SELECT id, original_name, mime_type, file_size, extraction_status, ai_analysis_status,
+              extracted_text, ai_summary, ai_extracted_data, created_at
+         FROM uploaded_documents
+        WHERE id = $1 AND newsroom_id = $2 AND entity_type = $3 AND uploaded_by = $4`,
+      [req.params.id, newsroomId, CLIENT_EXTRACTION, req.user.id]);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    res.json(doc);
+  } catch (err) { console.error('[beaiready/extraction:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/extraction/:id', async (req, res) => {
+  try {
+    const newsroomId = await resolveNewsroomId(req);
+    const { rows: [doc] } = await pool.query(
+      `DELETE FROM uploaded_documents WHERE id = $1 AND newsroom_id = $2 AND entity_type = $3 AND uploaded_by = $4 RETURNING file_path`,
+      [req.params.id, newsroomId, CLIENT_EXTRACTION, req.user.id]);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    if (doc.file_path) fs.unlink(doc.file_path, () => {});
+    res.json({ deleted: true });
+  } catch (err) { console.error('[beaiready/extraction:del]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;
