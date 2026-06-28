@@ -57,6 +57,7 @@ import beaireadyRoutes from './routes/beaiready.js';
 import beaireadyTrainingRoutes from './routes/beaiready-training.js';
 import beaireadyWorkspaceRoutes from './routes/beaiready-workspace.js';
 import beaireadyInsightsRoutes from './routes/beaiready-insights.js';
+import beaireadyKnowhowRoutes from './routes/beaiready-knowhow.js';
 import toolkitAdminRoutes from './routes/toolkit-admin.js';
 import toolkitSocialRoutes from './routes/toolkit-social.js';
 import promptRoutes from './routes/prompts.js';
@@ -330,6 +331,7 @@ app.use('/api/feedback', requireAuth, feedbackRoutes);
 app.use('/api/beaiready/training', requireAuth, resolveTenant, beaireadyTrainingRoutes);
 app.use('/api/beaiready/workspace', requireAuth, resolveTenant, beaireadyWorkspaceRoutes);
 app.use('/api/beaiready/insights', requireAuth, resolveTenant, beaireadyInsightsRoutes);
+app.use('/api/beaiready/knowhow', requireAuth, resolveTenant, beaireadyKnowhowRoutes);
 app.use('/api/beaiready', requireAuth, resolveTenant, beaireadyRoutes);
 // Toolbox catalogue management (the `tools` table behind /toolbox). Admin-only;
 // mounted before the generic /api admin router so this exact prefix is handled here.

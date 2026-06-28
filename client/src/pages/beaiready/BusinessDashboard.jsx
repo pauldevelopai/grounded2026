@@ -142,6 +142,15 @@ export default function BusinessDashboard() {
         </p>
       </section>
 
+      {/* ── KnowHow — Tier-1 personal base + the company-grounded new-staff coach ── */}
+      <div className="hub-section-label">KnowHow</div>
+      <section className="hub-band" style={{ marginBottom: 24, background: '#fbf7f4', border: '1px solid #eaddd3' }}>
+        <p style={{ margin: 0 }}>
+          Build your own knowledge &amp; workflows, and let new staff learn the ropes from a coach grounded in your
+          company's shared know‑how. <Link to="/dashboard/knowhow">My knowledge &amp; workflows →</Link> · <Link to="/dashboard/coach">New‑staff coach →</Link>
+        </p>
+      </section>
+
       {/* ── What works for businesses like yours — anonymised cross-business patterns ── */}
       {insights && insights.length > 0 && (
         <>
@@ -178,13 +187,6 @@ export default function BusinessDashboard() {
         </p>
       </section>
 
-      <div className="hub-section-label">On the roadmap</div>
-      <section className="hub-band" style={{ background: '#f4f1ec' }}>
-        <p style={{ margin: 0 }}>
-          <strong>KnowHow</strong> — clone a senior leader's expertise to coach your team.
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#8a8076' }}>Coming soon</span>
-        </p>
-      </section>
     </div>
   );
 }
