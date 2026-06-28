@@ -1,0 +1,457 @@
+// BeAIReadyAdminKnowHow — the KnowHow capture surface in the BE AI READY admin.
+// KnowHow replaces BetterBoss: it captures the institutional knowledge inside an
+// experienced employee's head. Pulse sends capture questions (login-free links);
+// answers + ingested documents accumulate into a per-tenant corpus. This page is
+// the capture slice only — topics, people, questions, documents, and the live
+// corpus count filling up. No agent / retrieval here yet (that's Part C).
+import { useEffect, useState, useCallback } from 'react';
+import { apiFetch } from '../../../hooks/useApi.js';
+
+export default function BeAIReadyAdminKnowHow() {
+  const [tenants, setTenants] = useState(null);
+  const [tid, setTid] = useState('');
+  const [ov, setOv] = useState(null);
+  const [responses, setResponses] = useState([]);
+  const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback((id) => {
+    if (!id) return;
+    apiFetch(`/knowhow/tenants/${id}/overview`).then(setOv).catch((e) => setErr(e.message));
+    apiFetch(`/knowhow/tenants/${id}/responses`).then(setResponses).catch(() => setResponses([]));
+  }, []);
+
+  const loadTenants = useCallback(() => {
+    apiFetch('/knowhow/tenants').then((rows) => {
+      setTenants(rows);
+      setTid((cur) => cur || (rows[0]?.id || ''));
+    }).catch((e) => setErr(e.message));
+  }, []);
+  useEffect(() => { loadTenants(); }, [loadTenants]);
+  useEffect(() => { load(tid); }, [tid, load]);
+
+  const flash = (m) => { setMsg(m); setErr(''); setTimeout(() => setMsg(''), 4000); };
+  const fail = (e) => setErr(typeof e === 'string' ? e : e.message);
+
+  if (tenants == null) return <div style={{ padding: 4 }}>Loading…</div>;
+  const currentTenant = tenants.find((t) => t.id === tid) || null;
+
+  return (
+    <div style={{ maxWidth: 920 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>KnowHow</h1>
+        <select value={tid} onChange={(e) => setTid(e.target.value)} style={sel}>
+          {tenants.map((t) => <option key={t.id} value={t.id}>{t.name} · {t.product}</option>)}
+        </select>
+      </div>
+      <p style={{ color: '#6b6359', margin: '6px 0 16px', maxWidth: '70ch' }}>
+        Capture the hard-won expertise inside your team's heads. Add the people and the topics, let Pulse draft
+        capture questions, send each person a login-free link, and watch the corpus fill. (The corpus is the asset
+        — answering questions over it, and coaching juniors, comes next.)
+      </p>
+
+      {currentTenant && <LinkClient tenant={currentTenant} reload={loadTenants} flash={flash} fail={fail} />}
+
+      {err && <div style={banner('#FEF2F2', '#B91C1C')}>{err}</div>}
+      {msg && <div style={banner('#ECFDF5', '#065F46')}>{msg}</div>}
+
+      {/* ── Corpus counter — the value story ── */}
+      {ov && (
+        <section style={{ ...card, background: '#1c1b1a', color: '#f3ede6', marginBottom: 18 }}>
+          <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
+            <Stat n={ov.corpus.pieces} label="pieces captured" />
+            <Stat n={ov.corpus.topics} label="topics" />
+            <Stat n={ov.corpus.people} label="people" />
+            <Stat n={ov.corpus.consented} label="consented" />
+          </div>
+          {ov.corpus.byTopic?.some((t) => t.pieces > 0) && (
+            <div style={{ marginTop: 12, fontSize: 12.5, color: '#bcb3a8' }}>
+              {ov.corpus.byTopic.filter((t) => t.pieces > 0).map((t) => `${t.label} (${t.pieces})`).join(' · ')}
+            </div>
+          )}
+        </section>
+      )}
+
+      {ov && <AskCorpus tid={tid} topics={ov.topics} hasCorpus={ov.corpus.pieces > 0} fail={fail} />}
+      {ov && <TeamLink tid={tid} askToken={ov.tenant?.ask_token} reload={() => load(tid)} flash={flash} fail={fail} />}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
+        {ov && <People tid={tid} people={ov.people} reload={() => load(tid)} flash={flash} fail={fail} />}
+        {ov && <Topics tid={tid} topics={ov.topics} reload={() => load(tid)} flash={flash} fail={fail} />}
+      </div>
+
+      {ov && <Capture tid={tid} ov={ov} reload={() => load(tid)} flash={flash} fail={fail} />}
+      {ov && <Documents tid={tid} topics={ov.topics} reload={() => load(tid)} flash={flash} fail={fail} />}
+      <Answers responses={responses} tid={tid} linked={!!currentTenant?.newsroom_id} reload={() => load(tid)} flash={flash} fail={fail} />
+    </div>
+  );
+}
+
+function Stat({ n, label }) {
+  return (
+    <div>
+      <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, color: '#e08a64' }}>{n ?? 0}</div>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#9a9087', marginTop: 3 }}>{label}</div>
+    </div>
+  );
+}
+
+function TeamLink({ tid, askToken, reload, flash, fail }) {
+  const [busy, setBusy] = useState(false);
+  const url = askToken ? `${window.location.origin}/knowhow/ask/${askToken}` : '';
+  const make = async () => {
+    setBusy(true);
+    try { await apiFetch(`/knowhow/tenants/${tid}/ask-token`, { method: 'POST' }); flash(askToken ? 'New link created (old one no longer works)' : 'Team ask-link created'); reload(); }
+    catch (e) { fail(e); }
+    setBusy(false);
+  };
+  return (
+    <section style={{ ...card, marginBottom: 18, background: '#faf8f5' }}>
+      <h2 style={h2}>Share with your team</h2>
+      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 10px', maxWidth: '66ch' }}>
+        A login-free link your team can use to ask KnowHow and get coached from the captured knowledge — no
+        account needed. Anyone with the link can ask, so share it within the team only.
+      </p>
+      {url ? (
+        <>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input readOnly value={url} style={{ ...inp, flex: 1 }} onFocus={(e) => e.target.select()} />
+            <button style={btn} onClick={() => { navigator.clipboard?.writeText(url); flash('Copied'); }}>Copy</button>
+          </div>
+          <button style={{ ...linkBtn, marginTop: 8, color: '#a89e92' }} onClick={make} disabled={busy}>{busy ? 'Rotating…' : 'Rotate link (invalidates the old one)'}</button>
+        </>
+      ) : (
+        <button style={btn} onClick={make} disabled={busy}>{busy ? 'Creating…' : 'Create team ask-link'}</button>
+      )}
+    </section>
+  );
+}
+
+function AskCorpus({ tid, topics, hasCorpus, fail }) {
+  const [q, setQ] = useState('');
+  const [mode, setMode] = useState('answer');
+  const [topicId, setTopicId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+
+  const ask = async () => {
+    if (!q.trim()) return fail('Ask a question first');
+    setBusy(true); setRes(null);
+    try {
+      const r = await apiFetch(`/knowhow/tenants/${tid}/ask`, { method: 'POST', body: JSON.stringify({ question: q, mode, topic_id: topicId || null }) });
+      setRes(r);
+    } catch (e) { fail(e); }
+    setBusy(false);
+  };
+
+  return (
+    <section style={{ ...card, marginBottom: 18, borderTop: '3px solid #c75b39' }}>
+      <h2 style={h2}>Ask KnowHow <span style={{ ...count, background: '#1c1b1a', color: '#f3ede6' }}>the corpus, answering</span></h2>
+      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 10px', maxWidth: '66ch' }}>
+        Ask a question and KnowHow answers <em>only</em> from what your people have captured — with citations
+        back to who said it. {hasCorpus ? '' : 'Nothing’s captured yet, so it has nothing to draw on — capture an answer or two first.'}
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ display: 'inline-flex', border: '1px solid #e4dcd2', borderRadius: 8, overflow: 'hidden' }}>
+          {['answer', 'coach'].map((m) => (
+            <button key={m} onClick={() => setMode(m)} style={{ padding: '7px 14px', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: mode === m ? '#c75b39' : '#fff', color: mode === m ? '#fff' : '#6b6359' }}>
+              {m === 'answer' ? 'Answer' : 'Coach a junior'}
+            </button>
+          ))}
+        </div>
+        <select style={{ ...inp, minWidth: 160 }} value={topicId} onChange={(e) => setTopicId(e.target.value)}>
+          <option value="">All topics</option>
+          {topics.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input style={{ ...inp, flex: 1 }} placeholder={mode === 'coach' ? 'A junior’s question or scenario…' : 'e.g. How do we decide whether to chase a tender?'}
+          value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask()} />
+        <button style={btn} onClick={ask} disabled={busy}>{busy ? 'Thinking…' : 'Ask'}</button>
+      </div>
+
+      {res && (
+        <div style={{ marginTop: 12 }}>
+          {res.empty ? (
+            <p style={{ color: '#a89e92', fontSize: 13, margin: 0 }}>{res.message}</p>
+          ) : (
+            <>
+              <div style={{ background: '#faf8f5', border: '1px solid #efe7dd', borderRadius: 10, padding: '14px 16px', fontSize: 14.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: '#2a2724' }}>{res.answer}</div>
+              {res.citations?.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076', marginBottom: 4 }}>Sources</div>
+                  <ul style={{ ...list, gap: 5 }}>
+                    {res.citations.map((c) => (
+                      <li key={c.n} style={{ fontSize: 12.5, color: '#6b6359' }}>
+                        <strong style={{ color: '#c75b39' }}>[{c.n}] {c.source}</strong> — {c.snippet}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: '#a89e92', marginTop: 6 }}>Grounded in {res.usedPieces} captured piece{res.usedPieces === 1 ? '' : 's'} · {res.mode === 'coach' ? 'coaching mode' : 'answer mode'}</div>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function People({ tid, people, reload, flash, fail }) {
+  const [f, setF] = useState({ name: '', role: '', seniority: 'senior', email_or_handle: '' });
+  const add = async () => {
+    if (!f.name.trim()) return fail('Name required');
+    try { await apiFetch(`/knowhow/tenants/${tid}/people`, { method: 'POST', body: JSON.stringify(f) });
+      setF({ name: '', role: '', seniority: 'senior', email_or_handle: '' }); flash('Person added'); reload(); }
+    catch (e) { fail(e); }
+  };
+  return (
+    <section style={card}>
+      <h2 style={h2}>People <span style={count}>{people.length}</span></h2>
+      <ul style={list}>
+        {people.map((p) => (
+          <li key={p.id} style={row}>
+            <span><strong>{p.name}</strong>{p.role ? ` · ${p.role}` : ''}{p.seniority ? ` · ${p.seniority}` : ''}</span>
+            <span style={{ fontSize: 11, color: p.consent_at ? '#16a34a' : '#a89e92' }}>{p.consent_at ? 'consented' : 'no consent yet'}</span>
+          </li>
+        ))}
+        {people.length === 0 && <li style={{ color: '#a89e92', fontSize: 13 }}>No people yet.</li>}
+      </ul>
+      <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+        <input style={inp} placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input style={{ ...inp, flex: 1 }} placeholder="Role" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })} />
+          <select style={{ ...inp, width: 120 }} value={f.seniority} onChange={(e) => setF({ ...f, seniority: e.target.value })}>
+            <option value="senior">senior</option><option value="lead">lead</option><option value="mid">mid</option><option value="junior">junior</option>
+          </select>
+        </div>
+        <button style={btn} onClick={add}>Add person</button>
+      </div>
+    </section>
+  );
+}
+
+function Topics({ tid, topics, reload, flash, fail }) {
+  const [f, setF] = useState({ label: '', description: '' });
+  const add = async () => {
+    if (!f.label.trim()) return fail('Label required');
+    try { await apiFetch(`/knowhow/tenants/${tid}/topics`, { method: 'POST', body: JSON.stringify(f) });
+      setF({ label: '', description: '' }); flash('Topic added'); reload(); }
+    catch (e) { fail(e); }
+  };
+  return (
+    <section style={card}>
+      <h2 style={h2}>Topics <span style={count}>{topics.length}</span></h2>
+      <ul style={list}>
+        {topics.map((t) => (
+          <li key={t.id} style={row}><span><strong>{t.label}</strong>{t.description ? <span style={{ color: '#6b6359' }}> — {t.description}</span> : ''}</span></li>
+        ))}
+        {topics.length === 0 && <li style={{ color: '#a89e92', fontSize: 13 }}>No topics yet.</li>}
+      </ul>
+      <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+        <input style={inp} placeholder="Topic label (e.g. tender qualification)" value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} />
+        <input style={inp} placeholder="Short description (optional)" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
+        <button style={btn} onClick={add}>Add topic</button>
+      </div>
+    </section>
+  );
+}
+
+function Capture({ tid, ov, reload, flash, fail }) {
+  const [topicId, setTopicId] = useState('');
+  const [personId, setPersonId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sel, setSel] = useState({});      // prompt id -> bool
+  const [link, setLink] = useState('');
+
+  const generate = async () => {
+    if (!topicId) return fail('Pick a topic first');
+    setBusy(true);
+    try {
+      const r = await apiFetch(`/knowhow/tenants/${tid}/prompts/generate`, { method: 'POST', body: JSON.stringify({ topic_id: topicId, person_id: personId || null }) });
+      flash(`${r.created.length} question${r.created.length === 1 ? '' : 's'} drafted${r.tip ? ` · ${r.tip}` : ''}`); reload();
+    } catch (e) { fail(e); }
+    setBusy(false);
+  };
+  const send = async () => {
+    const ids = Object.keys(sel).filter((k) => sel[k]);
+    if (!ids.length) return fail('Select the questions to send');
+    try {
+      const r = await apiFetch(`/knowhow/tenants/${tid}/prompts/send`, { method: 'POST', body: JSON.stringify({ prompt_ids: ids }) });
+      setLink(`${window.location.origin}${r.path}`); setSel({}); flash(`Link created for ${r.count} question${r.count === 1 ? '' : 's'}`); reload();
+    } catch (e) { fail(e); }
+  };
+  const act = async (id, action) => { try { await apiFetch(`/knowhow/prompts/${id}/${action}`, { method: 'POST' }); reload(); } catch (e) { fail(e); } };
+
+  const sendable = (ov.prompts || []).filter((p) => p.status === 'draft' || p.status === 'vetted');
+  const sent = (ov.prompts || []).filter((p) => p.status === 'sent' || p.status === 'answered');
+
+  return (
+    <section style={{ ...card, marginTop: 16 }}>
+      <h2 style={h2}>Capture questions</h2>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <select style={{ ...inp, minWidth: 200 }} value={topicId} onChange={(e) => setTopicId(e.target.value)}>
+          <option value="">Topic…</option>
+          {ov.topics.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+        <select style={{ ...inp, minWidth: 180 }} value={personId} onChange={(e) => setPersonId(e.target.value)}>
+          <option value="">Anyone</option>
+          {ov.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <button style={btn} onClick={generate} disabled={busy}>{busy ? 'Drafting…' : 'Generate questions'}</button>
+      </div>
+
+      {sendable.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076', margin: '4px 0 6px' }}>Drafts — select and send as one link</div>
+          <ul style={list}>
+            {sendable.map((p) => (
+              <li key={p.id} style={{ ...row, alignItems: 'flex-start' }}>
+                <label style={{ display: 'flex', gap: 8, cursor: 'pointer', flex: 1 }}>
+                  <input type="checkbox" checked={!!sel[p.id]} onChange={(e) => setSel({ ...sel, [p.id]: e.target.checked })} />
+                  <span style={{ fontSize: 13.5 }}>{p.text}<span style={{ color: '#a89e92' }}>{p.topic_label ? ` · ${p.topic_label}` : ''}{p.person_name ? ` · ${p.person_name}` : ''} · {p.status}</span></span>
+                </label>
+                <button style={linkBtn} onClick={() => act(p.id, 'archive')}>archive</button>
+              </li>
+            ))}
+          </ul>
+          <button style={{ ...btn, marginTop: 8 }} onClick={send}>Send selected as one link</button>
+        </>
+      )}
+
+      {link && (
+        <div style={{ marginTop: 12, padding: '10px 12px', background: '#faf3ef', border: '1px solid #ecdcd2', borderRadius: 8 }}>
+          <div style={{ fontSize: 12, color: '#8a8076', marginBottom: 4 }}>Send this login-free link to the person:</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input readOnly value={link} style={{ ...inp, flex: 1 }} onFocus={(e) => e.target.select()} />
+            <button style={btn} onClick={() => { navigator.clipboard?.writeText(link); flash('Copied'); }}>Copy</button>
+          </div>
+        </div>
+      )}
+
+      {sent.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076', margin: '14px 0 6px' }}>Sent / answered</div>
+          <ul style={list}>
+            {sent.map((p) => (
+              <li key={p.id} style={row}>
+                <span style={{ fontSize: 13 }}>{p.text}</span>
+                <span style={{ fontSize: 11, color: p.status === 'answered' ? '#16a34a' : '#a89e92' }}>{p.status}{p.response_count ? ` · ${p.response_count} answer${p.response_count === 1 ? '' : 's'}` : ''}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+function Documents({ tid, topics, reload, flash, fail }) {
+  const [f, setF] = useState({ title: '', topic_id: '', text: '' });
+  const [busy, setBusy] = useState(false);
+  const ingest = async () => {
+    if (!f.title.trim() || !f.text.trim()) return fail('Title and document text required');
+    setBusy(true);
+    try {
+      const r = await apiFetch(`/knowhow/tenants/${tid}/documents`, { method: 'POST', body: JSON.stringify(f) });
+      setF({ title: '', topic_id: '', text: '' }); flash(`Document ingested — ${r.pieces} piece${r.pieces === 1 ? '' : 's'} added`); reload();
+    } catch (e) { fail(e); }
+    setBusy(false);
+  };
+  return (
+    <section style={{ ...card, marginTop: 16 }}>
+      <h2 style={h2}>Add a document</h2>
+      <p style={{ fontSize: 12.5, color: '#6b6359', margin: '0 0 10px', maxWidth: '64ch' }}>
+        The secondary capture channel — paste a document's text (SOPs, playbooks, briefs). Text is stored as-is
+        (no vision retyping); binary PDFs/DOCX come in Part C. Each paragraph becomes a corpus piece.
+      </p>
+      <div style={{ display: 'grid', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input style={{ ...inp, flex: 1 }} placeholder="Document title" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+          <select style={{ ...inp, width: 200 }} value={f.topic_id} onChange={(e) => setF({ ...f, topic_id: e.target.value })}>
+            <option value="">Topic (optional)…</option>
+            {topics.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+        <textarea style={{ ...inp, minHeight: 120, resize: 'vertical' }} placeholder="Paste the document text here…" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} />
+        <button style={btn} onClick={ingest} disabled={busy}>{busy ? 'Ingesting…' : 'Ingest document'}</button>
+      </div>
+    </section>
+  );
+}
+
+function Answers({ responses, tid, linked, reload, flash, fail }) {
+  const [busy, setBusy] = useState('');
+  const promote = async (rid) => {
+    setBusy(rid);
+    try { await apiFetch(`/knowhow/tenants/${tid}/responses/${rid}/promote`, { method: 'POST' }); flash('Added to the client’s company knowledge — their AI will use it.'); reload(); }
+    catch (e) { fail(e); }
+    setBusy('');
+  };
+  return (
+    <section style={{ ...card, marginTop: 16 }}>
+      <h2 style={h2}>Recent answers <span style={count}>{responses.length}</span></h2>
+      {responses.length === 0 ? (
+        <p style={{ color: '#a89e92', fontSize: 13, margin: 0 }}>Answers will appear here as people respond to their links.</p>
+      ) : (
+        <ul style={list}>
+          {responses.map((r) => (
+            <li key={r.id} style={{ ...row, alignItems: 'flex-start', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 12, color: '#8a8076' }}>{r.person_name || 'someone'}{r.topic_label ? ` · ${r.topic_label}` : ''} — {r.prompt_text}</span>
+              <span style={{ fontSize: 13.5 }}>{r.body}</span>
+              <div>
+                {r.promoted ? (
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#166534' }}>✓ in company knowledge</span>
+                ) : linked ? (
+                  <button onClick={() => promote(r.id)} disabled={busy === r.id} style={promoteBtn}>{busy === r.id ? 'Adding…' : 'Add to company knowledge'}</button>
+                ) : (
+                  <span style={{ fontSize: 11.5, color: '#a89e92' }}>Link this KnowHow to a client to use its answers</span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// Link a KnowHow tenant to the BAIR client it's about, so its vetted answers can be
+// promoted into that client's company knowledge (consultant-controlled).
+function LinkClient({ tenant, reload, flash, fail }) {
+  const [clients, setClients] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { apiFetch('/beaiready/admin/clients').then(setClients).catch(() => setClients([])); }, []);
+  const setLink = async (newsroom_id) => {
+    setBusy(true);
+    try { await apiFetch(`/knowhow/tenants/${tenant.id}/link`, { method: 'POST', body: JSON.stringify({ newsroom_id: newsroom_id || null }) }); flash(newsroom_id ? 'Linked to client.' : 'Unlinked.'); reload(); }
+    catch (e) { fail(e); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14, background: tenant.newsroom_id ? '#f0fdf4' : '#fffbeb', borderColor: tenant.newsroom_id ? '#bbf7d0' : '#fde68a' }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: '#5b5249' }}>Linked client:</span>
+      <select value={tenant.newsroom_id || ''} onChange={(e) => setLink(e.target.value)} disabled={busy} style={sel}>
+        <option value="">— Not linked —</option>
+        {(clients || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <span style={{ fontSize: 12, color: '#8a8076' }}>
+        {tenant.newsroom_id ? 'Its answers can be added to this client’s company knowledge.' : 'Link a client to feed its answers into that business’s AI.'}
+      </span>
+    </div>
+  );
+}
+
+const promoteBtn = { fontSize: 12, padding: '4px 10px', borderRadius: 6, border: '1px solid #e4dcd2', background: '#faf8f5', color: '#6b6359', cursor: 'pointer', fontWeight: 600 };
+
+const card = { background: '#fff', border: '1px solid #eee5da', borderRadius: 12, padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' };
+const h2 = { fontSize: 15, fontWeight: 700, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 8 };
+const count = { fontSize: 11, fontWeight: 700, color: '#c75b39', background: '#f7ece7', borderRadius: 999, padding: '1px 8px' };
+const list = { listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 7 };
+const row = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, paddingBottom: 7, borderBottom: '1px solid #f4efe8' };
+const inp = { padding: '8px 10px', border: '1px solid #e4dcd2', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', color: '#1c1b1a' };
+const sel = { padding: '7px 10px', border: '1px solid #e4dcd2', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
+const btn = { padding: '8px 14px', background: '#c75b39', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' };
+const linkBtn = { background: 'none', border: 'none', color: '#a89e92', fontSize: 11.5, cursor: 'pointer', padding: 0 };
+const banner = (bg, fg) => ({ background: bg, color: fg, padding: '10px 14px', borderRadius: 8, marginBottom: 14, fontSize: 13 });

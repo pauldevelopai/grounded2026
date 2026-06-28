@@ -7,11 +7,39 @@ import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scr
 import { startScan, finishScan, updateScan } from './scan-state.js';
 import { runFormsSheetSync } from './forms-sync.js';
 import { generateGovernanceToday } from './governance-today.js';
+import { generateAINewsToday } from './ai-news-today.js';
+import { gmailAiFilter, isAboutAI } from './newsletter-filter.js';
+import { harvestTechieray } from './legal-ingest/techieray.js';
 
 // Regenerate the "Today" AI-governance digest (web-search-backed) for the tracker.
 export async function runGovernanceTodayDigest() {
   const v = await generateGovernanceToday();
-  return { result: `Today digest regenerated (${v.headlines?.length || 0} sources)`, itemsProcessed: 1 };
+  return {
+    result: v ? `Today digest regenerated from the tracker (${v.headlines?.length || 0} items)`
+              : 'No tracked lawsuits/regulations yet — AI-Law briefing left empty',
+    itemsProcessed: v ? 1 : 0,
+  };
+}
+
+// Regenerate the "Today in AI" news briefing for the BE AI READY home. First pulls
+// today's newsletters from Gmail (best-effort — same ingestion the Morning Briefing
+// uses) so the briefing is fresh, then synthesises it from the ingested items.
+export async function runAINewsTodayDigest() {
+  try { await runNewsletterDigest(); }
+  catch (e) { console.error('[ai-news-today:ingest]', e.message); }
+  const v = await generateAINewsToday();
+  return {
+    result: v ? `AI-news briefing regenerated (${v.headlines?.length || 0} sources)`
+              : 'No recent newsletter items — AI-news briefing left empty',
+    itemsProcessed: v ? 1 : 0,
+  };
+}
+
+// Weekly: re-scan TechieRay's Global AI Regulation Tracker → ai_regulations.
+// Idempotent (updates existing harvested rows, skips curated, no duplicates).
+export async function runTechierayHarvest() {
+  const r = await harvestTechieray();
+  return { result: `TechieRay: ${r.added} new · ${r.updated} refreshed · ${r.skipped} skipped (of ${r.considered})`, itemsProcessed: r.added + r.updated };
 }
 
 // Helper: create a notification for all admin users (broadcast)
@@ -486,8 +514,11 @@ export async function runNewsletterDigest() {
   const categoryFilter = LABEL_NAME.startsWith('CATEGORY_')
     ? `category:${LABEL_NAME.replace('CATEGORY_', '').toLowerCase()}`
     : `label:${LABEL_NAME}`;
-  const searchQuery = `${categoryFilter} after:${dateStr}`;
+  // AI-only: the Forums tab also holds non-AI group mail, so we only fetch mail that
+  // mentions AI (the second relevance gate below catches passing mentions).
+  const searchQuery = `${categoryFilter} after:${dateStr} ${gmailAiFilter()}`.replace(/\s+/g, ' ').trim();
   const messages = await searchEmails(searchQuery, 30);
+  let skippedNonAi = 0;
 
   for (const msg of messages) {
     // Skip if already processed
@@ -499,6 +530,9 @@ export async function runNewsletterDigest() {
     try {
       const email = await readEmail(msg.id);
       if (!email.body || email.body.length < 50) continue;
+
+      // Relevance gate: only ingest mail that's genuinely ABOUT AI.
+      if (!isAboutAI(email.subject, email.body)) { skippedNonAi++; continue; }
 
       // Classify with Claude
       const classified = await classifyNewsletterContent(email.body, sectorNames);
@@ -574,7 +608,7 @@ export async function runNewsletterDigest() {
     '/newsletter'
   );
 
-  return { result: digestText, itemsProcessed };
+  return { result: `${digestText}${skippedNonAi ? ` · skipped ${skippedNonAi} non-AI` : ''}`, itemsProcessed };
 }
 
 // ── 8. Embedding Backfill ──────────────────────────────────────────────
@@ -959,6 +993,8 @@ export const JOB_REGISTRY = {
   data_security_triage:       runDataSecurityTriage,
   ethics_triage:              runEthicsTriage,
   governance_today_digest:    runGovernanceTodayDigest,
+  ai_news_today_digest:       runAINewsTodayDigest,
+  techieray_harvest:          runTechierayHarvest,
 };
 
 // ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──

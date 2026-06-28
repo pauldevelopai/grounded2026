@@ -97,6 +97,14 @@ export async function processUpload(documentId) {
       [summary, extractedData ? JSON.stringify(extractedData) : null, documentId]
     );
 
+    // A BE AI READY client's own self-serve extraction is PRIVATE to them (Tier 1):
+    // extract + summarise, but do NOT flow it into the shared knowledge base. It only
+    // reaches the company tier via an explicit admin promotion (the Gate-1 pattern).
+    if (doc.entity_type === 'bair_client_extraction') {
+      console.log(`Client extraction processed (private): ${doc.original_name} (${documentId})`);
+      return;
+    }
+
     // Step 3: Create knowledge entry from extraction
     const sectorName = doc.sector_id ? (await pool.query('SELECT name FROM sectors WHERE id = $1', [doc.sector_id])).rows[0]?.name : null;
     await createKnowledgeEntry({

@@ -28,6 +28,7 @@ import knowledgeRoutes from './routes/knowledge.js';
 import uploadRoutes from './routes/uploads.js';
 import intelligenceRoutes from './routes/intelligence.js';
 import newsletterRoutes from './routes/newsletter.js';
+import briefingsRoutes from './routes/briefings.js';
 import learningOutcomeRoutes from './routes/learning-outcomes.js';
 import learningTaskRoutes from './routes/learning-tasks.js';
 import learningJourneyRoutes from './routes/learning-journeys.js';
@@ -39,6 +40,7 @@ import feedbackRoutes from './routes/feedback.js';
 import userQuestionsRoutes from './routes/user-questions.js';
 import lawsuitRoutes from './routes/lawsuits.js';
 import regulationRoutes from './routes/regulations.js';
+import trackerReviewRoutes from './routes/tracker-review.js';
 import legalSourcesRoutes from './routes/legal-sources.js';
 import contentSourcesRoutes from './routes/content-sources.js';
 import workflowsRoutes from './routes/workflows.js';
@@ -53,6 +55,9 @@ import adminOverviewRoutes from './routes/admin.js';
 import newsroomsRoutes from './routes/newsrooms.js';
 import beaireadyRoutes from './routes/beaiready.js';
 import beaireadyTrainingRoutes from './routes/beaiready-training.js';
+import beaireadyWorkspaceRoutes from './routes/beaiready-workspace.js';
+import beaireadyInsightsRoutes from './routes/beaiready-insights.js';
+import beaireadyKnowhowRoutes from './routes/beaiready-knowhow.js';
 import toolkitAdminRoutes from './routes/toolkit-admin.js';
 import toolkitSocialRoutes from './routes/toolkit-social.js';
 import promptRoutes from './routes/prompts.js';
@@ -62,10 +67,15 @@ import bairScoreRoutes from './routes/bair-score.js';
 import bairIntakeRoutes from './routes/bair-intake.js';
 import pulseRoutes from './routes/pulse.js';
 import pulsePublicRoutes from './routes/pulse-public.js';
+import knowhowRoutes from './routes/knowhow.js';
+import knowhowPublicRoutes from './routes/knowhow-public.js';
 import { requirePulse } from './middleware/pulse-flag.js';
 import { startScheduler } from './services/scheduler.js';
+import { getAINewsToday, generateAINewsToday } from './services/ai-news-today.js';
+import { getGovernanceToday, generateGovernanceToday } from './services/governance-today.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
+import { resolveTenant } from './middleware/resolve-tenant.js';
 
 const app = express();
 
@@ -318,8 +328,11 @@ app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
 // Feedback: all authenticated users can submit; admin can view/manage
 app.use('/api/feedback', requireAuth, feedbackRoutes);
 // BE AI READY business dashboard data — reads scoped to the caller's own tenant.
-app.use('/api/beaiready/training', requireAuth, beaireadyTrainingRoutes);
-app.use('/api/beaiready', requireAuth, beaireadyRoutes);
+app.use('/api/beaiready/training', requireAuth, resolveTenant, beaireadyTrainingRoutes);
+app.use('/api/beaiready/workspace', requireAuth, resolveTenant, beaireadyWorkspaceRoutes);
+app.use('/api/beaiready/insights', requireAuth, resolveTenant, beaireadyInsightsRoutes);
+app.use('/api/beaiready/knowhow', requireAuth, resolveTenant, beaireadyKnowhowRoutes);
+app.use('/api/beaiready', requireAuth, resolveTenant, beaireadyRoutes);
 // Toolbox catalogue management (the `tools` table behind /toolbox). Admin-only;
 // mounted before the generic /api admin router so this exact prefix is handled here.
 app.use('/api/toolkit-admin', requireAuth, requireRole('admin'), toolkitAdminRoutes);
@@ -339,6 +352,10 @@ app.use('/api/user-questions', requireAuth, userQuestionsRoutes);
 app.get('/api/pulse/status', (req, res) => res.json({ enabled: config.pulseEnabled }));
 app.use('/api/pulse/public', requirePulse, pulsePublicRoutes);
 app.use('/api/pulse', requirePulse, requireAuth, requireRole('admin'), pulseRoutes);
+
+// KnowHow capture (its own product, not gated by the Pulse flag). The public
+// answer surface is token-gated only; the admin surface joins the admin router below.
+app.use('/api/knowhow/public', knowhowPublicRoutes);
 
 // ── Admin-only endpoints ───────────────────────────────────────────────────────
 // All routes below this point require role = 'admin'.
@@ -370,8 +387,11 @@ admin.use('/background-jobs',      backgroundJobRoutes);
 admin.use('/notifications',        notificationRoutes);
 admin.use('/knowledge',            knowledgeRoutes);
 admin.use('/uploads',              uploadRoutes);
+admin.use('/tracker-review',       trackerReviewRoutes);
 admin.use('/intelligence',         intelligenceRoutes);
 admin.use('/newsletter',           newsletterRoutes);
+admin.use('/briefings',            briefingsRoutes);
+admin.use('/knowhow',              knowhowRoutes);
 admin.use('/learning-outcomes',    learningOutcomeRoutes);
 admin.use('/learning-tasks',       learningTaskRoutes);
 admin.use('/learning-journeys',    sectorFilter, learningJourneyRoutes);
@@ -392,11 +412,35 @@ app.use('/api', admin);
 
 // ── Error handler ──────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
+  // Errors that carry an explicit status (e.g. the fail-closed tenancy guard's 403)
+  // surface with that status + message; everything else is an opaque 500.
+  if (err && err.status) return res.status(err.status).json({ message: err.message || 'Request failed' });
   console.error(err.stack);
   res.status(500).json({ message: 'Internal server error' });
 });
 
+// If the home "Today in AI" briefings have no cached value (e.g. just after a
+// deploy that purged a stale/fabricated cache), regenerate them once so the front
+// page is up to date without waiting for the daily job or a manual refresh. Fire-
+// and-forget + guarded: it only runs when a briefing is actually empty, never
+// blocks boot, and the generators themselves no-op (return null) when there's
+// nothing real to report — so this can't put invented content back.
+async function selfHealBriefings() {
+  try {
+    if (!(await getAINewsToday())) {
+      generateAINewsToday().then((v) => v && console.log('[boot] AI-news briefing regenerated')).catch((e) => console.warn('[boot] AI-news regen skipped:', e.message));
+    }
+  } catch (e) { console.warn('[boot] AI-news check failed:', e.message); }
+  try {
+    if (!(await getGovernanceToday())) {
+      generateGovernanceToday().then((v) => v && console.log('[boot] AI-law briefing regenerated')).catch((e) => console.warn('[boot] AI-law regen skipped:', e.message));
+    }
+  } catch (e) { console.warn('[boot] AI-law check failed:', e.message); }
+}
+
 app.listen(config.port, () => {
   console.log(`Tracker server running on port ${config.port}`);
   startScheduler();
+  // Defer slightly so boot/DB is fully settled; non-blocking.
+  setTimeout(() => { selfHealBriefings(); }, 4000);
 });

@@ -297,7 +297,7 @@ BE AI READY is one structured audit across three pillars, with a living dashboar
 2. Governance — we write the business's AI-use policy and accountability framework WITH them, fitted to their tools/data/sector (not a generic template), aligned with POPIA and emerging AI regulation, backed by a daily legal tracker.
 3. Security — we inventory every AI tool the team uses (official and unofficial), map where confidential/client/personal data is exposed, and hand over a prioritised fix list.
 
-Also included: real consultant face-time inside the business (6 hours Essential / 12 Growth / 15 Enterprise); a productivity view of five measures only, with NO surveillance (deliverables, revenue, time spent, AI hours saved, client & customer outcomes); an active AI toolbox scored for data safety; and Pulse — one quick daily question to the team. BetterBoss (capturing a manager's expertise into an AI guide) is coming soon. Separately, a hands-on one-day on-site training + three 45-minute mentoring sessions for up to 30 people (R35k, travel excluded). Pricing is a once-off fee, nothing monthly: Essential R50 000 / Growth R85 000 (most common) / Enterprise R120 000+ — each includes the full audit, findings report, action plan and the lifetime dashboard. Develop AI is a Cape Town–based AI consultancy.
+Also included: real consultant face-time inside the business (6 hours Essential / 12 Growth / 15 Enterprise); a productivity view of five measures only, with NO surveillance (deliverables, revenue, time spent, AI hours saved, client & customer outcomes); an active AI toolbox scored for data safety; and Pulse — one quick daily question to the team. KnowHow (capturing a manager's expertise into an AI guide) is coming soon. Separately, a hands-on one-day on-site training + three 45-minute mentoring sessions for up to 30 people (R35k, travel excluded). Pricing is a once-off fee, nothing monthly: Essential R50 000 / Growth R85 000 (most common) / Enterprise R120 000+ — each includes the full audit, findings report, action plan and the lifetime dashboard. Develop AI is a Cape Town–based AI consultancy.
 
 How to answer:
 - Speak to a BUSINESS audience in plain language — Visibility / Governance / Security, not newsroom framing.
@@ -350,24 +350,38 @@ export async function chatWithGroundedHelp({ history = [], message, contextItems
  * Returns { text, citations } where citations is an array of {url, title}
  * objects the model cited (may be empty if no search was needed).
  */
-export async function callClaudeWithWebSearch({ system, userContent, maxTokens = 1500, maxUses = 5 }) {
+export async function callClaudeWithWebSearch({ system, userContent, maxTokens = 1500, maxUses = 5, finalTextOnly = false, allowedDomains = null }) {
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  // allowedDomains restricts the search to a reliable-sources allowlist (kills
+  // AI-generated / speculative "news" sites — the source of fabricated stories).
+  const webSearch = { type: 'web_search_20250305', name: 'web_search', max_uses: maxUses };
+  if (Array.isArray(allowedDomains) && allowedDomains.length) webSearch.allowed_domains = allowedDomains;
   const params = {
     model: MODEL,
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: userContent }],
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses }],
+    tools: [webSearch],
   };
   const message = await client.messages.create(params);
 
-  // Content blocks are a mix of text + tool_use + server_tool_use + web_search_tool_result
-  const textBlocks = (message.content || []).filter(b => b.type === 'text');
+  // Content blocks are a mix of text + tool_use + server_tool_use + web_search_tool_result.
+  const blocks = message.content || [];
+  let textBlocks = blocks.filter(b => b.type === 'text');
+  // finalTextOnly: return just the synthesized answer (text after the last search),
+  // dropping the model's between-search narration ("Let me now write the briefing").
+  if (finalTextOnly) {
+    let lastNonText = -1;
+    blocks.forEach((b, i) => { if (b.type !== 'text') lastNonText = i; });
+    const finalBlocks = blocks.slice(lastNonText + 1).filter(b => b.type === 'text');
+    if (finalBlocks.length) textBlocks = finalBlocks;
+  }
   const text = textBlocks.map(b => b.text).join('\n');
 
-  // Harvest citations from any text blocks that carry them (new SDK feature)
+  // Harvest citations from ALL text blocks (sources cited mid-search still count,
+  // even when finalTextOnly trims the returned prose to the final answer).
   const citations = [];
-  for (const b of textBlocks) {
+  for (const b of blocks.filter(b => b.type === 'text')) {
     if (Array.isArray(b.citations)) {
       for (const c of b.citations) {
         citations.push({ url: c.url, title: c.title });

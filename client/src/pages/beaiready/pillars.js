@@ -75,16 +75,23 @@ export const PILLARS = [
     ],
   },
   {
-    key: 'productivity',
-    nav: 'Productivity',
-    label: 'Productivity',
-    tagline: 'Get more done — measured fairly.',
+    key: 'productivity',   // key kept for routing/recs continuity; displayed as "Tools"
+    nav: 'Tools',
+    label: 'Tools',
+    tagline: 'The AI tools your team actually uses.',
     intro:
-      'AI should show whether work is moving, not watch your people. A set of tools built around how small ' +
-      'and medium businesses actually run.',
+      'The practical AI tools for getting work done — and one shared place where the team\'s AI work is pooled ' +
+      'and kept, so every useful question and answer builds the business up instead of vanishing. Plus a ' +
+      'continuously scored toolbox and the Nodes your business runs and owns.',
     features: [
+      { name: 'Team AI workspace', status: 'live', dash: '/dashboard/workspace', slug: 'team-workspace',
+        what: 'Where your whole team asks AI — every answer grounded in your own knowledge, and every question and answer pooled in one shared place so the business builds on it. The more it\'s used, the smarter it gets, and good answers can be saved into your knowledge.' },
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
+      { name: 'Prompt library', status: 'live', dash: '/dashboard/prompts', slug: 'prompt-library',
+        what: 'The prompts we recommend for the AI model your team uses — scored per model — plus your own saved versions. Copy, rate, and build your own library.' },
+      { name: 'Nodes', status: 'live', to: '/nodes',
+        what: 'Small AI tools your business runs and owns — like Extract PDF: drop in a document, get trusted structured data back. Run them here, or download and run on your own machine.' },
       { name: 'Track employee productivity', status: 'live', dash: '/dashboard/productivity', slug: 'productivity-tracking',
         what: 'Five measures only — deliverables, revenue, time spent, AI hours saved, client outcomes — entered at the business level with your own baselines. Never used to police individuals.' },
     ],
@@ -95,32 +102,123 @@ export const PILLARS = [
     label: 'Training',
     tagline: 'Change what your team does on Monday.',
     intro:
-      'Hands-on, practical AI training — and a living record of it in your dashboard.',
+      'Hands-on, practical AI training — with a living record of it in your dashboard, a read on where ' +
+      'your team needs support, and the tools to capture their hard-won know-how.',
     features: [
-      { name: 'Book a training', status: 'live', to: '/training',
+      { name: 'Book a training', status: 'live', to: '/training/book',
         what: 'A hands-on one-day on-site training + three mentoring sessions (R35k, up to 30 people) — the strongest place to start. See the full offer and book a date.' },
-      { name: 'Course materials — past & upcoming', status: 'partial', dash: '/dashboard/training', slug: 'training-materials',
+      { name: 'Course materials — past & upcoming', status: 'partial', to: '/training',
         what: 'Every training and mentoring session you’ve had, and what’s scheduled — with the materials, accessible to your staff at any time.' },
-      { name: 'BetterBoss', status: 'building', slug: 'betterboss',
+      { name: 'KnowHow', status: 'building', slug: 'knowhow',
         what: 'Capture a manager’s hard-won expertise and turn it into an AI guide that coaches junior staff through their real work.' },
     ],
   },
   {
     key: 'strategy',
     nav: 'Strategy',
-    label: 'Your AI Strategy',
-    tagline: 'Plot the goals. Find what to automate.',
+    label: 'Strategy',
+    tagline: 'The bigger picture — and what’s next.',
     intro:
-      'We map your company’s goals and your full workflow end to end, then identify exactly which parts ' +
-      'are worth automating with AI — and in what order.',
+      'Once your knowledge shows how the business really runs, this is where we advise on using AI to your ' +
+      'advantage: where it genuinely saves time and money, and which friction is worth fixing first.',
     features: [
       { name: 'Goals, workflow & automation roadmap', status: 'partial', dash: '/dashboard/strategy', slug: 'strategy-roadmap',
         what: 'A clear map of how your business runs — every step and hand-off — and which parts AI should take on first, sized by effort and payoff: your practical automation roadmap, built with your team.' },
-      { name: 'Staff AI Needs', status: 'partial', dash: '/dashboard/strategy', slug: 'staff-needs',
+      // Defined here for continuity, but re-homed to Training by the block below.
+      { name: 'Staff AI Needs', status: 'partial', dash: '/dashboard/staff-needs', slug: 'staff-needs',
         what: 'A read on where your team stands and what they need, drawn from the competency forms they complete — so your AI strategy targets the real gaps.' },
     ],
   },
+
+  // ── Knowledge (the foundation) ──────────────────────────────────────────────────
+  // Be AI Ready starts here: capture the hard-won knowledge in people's heads and
+  // scattered files, organise it into something the business can actually use (kept
+  // private), and surface the right parts of it to the world. Features assembled in
+  // the consolidation block below: KnowHow (capture) + the two Visibility features
+  // (knowledge surfaced outward, Paul 2026-06-24).
+  {
+    key: 'knowledge',
+    nav: 'Knowledge',
+    label: 'Knowledge',
+    tagline: 'Start with what you already know.',
+    intro:
+      'Most businesses sit on hard-won knowledge that lives in people’s heads and scattered files, and is easily ' +
+      'lost when they’re busy or leave. Be AI Ready begins by capturing it and organising it into something you ' +
+      'can actually use — kept private to your business — and surfacing the right parts of it so AI systems ' +
+      'describe you correctly.',
+    features: [],   // assembled in the consolidation block below
+  },
+
+  // ── Measurement ─────────────────────────────────────────────────────────────────
+  // Agree the goals up front, then prove the results against them. Takes productivity
+  // tracking (moved from Tools) plus the goals-and-results flow.
+  {
+    key: 'measurement',
+    nav: 'Measurement',
+    label: 'Measurement',
+    tagline: 'Agree the goals. Prove the results.',
+    intro:
+      'We agree clear goals at the start — how much time will be saved, how much cost cut, how much more capable ' +
+      'the business has become — then measure the results against them, so you can see in concrete terms that ' +
+      'the work was worth doing.',
+    features: [
+      { name: 'Goals & results', status: 'live', dash: '/dashboard/productivity', slug: 'goals-results',
+        what: 'Measurable goals agreed at the start of the engagement — baseline to target — tracked against your real metrics, so the value of the work is something you can see, not just claim.' },
+    ],
+  },
 ];
+
+// Re-home features so the six visible pillars match the Be AI Ready model (Paul,
+// 2026-06-24). One source of truth per feature: the original pillar defs (Visibility,
+// Data Security) stay intact and their /dashboard tools keep working — features are
+// just moved by reference into the pillar that now owns them.
+//   • Knowledge (foundation) absorbs KnowHow (capture) + Visibility (knowledge
+//     surfaced to the world).
+//   • Governance absorbs Data Security (keeping that knowledge safe to use & share).
+//   • Measurement takes productivity tracking (from Tools).
+//   • Staff AI Needs sits with Training (a training-needs read).
+(() => {
+  const byKey = (k) => PILLARS.find((p) => p.key === k);
+  const pull = (pillarKey, slug) => {
+    const p = byKey(pillarKey);
+    const f = p && p.features.find((x) => x.slug === slug);
+    if (f) p.features = p.features.filter((x) => x.slug !== slug);
+    return f;
+  };
+  const training = byKey('training');
+  const knowledge = byKey('knowledge');
+  const governance = byKey('governance');
+  const measurement = byKey('measurement');
+
+  // Knowledge = capture (KnowHow) + surface outward (the two Visibility features).
+  knowledge.features = [
+    pull('training', 'knowhow'),
+    pull('visibility', 'visibility-scan'),
+    pull('visibility', 'visibility-data'),
+  ].filter(Boolean);
+
+  // Staff AI Needs: Strategy → Training.
+  const staffNeeds = pull('strategy', 'staff-needs');
+  if (staffNeeds) training.features = [...training.features, staffNeeds];
+
+  // Governance absorbs Data Security.
+  governance.features = [
+    ...governance.features,
+    pull('data-security', 'ai-tools-log'),
+    pull('data-security', 'acceptable-use'),
+  ].filter(Boolean);
+
+  // Measurement takes productivity tracking (ahead of the Goals & results stub).
+  const productivity = pull('productivity', 'productivity-tracking');
+  if (productivity) measurement.features = [productivity, ...measurement.features];
+})();
+
+// Pillars shown in the nav + on the home page, in the Be AI Ready order (Paul,
+// 2026-06-24): Knowledge leads (the inside-out foundation), then Training,
+// Governance, Tools, Strategy, Measurement. The array order here is the displayed
+// order — flip 'knowledge'/'training' to lead with Training instead.
+const VISIBLE_KEYS = ['knowledge', 'training', 'governance', 'productivity', 'strategy', 'measurement'];
+export const VISIBLE_PILLARS = VISIBLE_KEYS.map((k) => PILLARS.find((p) => p.key === k)).filter(Boolean);
 
 export function findPillar(key) {
   return PILLARS.find((p) => p.key === key) || null;

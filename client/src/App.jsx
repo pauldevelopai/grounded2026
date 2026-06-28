@@ -79,6 +79,8 @@ import PulseOverview from './pages/pulse/PulseOverview.jsx';
 import PulseCycleDetail from './pages/pulse/PulseCycleDetail.jsx';
 import PulseNewsroomDetail from './pages/pulse/PulseNewsroomDetail.jsx';
 import PulseAnswer from './pages/pulse/PulseAnswer.jsx';
+import KnowHowAnswer from './pages/knowhow/KnowHowAnswer.jsx';
+import KnowHowAsk from './pages/knowhow/KnowHowAsk.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
@@ -90,8 +92,12 @@ import BusinessGovernance from './pages/beaiready/BusinessGovernance.jsx';
 import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
-import BusinessTraining from './pages/beaiready/BusinessTraining.jsx';
 import BusinessStrategy from './pages/beaiready/BusinessStrategy.jsx';
+import BusinessWorkspace from './pages/beaiready/BusinessWorkspace.jsx';
+import BusinessStaffNeeds from './pages/beaiready/BusinessStaffNeeds.jsx';
+import BusinessExtraction from './pages/beaiready/BusinessExtraction.jsx';
+import BusinessKnowHow from './pages/beaiready/BusinessKnowHow.jsx';
+import BusinessCoach from './pages/beaiready/BusinessCoach.jsx';
 import BeAIReadyPrompts from './pages/beaiready/BeAIReadyPrompts.jsx';
 import BeAIReadyMyPrompts from './pages/beaiready/BeAIReadyMyPrompts.jsx';
 import BairShell from './pages/bair/BairShell.jsx';
@@ -102,9 +108,16 @@ import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
 import BeAIReadyAdminPillars from './pages/beaiready/admin/BeAIReadyAdminPillars.jsx';
 import BeAIReadyAdminTools from './pages/beaiready/admin/BeAIReadyAdminTools.jsx';
+import BeAIReadyAdminTracker from './pages/beaiready/admin/BeAIReadyAdminTracker.jsx';
+import BeAIReadyAdminNodes from './pages/beaiready/admin/BeAIReadyAdminNodes.jsx';
 import BeAIReadyAdminTraining from './pages/beaiready/admin/BeAIReadyAdminTraining.jsx';
+import BeAIReadyAdminStrategy from './pages/beaiready/admin/BeAIReadyAdminStrategy.jsx';
 import BeAIReadyAdminPrompts from './pages/beaiready/admin/BeAIReadyAdminPrompts.jsx';
 import BeAIReadyAdminData from './pages/beaiready/admin/BeAIReadyAdminData.jsx';
+import BeAIReadyAdminInsights from './pages/beaiready/admin/BeAIReadyAdminInsights.jsx';
+import BeAIReadyAdminWorkspace from './pages/beaiready/admin/BeAIReadyAdminWorkspace.jsx';
+import BeAIReadyAdminBriefings from './pages/beaiready/admin/BeAIReadyAdminBriefings.jsx';
+import BeAIReadyAdminKnowHow from './pages/beaiready/admin/BeAIReadyAdminKnowHow.jsx';
 import BeAIReadyPillar from './pages/beaiready/BeAIReadyPillar.jsx';
 import BeAIReadyToolbox from './pages/beaiready/BeAIReadyToolbox.jsx';
 import BeAIReadyToolboxFinder from './pages/beaiready/BeAIReadyToolboxFinder.jsx';
@@ -114,8 +127,11 @@ import BeAIReadyToolboxForYou from './pages/beaiready/BeAIReadyToolboxForYou.jsx
 import BeAIReadyToolboxSuggest from './pages/beaiready/BeAIReadyToolboxSuggest.jsx';
 import BeAIReadyToolboxCategory from './pages/beaiready/BeAIReadyToolboxCategory.jsx';
 import BeAIReadyTracker from './pages/beaiready/BeAIReadyTracker.jsx';
+import BeAIReadyNodes from './pages/beaiready/BeAIReadyNodes.jsx';
+import GatedFeature from './pages/beaiready/GatedFeature.jsx';
 import BeAIReadyFeature from './pages/beaiready/BeAIReadyFeature.jsx';
 import BeAIReadyTraining from './pages/beaiready/BeAIReadyTraining.jsx';
+import BeAIReadyTrainingBook from './pages/beaiready/BeAIReadyTrainingBook.jsx';
 import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
 import PublicLawsuitDetail from './pages/public/PublicLawsuitDetail.jsx';
 import PublicRegulationsList from './pages/public/PublicRegulationsList.jsx';
@@ -159,6 +175,14 @@ const IS_BEAIREADY = typeof window !== 'undefined' &&
 const PublicShell = IS_BEAIREADY ? BeAIReadyLayout : PublicLayout;
 const PublicRootHome = IS_BEAIREADY ? BeAIReadyHome : PublicHome;
 
+// BE AI READY login wall: the live tools (Tracker + Toolbox) sit behind sign-in
+// (Paul's call, 2026-06-22). Marketing stays public. GatedFeature shows a friendly
+// explainer + sign-in to logged-out visitors. Copy mirrors pillars.js.
+const GATE_TRACKER = { title: 'Legal, Ethics & Regulation tracker', blurb: 'A daily-updated feed of AI lawsuits and regulations worldwide — in one place, newest first — the live infrastructure that keeps your governance current.' };
+const GATE_TOOLBOX = { title: 'AI Toolbox', blurb: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' };
+const GATE_NODES = { title: 'Nodes', blurb: 'Small AI tools your business runs and owns — like Extract PDF: drop in a document, get trusted structured data back. Run them here, or download and run on your own machine.' };
+const GATE_TRAINING = { title: 'Your training', blurb: 'Your AI training in one place — your agenda and materials, past and upcoming sessions, and your team’s AI needs. Sign in to see what’s scheduled for your team and pick up your materials.' };
+
 export default function App() {
   return (
     <AuthProvider>
@@ -174,6 +198,11 @@ export default function App() {
           <Route path="/_preview" element={<Navigate to="/sections" replace />} />
           {/* Pulse public answer page — newsroom-facing, no login (Phase 4). */}
           <Route path="/pulse/:token" element={<PulseAnswer />} />
+          {/* KnowHow junior-facing ask/coach page — no login (team ask-link). More
+              specific than /knowhow/:token, so it's registered first. */}
+          <Route path="/knowhow/ask/:token" element={<KnowHowAsk />} />
+          {/* KnowHow public answer page — employee-facing capture, no login (token-gated). */}
+          <Route path="/knowhow/:token" element={<KnowHowAnswer />} />
 
           {/* ── Public site root (/) — PublicShell + home pick the door by host
               (grounded.* → PublicLayout/PublicHome; beaiready.* → the BE AI READY
@@ -188,15 +217,25 @@ export default function App() {
           {IS_BEAIREADY && (
             <Route element={<BeAIReadyLayout />}>
               <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
-              <Route path="/toolbox" element={<BeAIReadyToolbox mode="list" />} />
-              <Route path="/toolbox/finder" element={<BeAIReadyToolboxFinder />} />
-              <Route path="/toolbox/explore" element={<BeAIReadyToolboxExplorer />} />
-              <Route path="/toolbox/ask" element={<BeAIReadyToolboxAsk />} />
-              <Route path="/toolbox/for-you" element={<BeAIReadyToolboxForYou />} />
-              <Route path="/toolbox/suggest" element={<BeAIReadyToolboxSuggest />} />
-              <Route path="/toolbox/category/:name" element={<BeAIReadyToolboxCategory />} />
-              <Route path="/toolbox/:slug" element={<BeAIReadyToolbox mode="detail" />} />
-              <Route path="/tracker" element={<BeAIReadyTracker />} />
+              {/* AI Toolbox — LIVE tool: behind the login wall (friendly explainer when out). */}
+              <Route element={<GatedFeature {...GATE_TOOLBOX} />}>
+                <Route path="/toolbox" element={<BeAIReadyToolbox mode="list" />} />
+                <Route path="/toolbox/finder" element={<BeAIReadyToolboxFinder />} />
+                <Route path="/toolbox/explore" element={<BeAIReadyToolboxExplorer />} />
+                <Route path="/toolbox/ask" element={<BeAIReadyToolboxAsk />} />
+                <Route path="/toolbox/for-you" element={<BeAIReadyToolboxForYou />} />
+                <Route path="/toolbox/suggest" element={<BeAIReadyToolboxSuggest />} />
+                <Route path="/toolbox/category/:name" element={<BeAIReadyToolboxCategory />} />
+                <Route path="/toolbox/:slug" element={<BeAIReadyToolbox mode="detail" />} />
+              </Route>
+              {/* Legal/Governance Tracker — LIVE tool: behind the login wall. */}
+              <Route element={<GatedFeature {...GATE_TRACKER} />}>
+                <Route path="/tracker" element={<BeAIReadyTracker />} />
+              </Route>
+              {/* Nodes storefront — LIVE tool: behind the login wall. */}
+              <Route element={<GatedFeature {...GATE_NODES} />}>
+                <Route path="/nodes" element={<BeAIReadyNodes />} />
+              </Route>
               <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
             </Route>
           )}
@@ -206,10 +245,13 @@ export default function App() {
             <Route index element={<PublicHome />} />
             <Route path="dashboard"      element={<Suspense fallback={<LazyFallback />}><PublicLegalDashboard /></Suspense>} />
             <Route path="ethics-builder" element={<Suspense fallback={<LazyFallback />}><EthicsPolicyBuilder /></Suspense>} />
-            <Route path="lawsuits" element={<PublicLawsuitsList />} />
-            <Route path="lawsuits/:id" element={<PublicLawsuitDetail />} />
-            <Route path="regulations" element={<PublicRegulationsList />} />
-            <Route path="regulations/:id" element={<PublicRegulationDetail />} />
+            {/* On the BE AI READY door the canonical list is /tracker; redirect the old
+                GROUNDED lists there. Detail pages stay (the tracker rows link to them). */}
+            <Route path="lawsuits" element={IS_BEAIREADY ? <Navigate to="/tracker" replace /> : <PublicLawsuitsList />} />
+            {/* On beaiready the tracker's detail pages are gated too (no public bypass to the content). */}
+            <Route path="lawsuits/:id" element={IS_BEAIREADY ? <GatedFeature {...GATE_TRACKER}><PublicLawsuitDetail /></GatedFeature> : <PublicLawsuitDetail />} />
+            <Route path="regulations" element={IS_BEAIREADY ? <Navigate to="/tracker" replace /> : <PublicRegulationsList />} />
+            <Route path="regulations/:id" element={IS_BEAIREADY ? <GatedFeature {...GATE_TRACKER}><PublicRegulationDetail /></GatedFeature> : <PublicRegulationDetail />} />
             <Route path="explore"        element={<Suspense fallback={<LazyFallback />}><PublicExplore /></Suspense>} />
             <Route path="sources"        element={<Suspense fallback={<LazyFallback />}><PublicSources /></Suspense>} />
             {/* Submit is folded into the Feedback mechanism (the bubble). Old links redirect. */}
@@ -236,9 +278,13 @@ export default function App() {
           {/* ── Training — host-aware: the BE AI READY door gets the business
                 training offer; Grounded keeps the newsroom course library. ── */}
           <Route path="/training" element={<PublicShell />}>
+            {/* On BE AI READY the training page is gated + personalised to the signed-in
+                client (their agenda, materials, sessions). Grounded's stays public. */}
             <Route index element={IS_BEAIREADY
-              ? <BeAIReadyTraining />
+              ? <GatedFeature {...GATE_TRAINING}><BeAIReadyTraining /></GatedFeature>
               : <Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
+            {/* The PUBLIC one-day-training advert ("Book a training") — never gated. */}
+            {IS_BEAIREADY && <Route path="book" element={<BeAIReadyTrainingBook />} />}
           </Route>
 
           {/* ── BE AI READY business authed area (spec Part C). On the beaiready
@@ -253,8 +299,15 @@ export default function App() {
                   <Route path="/admin" element={<BeAIReadyAdminUsers />} />
                   <Route path="/admin/pillars" element={<BeAIReadyAdminPillars />} />
                   <Route path="/admin/tools" element={<BeAIReadyAdminTools />} />
+                  <Route path="/admin/tracker" element={<BeAIReadyAdminTracker />} />
+                  <Route path="/admin/nodes" element={<BeAIReadyAdminNodes />} />
                   <Route path="/admin/training" element={<BeAIReadyAdminTraining />} />
+                  <Route path="/admin/strategy" element={<BeAIReadyAdminStrategy />} />
+                  <Route path="/admin/insights" element={<BeAIReadyAdminInsights />} />
                   <Route path="/admin/prompts" element={<BeAIReadyAdminPrompts />} />
+                  <Route path="/admin/briefings" element={<BeAIReadyAdminBriefings />} />
+                  <Route path="/admin/knowhow" element={<BeAIReadyAdminKnowHow />} />
+                  <Route path="/admin/workspace" element={<BeAIReadyAdminWorkspace />} />
                   <Route path="/admin/data" element={<BeAIReadyAdminData />} />
                   <Route path="/admin/models" element={<BeAIReadyAdminModels />} />
                 </Route>
@@ -270,8 +323,14 @@ export default function App() {
                 <Route path="/dashboard/visibility" element={<BusinessVisibility />} />
                 <Route path="/dashboard/security" element={<BusinessSecurity />} />
                 <Route path="/dashboard/productivity" element={<BusinessProductivity />} />
-                <Route path="/dashboard/training" element={<BusinessTraining />} />
+                {/* /dashboard/training merged into the public /training page (shown when signed in). */}
+                <Route path="/dashboard/training" element={<Navigate to="/training" replace />} />
                 <Route path="/dashboard/strategy" element={<BusinessStrategy />} />
+                <Route path="/dashboard/workspace" element={<BusinessWorkspace />} />
+                <Route path="/dashboard/staff-needs" element={<BusinessStaffNeeds />} />
+                <Route path="/dashboard/extraction" element={<BusinessExtraction />} />
+                <Route path="/dashboard/knowhow" element={<BusinessKnowHow />} />
+                <Route path="/dashboard/coach" element={<BusinessCoach />} />
                 <Route path="/dashboard/prompts" element={<BeAIReadyPrompts mode="library" />} />
                 <Route path="/dashboard/prompts/:id" element={<BeAIReadyPrompts mode="detail" />} />
                 <Route path="/dashboard/my-prompts" element={<BeAIReadyMyPrompts />} />

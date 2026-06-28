@@ -104,8 +104,34 @@ router.post('/beacon', async (req, res) => {
 });
 
 // Friendly display names for the hosted Nodes (slug → product name).
-const NODE_LABELS = { analytics: 'Audience Signal', verifier: 'Election Watch', podcasting: 'Podcast Studio' };
+const NODE_LABELS = { analytics: 'Audience Signal', verifier: 'Election Watch', podcasting: 'Podcast Studio', bair_extract: 'Extract PDF' };
 const labelForNode = (slug) => NODE_LABELS[slug] || slug.replace(/_/g, ' ');
+
+// ── GET /api/nodes/admin/node-keys — ADMIN ───────────────────────────────────
+// BYOK oversight: which tenants have configured a key for a node, WITHOUT ever
+// exposing the key (it's encrypted at rest). Discovers credential entries across
+// every node_<slug>_store table. Table names come from the catalog → safe to
+// interpolate.
+router.get('/admin/node-keys', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const { rows: tbls } = await pool.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name ~ '^node_[a-z0-9_]+_store$' ORDER BY table_name`);
+    const out = [];
+    for (const { table_name } of tbls) {
+      const slug = table_name.replace(/^node_/, '').replace(/_store$/, '');
+      if (!/^[a-z0-9_]+$/.test(slug)) continue;
+      const { rows } = await pool.query(`
+        SELECT s.newsroom_id, tm.name AS member_name, tm.email AS member_email, MAX(s.updated_at) AS updated_at
+          FROM ${table_name} s
+          LEFT JOIN team_members tm ON tm.id::text = s.newsroom_id
+         WHERE s.collection ILIKE 'credential%' OR s.key ILIKE 'credential%'
+         GROUP BY s.newsroom_id, tm.name, tm.email`).catch(() => ({ rows: [] }));
+      if (rows.length) out.push({ slug, label: labelForNode(slug), tenants: rows.map((r) => ({ member_name: r.member_name, member_email: r.member_email, configured: true, updated_at: r.updated_at })) });
+    }
+    res.json(out);
+  } catch (err) { console.error('[nodes/admin/node-keys]', err.message); res.status(500).json({ message: 'Internal server error' }); }
+});
 
 // ── GET /api/nodes/admin/overview — ADMIN ────────────────────────────────────
 // Generalised across EVERY hosted Node: each Node writes its own

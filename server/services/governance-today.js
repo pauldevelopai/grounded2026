@@ -1,54 +1,89 @@
-// governance-today.js — the "Today" AI-governance briefing shown atop the BE AI
-// READY tracker. The tracker itself only holds lawsuits + regulations (items the
-// triage promotes); breaking news — a model suspension, an enforcement action —
-// never becomes a "lawsuit" or "regulation", so it never appears. This fills that
-// gap: it grounds Claude in what we already track, then uses a LIVE web search
-// (callClaudeWithWebSearch) to surface the latest developments, and writes a short
-// conversational digest for a business audience. Cached in app_settings
-// (key 'governance_today'); regenerated on a schedule, never per page-load.
+// governance-today.js — the "Today in AI governance" (AI Law) briefing shown atop
+// the tracker AND on the BE AI READY home. Source of truth = OUR OWN Law &
+// Regulation tracker (ai_lawsuits + ai_regulations), NOT a live web search. Paul's
+// call (2026-06-24): the team curates the tracker, so the briefing must come
+// directly from it — full oversight, and no web-sourced fabrication. It summarises
+// the most-recently-updated tracked items into a short business-facing read, with
+// the tracked items as the cited sources. Cached in app_settings ('governance_today')
+// + governance_today_history; regenerated on a schedule or from the admin.
 import pool from '../db/pool.js';
-import { callClaudeWithWebSearch } from './claude.js';
+import { callClaude } from './claude.js';
+import { getBriefingSettings } from './briefing-settings.js';
 
 const KEY = 'governance_today';
 
-async function recentContext() {
+// The most-recently-updated tracked lawsuits + regulations — the curated corpus the
+// briefing is written from. Newest first across both, capped at `limit`. Excludes
+// unvetted auto-added rows (curated by hand, or auto-added then explicitly kept) so
+// the briefing/headlines can never surface a web-sourced fabrication that an admin
+// hasn't reviewed — matching what the public tracker shows.
+const VETTED = "(auto_added = false OR review_status = 'kept')";
+async function recentTrackerItems(limit) {
   const { rows: law } = await pool.query(
-    `SELECT case_name, status FROM ai_lawsuits ORDER BY last_update DESC NULLS LAST LIMIT 6`).catch(() => ({ rows: [] }));
+    `SELECT case_name AS name, jurisdiction, status, summary, source_url, case_url,
+            COALESCE(last_update, updated_at::date) AS dt, 'lawsuit' AS kind
+       FROM ai_lawsuits
+      WHERE ${VETTED}
+      ORDER BY COALESCE(last_update, updated_at::date) DESC NULLS LAST LIMIT $1`, [limit]
+  ).catch(() => ({ rows: [] }));
   const { rows: reg } = await pool.query(
-    `SELECT regulation_name, jurisdiction, status FROM ai_regulations ORDER BY updated_at DESC NULLS LAST LIMIT 6`).catch(() => ({ rows: [] }));
-  const l = law.map((r) => `- ${r.case_name} (${r.status})`).join('\n') || '(none)';
-  const g = reg.map((r) => `- ${r.regulation_name} — ${r.jurisdiction} (${r.status})`).join('\n') || '(none)';
-  return `Lawsuits we already track:\n${l}\n\nRegulations we already track:\n${g}`;
+    `SELECT regulation_name AS name, jurisdiction, status, summary, source_url, official_url AS case_url,
+            COALESCE(enforcement_date, effective_date, updated_at::date) AS dt, 'regulation' AS kind
+       FROM ai_regulations
+      WHERE ${VETTED}
+      ORDER BY updated_at DESC NULLS LAST LIMIT $1`, [limit]
+  ).catch(() => ({ rows: [] }));
+  return [...law, ...reg]
+    .sort((a, b) => (b.dt ? new Date(b.dt).getTime() : 0) - (a.dt ? new Date(a.dt).getTime() : 0))
+    .slice(0, limit);
 }
 
-function dedupeCitations(cites) {
+function sanitizeSummary(raw) {
+  let s = (raw || '').trim();
+  s = s.replace(/^\s*[-*_]{3,}\s*$/gm, '');
+  s = s.replace(/^#{1,6}\s+/gm, '');
+  s = s.replace(/\n{3,}/g, '\n\n');
+  s = s.split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean).join('\n\n');
+  return s.trim();
+}
+
+function buildHeadlines(items) {
   const seen = new Set(); const out = [];
-  for (const c of cites || []) {
-    if (c.url && !seen.has(c.url)) { seen.add(c.url); out.push({ title: c.title || c.url, url: c.url }); }
+  for (const it of items) {
+    const url = it.source_url || it.case_url || null;
+    const key = url || it.name;
+    if (key && !seen.has(key)) { seen.add(key); out.push({ title: it.name, url }); }
   }
-  return out;
+  return out.slice(0, 6);
 }
 
 export async function generateGovernanceToday() {
-  const context = await recentContext();
-  const system =
-    'You write a short daily "Today in AI governance" briefing for South African small and medium ' +
-    'businesses on the Be AI Ready platform. Audience: non-technical owners and managers. Tone: plain, ' +
-    'calm, concrete — no hype, no jargon. You have a web search tool: use it to find the most significant ' +
-    'AI data-governance developments worldwide from the LAST ~10 DAYS — regulatory actions and enforcement, ' +
-    'major lawsuits or settlements, AI models being suspended/withdrawn/restricted, and big policy shifts. ' +
-    'Prefer authoritative, recent sources. Never invent; if unsure, leave it out.';
-  const userContent =
-    `Here is what our tracker already follows:\n\n${context}\n\n` +
-    'Write TWO short paragraphs (about 130 words total): where AI data governance stands right now ' +
-    'globally, weaving in the most important very recent developments you find via web search (name them ' +
-    'specifically — e.g. a particular model suspension or enforcement action and who it affects), and what ' +
-    'it practically means for a small business. Plain prose only — no headings, no preamble, no bullet list.';
+  const settings = await getBriefingSettings();
+  const items = await recentTrackerItems(settings.ai_law.item_count || 10);
+  if (!items.length) return null;   // nothing tracked yet — honest empty (no invention)
 
-  const { text, citations } = await callClaudeWithWebSearch({ system, userContent, maxTokens: 900, maxUses: 5 });
+  const sourceList = items.map((it) => {
+    const meta = [it.jurisdiction, it.status].filter(Boolean).join(', ');
+    const sum = (it.summary || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+    return `- [${it.kind}] ${it.name}${meta ? ` (${meta})` : ''}${sum ? `: ${sum}` : ''}`;
+  }).join('\n');
+
+  const writeSystem =
+    'You write a daily "Today in AI governance" briefing for South African small and medium businesses on ' +
+    'the Be AI Ready platform. Audience: non-technical owners and managers. Tone: plain, calm, concrete — no ' +
+    'hype, no jargon. You are given items from OUR OWN curated AI Law & Regulation tracker. Output ONLY the ' +
+    'briefing prose and nothing else: 90–110 words, one or two short paragraphs. Pick the few most significant ' +
+    'items and say, in everyday terms, what each practically means for a small business. Use ONLY the items ' +
+    'provided — do not add, rename, merge or invent any law, case, company, product or model, and do not pull ' +
+    'in anything from outside this list. Do NOT restate these instructions, write a preamble or heading, use ' +
+    'markdown or bullets, or produce more than one version.';
+  const writeUser = `From our Law & Regulation tracker (most recently updated, newest first):\n\n${sourceList}\n\nWrite the briefing now.`;
+  const text = await callClaude({ system: writeSystem, userContent: writeUser, maxTokens: 320, temperature: 0.4 });
+
   const value = {
-    summary: (text || '').trim(),
-    headlines: dedupeCitations(citations).slice(0, 6),
+    summary: sanitizeSummary(text),
+    headlines: buildHeadlines(items),
+    source: 'tracker',
     generated_at: new Date().toISOString(),
   };
   await pool.query(
@@ -56,11 +91,26 @@ export async function generateGovernanceToday() {
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
     [KEY, JSON.stringify(value)]
   );
+  if (value.summary) {
+    const digestDate = value.generated_at.slice(0, 10);
+    await pool.query(
+      `INSERT INTO governance_today_history (digest_date, summary, headlines, generated_at)
+       VALUES ($1, $2, $3::jsonb, $4)
+       ON CONFLICT (digest_date) DO UPDATE
+         SET summary = EXCLUDED.summary, headlines = EXCLUDED.headlines, generated_at = EXCLUDED.generated_at`,
+      [digestDate, value.summary, JSON.stringify(value.headlines || []), value.generated_at]
+    ).catch((e) => console.error('[governance-today:history]', e.message));
+  }
   return value;
 }
 
-// Read the cached digest. Does NOT generate on a public hit by default (web search
-// costs money and is slow) — the scheduled job / admin refresh keeps it fresh.
+export async function getGovernanceTodayHistory(limit = 60) {
+  const { rows } = await pool.query(
+    `SELECT digest_date, summary, headlines, generated_at
+       FROM governance_today_history ORDER BY digest_date DESC LIMIT $1`, [limit]);
+  return rows;
+}
+
 export async function getGovernanceToday({ generateIfEmpty = false } = {}) {
   const { rows } = await pool.query('SELECT value FROM app_settings WHERE key = $1', [KEY]);
   if (rows.length) return rows[0].value;

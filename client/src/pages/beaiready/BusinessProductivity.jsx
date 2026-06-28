@@ -1,6 +1,6 @@
 // BusinessProductivity — the authed Productivity workspace (/dashboard/productivity).
 // The five measures (no surveillance — aggregate, entered by the business) and the
-// live AI toolbox link. Scoped to the tenant. (BetterBoss lives on the Training tab.)
+// live AI toolbox link. Scoped to the tenant. (KnowHow lives on the Training tab.)
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
@@ -26,9 +26,13 @@ export default function BusinessProductivity() {
   const [period, setPeriod] = useState(thisPeriod());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [goals, setGoals] = useState(null);
 
   const load = () => apiFetch('/beaiready/metrics').then(setMetrics).catch(() => setMetrics([]));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    apiFetch('/beaiready/goals').then(setGoals).catch(() => setGoals([]));
+  }, []);
 
   const cur = (key) => (metrics || []).find((m) => m.metric === key);
 
@@ -81,12 +85,64 @@ export default function BusinessProductivity() {
         })}
       </section>
 
+      {/* Goals — agreed with your consultant at the start, tracked against the measures above. */}
+      <div className="hub-section-label">Goals &amp; results</div>
+      <p style={{ color: '#8a8076', fontSize: 13, margin: '-2px 0 12px', maxWidth: '64ch' }}>
+        The targets you agreed at the start, and how you're tracking against them.
+      </p>
+      {goals == null ? <p style={{ color: '#8a8076' }}>Loading…</p> : goals.length === 0 ? (
+        <p style={{ color: '#8a8076', fontSize: 13.5, marginBottom: 24 }}>No goals set yet — your Be AI Ready consultant agrees these with you at the start.</p>
+      ) : (
+        <section style={{ display: 'grid', gap: 10, marginBottom: 24 }}>
+          {goals.map((g) => <GoalCard key={g.id} g={g} />)}
+        </section>
+      )}
+
       <section className="hub-band">
         <h2>Your active AI toolbox</h2>
         <p style={{ margin: 0 }}>
           The best AI tools for each function, scored for data safety. <Link to="/toolbox">Open the toolbox →</Link>
         </p>
       </section>
+
+      <section className="hub-band" style={{ marginTop: 16 }}>
+        <h2>Prompt library</h2>
+        <p style={{ margin: 0 }}>
+          The prompts we recommend for the AI model your team uses — scored per model — and your own saved
+          versions. Copy, rate, and build your library.
+          {' '}<Link to="/dashboard/prompts">Open the prompt library →</Link> · <Link to="/dashboard/my-prompts">My prompts</Link>
+        </p>
+      </section>
+    </div>
+  );
+}
+
+const measureLabel = (k) => (MEASURES.find((m) => m[0] === k) || [])[1] || null;
+
+function GoalCard({ g }) {
+  const pct = g.progress != null ? Math.round(g.progress * 100) : null;
+  const fmt = (v) => (v == null ? '—' : Number(v).toLocaleString());
+  const achieved = g.status === 'achieved';
+  return (
+    <div className="hub-card" style={achieved ? { borderColor: '#bbf7d0' } : undefined}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 15 }}>{g.title}{achieved && <span style={{ color: '#166534', fontWeight: 600 }}> · achieved ✓</span>}</strong>
+        {g.target_date && <span style={{ fontSize: 12, color: '#a89e92' }}>by {new Date(g.target_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}</span>}
+      </div>
+      {g.detail && <p style={{ fontSize: 13, color: '#6b6359', margin: '4px 0 0' }}>{g.detail}</p>}
+      {g.baseline != null && g.target != null && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#8a8076', marginBottom: 4 }}>
+            <span>from {fmt(g.baseline)}{g.unit ? ` ${g.unit}` : ''}</span>
+            <span style={{ color: '#c75b39', fontWeight: 700 }}>now {fmt(g.current)}{pct != null ? ` · ${pct}%` : ''}</span>
+            <span>target {fmt(g.target)}</span>
+          </div>
+          <div style={{ height: 8, background: '#f1ece5', borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ width: `${pct || 0}%`, height: '100%', background: achieved ? '#16a34a' : '#c75b39' }} />
+          </div>
+          {g.current == null && g.metric && <p style={{ fontSize: 11.5, color: '#a89e92', margin: '4px 0 0' }}>Enter the “{measureLabel(g.metric) || g.metric}” measure above to track this.</p>}
+        </div>
+      )}
     </div>
   );
 }

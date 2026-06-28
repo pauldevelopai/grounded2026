@@ -35,8 +35,11 @@ function fileFilter(req, file, cb) {
   }
 }
 
+// Training agendas, slide decks and reports are routinely larger than 10MB; cap at
+// 100MB (env-overridable) so real documents aren't silently rejected.
+const MAX_MB = parseInt(process.env.UPLOAD_MAX_MB, 10) || 100;
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: MAX_MB * 1024 * 1024 },
 });

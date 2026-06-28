@@ -1,9 +1,15 @@
 // Public, no-auth endpoints for the ailegal.co.za reader-facing surface.
 // Mount BEFORE any auth middleware.
 import { Router } from 'express';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import pool from '../db/pool.js';
 import { chatWithGroundedHelp, callClaude } from '../services/claude.js';
-import { getGovernanceToday } from '../services/governance-today.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { getGovernanceToday, getGovernanceTodayHistory } from '../services/governance-today.js';
+import { getAINewsToday, getAINewsTodayHistory } from '../services/ai-news-today.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
@@ -65,6 +71,16 @@ const PUBLIC_REG_COLS = `
 // Only these statuses are shown publicly
 const PUBLIC_REG_STATUSES = ['enacted', 'in_force', 'partial_force', 'amended'];
 
+// Auto-added tracker rows (from the old governance web-search ingest) were shown
+// publicly the moment they were created and "pruned if wrong" — but unvetted ones
+// included web-sourced fabrications (e.g. a bogus "export-control suspension"
+// regulation) that surfaced on the public tracker, the home counts, and the AI-Law
+// briefing. Public surfaces now only show a tracker row if it was curated by hand
+// (auto_added = false) or an admin explicitly kept the auto-added one
+// (review_status = 'kept'). Nothing is deleted — unvetted rows stay visible in the
+// admin tracker for review. Columns from migration 103.
+const TRACKER_PUBLIC_SQL = "(auto_added = false OR review_status = 'kept')";
+
 // Columns exposed to the public for lawsuits
 const PUBLIC_LAWSUIT_COLS = `
   id, case_name, plaintiffs, defendants, court, judge, jurisdiction, district, circuit,
@@ -84,7 +100,7 @@ router.get('/regulations', async (req, res) => {
     const offset   = (page - 1) * pageSize;
 
     // Filters are shared by the count query and the data query.
-    const filterParts = [`status = ANY($1::text[])`];
+    const filterParts = [`status = ANY($1::text[])`, TRACKER_PUBLIC_SQL];
     const params = [PUBLIC_REG_STATUSES];
 
     if (status && PUBLIC_REG_STATUSES.includes(status)) {
@@ -205,7 +221,7 @@ router.get('/regulations/recent', async (req, res) => {
 router.get('/regulations/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT ${PUBLIC_REG_COLS} FROM ai_regulations WHERE id = $1 AND status = ANY($2::text[])`,
+      `SELECT ${PUBLIC_REG_COLS} FROM ai_regulations WHERE id = $1 AND status = ANY($2::text[]) AND ${TRACKER_PUBLIC_SQL}`,
       [req.params.id, PUBLIC_REG_STATUSES]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
@@ -253,7 +269,7 @@ router.get('/lawsuits', async (req, res) => {
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
     const offset   = (page - 1) * pageSize;
 
-    const filterParts = ['1=1'];
+    const filterParts = ['1=1', TRACKER_PUBLIC_SQL];
     const params = [];
 
     if (status && status !== 'all') {
@@ -374,7 +390,7 @@ router.get('/lawsuits/recent', async (req, res) => {
 router.get('/lawsuits/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT ${PUBLIC_LAWSUIT_COLS} FROM ai_lawsuits WHERE id = $1`,
+      `SELECT ${PUBLIC_LAWSUIT_COLS} FROM ai_lawsuits WHERE id = $1 AND ${TRACKER_PUBLIC_SQL}`,
       [req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
@@ -630,6 +646,7 @@ router.post('/chat', chatCors, async (req, res) => {
                   ts_rank(search_tsv, websearch_to_tsquery('english', $1)) AS rank
              FROM ai_lawsuits
             WHERE search_tsv @@ websearch_to_tsquery('english', $1)
+              AND ${TRACKER_PUBLIC_SQL}
             ORDER BY rank DESC
             LIMIT 4`,
           [ftsQuery]
@@ -652,7 +669,8 @@ router.post('/chat', chatCors, async (req, res) => {
                   CASE WHEN filing_date IS NOT NULL THEN 'filed ' || filing_date::text ELSE NULL END AS dates,
                   summary
              FROM ai_lawsuits
-            WHERE ${ors}
+            WHERE (${ors})
+              AND ${TRACKER_PUBLIC_SQL}
             ORDER BY updated_at DESC
             LIMIT 4`,
           params
@@ -671,6 +689,7 @@ router.post('/chat', chatCors, async (req, res) => {
            FROM ai_regulations
           WHERE search_tsv @@ websearch_to_tsquery('english', $1)
             AND status = ANY($2::text[])
+            AND ${TRACKER_PUBLIC_SQL}
           ORDER BY rank DESC
           LIMIT 3`,
         [ftsQuery, PUBLIC_REG_STATUSES]
@@ -696,6 +715,7 @@ router.post('/chat', chatCors, async (req, res) => {
            FROM ai_regulations
           WHERE (${ors})
             AND status = ANY($${params.length}::text[])
+            AND ${TRACKER_PUBLIC_SQL}
           ORDER BY updated_at DESC
           LIMIT 3`,
         params
@@ -1143,6 +1163,35 @@ router.get('/governance-today', async (req, res) => {
   catch (err) { console.error('[public/governance-today]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// Past daily briefings (newest first) — the tracker's "Daily briefings" tab.
+router.get('/governance-today/history', async (req, res) => {
+  try { res.json(await getGovernanceTodayHistory(60)); }
+  catch (err) { console.error('[public/governance-today/history]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// The "Today in AI" news briefing (cached; refreshed by the ai_news_today_digest
+// job). Sister of governance-today: AI news from the newsletters, not AI law.
+// Public, read-only; returns null until first generated.
+router.get('/ai-news-today', async (req, res) => {
+  try { res.json(await getAINewsToday()); }
+  catch (err) { console.error('[public/ai-news-today]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.get('/ai-news-today/history', async (req, res) => {
+  try { res.json(await getAINewsTodayHistory(60)); }
+  catch (err) { console.error('[public/ai-news-today/history]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Companies open for self-registration (those an admin has given an access code).
+// Public — names + ids only, no secrets — for the registration company picker.
+router.get('/companies', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name FROM newsrooms WHERE is_active = true AND kind = 'business' AND access_code_hash IS NOT NULL ORDER BY name`);
+    res.json(rows);
+  } catch (err) { console.error('[public/companies]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── AI Toolkit (imported from aikit) ─────────────────────────────────────────
 router.get('/toolkit', async (req, res) => {
   try {
@@ -1179,6 +1228,55 @@ router.get('/toolkit', async (req, res) => {
   } catch (err) {
     console.error('[public/toolkit]', err);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ── BE AI READY — product-filtered Nodes registry ───────────────────────────
+// The BAIR storefront (beaiready host) has no /nodes/ route of its own, so it can't
+// read the static front-door registry same-origin. This reads nodes.json (the box
+// copy, the local sibling repo, or the live URL as a fallback) and returns only the
+// Nodes tagged for the 'bair' product — keeping nodes.json the single source of
+// truth (one Node, two storefronts; never duplicated).
+let _bairNodesCache = { at: 0, data: null };
+
+async function loadNodesRegistry() {
+  const candidates = [
+    process.env.NODES_REGISTRY_FILE,
+    '/var/www/nodes/nodes.json',                              // the box
+    path.join(__dirname, '../../../Nodes/nodes/nodes.json'),  // local dev sibling repo
+  ].filter(Boolean);
+  for (const f of candidates) {
+    try { return JSON.parse(await readFile(f, 'utf8')); } catch { /* try next */ }
+  }
+  const url = process.env.NODES_REGISTRY_URL || 'https://grounded.developai.co.za/nodes/nodes.json';
+  const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  if (!r.ok) throw new Error(`registry ${r.status}`);
+  return r.json();
+}
+
+router.get('/bair-nodes', async (req, res) => {
+  try {
+    if (!_bairNodesCache.data || Date.now() - _bairNodesCache.at > 5 * 60 * 1000) {
+      const reg = await loadNodesRegistry();
+      const nodes = ((reg && reg.nodes) || [])
+        .filter((n) => Array.isArray(n.products) && n.products.includes('bair'))
+        .map((n) => ({
+          slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
+          hosted: !!n.hosted,
+          // Run path: SAME-ORIGIN relative URL so the Node opens on whatever host
+          // served the storefront (the beaiready host). The tracker_token cookie is
+          // host-scoped, so the Node must be reached on beaiready (where the client
+          // signed in) — otherwise the browser won't send the cookie and the Node
+          // bounces to login. Caddy serves /nodes/bair-extract/app/* on beaiready too.
+          runUrl: n.hosted ? `/nodes/${n.slug}/app/` : null,
+        }));
+      _bairNodesCache = { at: Date.now(), data: { nodes } };
+    }
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json(_bairNodesCache.data);
+  } catch (err) {
+    console.error('[public/bair-nodes]', err.message);
+    res.status(500).json({ nodes: [], message: 'Could not load the Nodes list.' });
   }
 });
 
@@ -1361,16 +1459,16 @@ router.get('/overview', async (req, res) => {
   const list = async (sql, p = []) => { try { const { rows } = await pool.query(sql, p); return rows; } catch { return []; } };
   try {
     const [lawsuitsCount, regsCount, useCasesCount, ethicsCount] = await Promise.all([
-      n(`SELECT count(*)::int n FROM ai_lawsuits`),
-      n(`SELECT count(*)::int n FROM ai_regulations WHERE status = ANY($1::text[])`, [PUBLIC_REG_STATUSES]),
+      n(`SELECT count(*)::int n FROM ai_lawsuits WHERE ${TRACKER_PUBLIC_SQL}`),
+      n(`SELECT count(*)::int n FROM ai_regulations WHERE status = ANY($1::text[]) AND ${TRACKER_PUBLIC_SQL}`, [PUBLIC_REG_STATUSES]),
       n(`SELECT count(*)::int n FROM ai_legal_usecases WHERE is_published = true`),
       n(`SELECT count(*)::int n FROM ethics_items WHERE status = 'published'`),
     ]);
     const [lawsuits, regulations, useCases, ethics] = await Promise.all([
       list(`SELECT id, case_name, jurisdiction, status, case_type, summary, updated_at
-              FROM ai_lawsuits ORDER BY updated_at DESC NULLS LAST LIMIT 6`),
+              FROM ai_lawsuits WHERE ${TRACKER_PUBLIC_SQL} ORDER BY updated_at DESC NULLS LAST LIMIT 6`),
       list(`SELECT id, COALESCE(short_name, regulation_name) AS title, jurisdiction, status, summary, updated_at
-              FROM ai_regulations WHERE status = ANY($1::text[]) ORDER BY updated_at DESC NULLS LAST LIMIT 6`, [PUBLIC_REG_STATUSES]),
+              FROM ai_regulations WHERE status = ANY($1::text[]) AND ${TRACKER_PUBLIC_SQL} ORDER BY updated_at DESC NULLS LAST LIMIT 6`, [PUBLIC_REG_STATUSES]),
       list(`SELECT id, firm_name, jurisdiction, use_case_title, summary, COALESCE(published_at, updated_at) AS updated_at
               FROM ai_legal_usecases WHERE is_published = true ORDER BY COALESCE(published_at, updated_at) DESC NULLS LAST LIMIT 6`),
       list(`SELECT id, topic, item_type, title, summary, url, source_name, COALESCE(published_at, created_at) AS updated_at

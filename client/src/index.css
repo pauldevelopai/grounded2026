@@ -464,6 +464,49 @@ input, select, textarea {
   margin-bottom: 16px;
 }
 
+/* BE AI READY door — branded sign-in (charcoal + terracotta) to match the rest of the site. */
+.login-page.beaiready {
+  background: radial-gradient(1100px 560px at 50% -10%, #2a2724 0%, #1c1b1a 58%, #161514 100%);
+  padding: 24px;
+}
+.login-page.beaiready .login-card {
+  max-width: 400px;
+  padding: 40px 36px;
+  border-radius: 16px;
+  border-top: 4px solid #c75b39;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.login-page.beaiready .login-card h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #1c1b1a;
+}
+.login-page.beaiready .login-card .brand-sub {
+  color: #c75b39;
+  font-weight: 700;
+}
+.login-page.beaiready .login-card .login-instruction {
+  font-size: 15px;
+  color: #6b6359;
+}
+.login-page.beaiready .login-card .btn-primary {
+  background: #c75b39;
+  border-color: #c75b39;
+}
+.login-page.beaiready .login-card .btn-primary:hover {
+  background: #b14e2f;
+  border-color: #b14e2f;
+}
+.login-page.beaiready .login-card input:focus {
+  border-color: #c75b39;
+  box-shadow: 0 0 0 3px rgba(199, 91, 57, 0.15);
+  outline: none;
+}
+.login-page.beaiready .login-card a {
+  color: #c75b39;
+}
+
 /* Detail page */
 .detail-header {
   display: flex;

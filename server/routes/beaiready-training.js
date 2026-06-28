@@ -12,9 +12,13 @@ import fs from 'node:fs';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
-import { createKnowledgeEntry } from '../services/knowledge.js';
+import { createKnowledgeEntry, getRelevantKnowledge } from '../services/knowledge.js';
 import { syncOneForm, syncFormsForTenant, toCsvUrl } from '../services/forms-sync.js';
 import { upload } from '../middleware/upload.js';
+import { scrapeArticle } from '../services/web-scraper.js';
+import { extractText } from '../services/document-processor.js';
+import { encryptFor, decryptFor } from '../services/crypto.js';
+import { callClaude } from '../services/claude.js';
 
 const router = Router();
 
@@ -43,8 +47,17 @@ async function tenantContext(req) {
 }
 const isAdmin = (req) => req.user?.role === 'admin';
 
-// Ingest (or re-ingest) a training row's body into the shared sector knowledge base.
-// Deletes any prior entry first so an edit doesn't duplicate. category = 'training_material'|'training_outcome'.
+// Ingest (or re-ingest) a training/strategy row into the shared knowledge base so
+// FUTURE engagements — this client AND other companies of similar size/activity —
+// can learn from it. Stored SECTOR-scoped (organisation_id NULL) so it informs the
+// whole sector, matching the "sector-scoped" promise in the UI. Deletes any prior
+// entry first so an edit doesn't duplicate. Works for any row carrying
+// knowledge_id + rag_synced columns (materials, outcomes, strategy items).
+const RAG_SOURCE_DESC = {
+  training_outcome: 'BE AI READY training outcome',
+  training_material: 'BE AI READY training material',
+  training_strategy: 'BE AI READY AI-strategy item (what a similar business is doing with AI)',
+};
 async function syncToRag({ table, row, tenant, category, shouldIngest }) {
   if (row.knowledge_id) {
     await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [row.knowledge_id]).catch(() => {});
@@ -56,14 +69,60 @@ async function syncToRag({ table, row, tenant, category, shouldIngest }) {
   }
   const knowledgeId = await createKnowledgeEntry({
     category, subcategory: row.kind || null,
-    title: row.title, content: row.content,
-    sectorId: tenant.sectorId, organisationId: tenant.organisationId,
+    title: row.title, content: row.content || row.detail || row.title,
+    // PRIVATE to this client's organisation. Raw client content never crosses the
+    // tenant boundary — cross-business value comes only via anonymised patterns.
+    sectorId: tenant.sectorId, organisationId: tenant.organisationId, visibility: 'private',
     sourceType: 'beaiready_training', sourceId: row.id,
-    sourceDescription: category === 'training_outcome' ? 'BE AI READY training outcome' : 'BE AI READY training material',
+    sourceDescription: RAG_SOURCE_DESC[category] || 'BE AI READY',
     confidence: 0.6,
   });
   await pool.query(`UPDATE ${table} SET knowledge_id = $1, rag_synced = true WHERE id = $2`, [knowledgeId, row.id]);
   row.knowledge_id = knowledgeId; row.rag_synced = true;   // reflect post-sync state in the response
+}
+
+// Harvest: pull the text out of an uploaded training file (agenda PDF, report,
+// material handout) and store it on the row so the system can REASON over it —
+// it can't just sit on disk as an opaque PDF. Best-effort: a stubborn or
+// unsupported file is marked 'failed' but never breaks the upload. Returns the
+// extracted text (or null) so callers can chain a RAG re-sync.
+async function harvestFileText(docId) {
+  try {
+    const { rows: [doc] } = await pool.query('SELECT file_path, mime_type FROM uploaded_documents WHERE id = $1', [docId]);
+    if (!doc || !doc.file_path) return null;
+    await pool.query("UPDATE uploaded_documents SET extraction_status = 'extracting' WHERE id = $1", [docId]);
+    const text = await extractText(doc.file_path, doc.mime_type);
+    await pool.query(
+      "UPDATE uploaded_documents SET extracted_text = $1, extraction_status = 'extracted', updated_at = NOW() WHERE id = $2",
+      [text || '', docId]);
+    return text || '';
+  } catch (e) {
+    console.error('[bair-train/harvest]', docId, e.message);
+    await pool.query(
+      "UPDATE uploaded_documents SET extraction_status = 'failed', extraction_error = $1 WHERE id = $2",
+      [e.message, docId]).catch(() => {});
+    return null;
+  }
+}
+
+// Ingest a material into the SECTOR knowledge base using its typed content AND the
+// harvested text of its attached files — so what was actually taught (the slides /
+// handouts), not just the summary, informs future same-sector engagements. Replaces
+// the plain syncToRag call for materials.
+async function syncMaterialToRag(materialId, tenant) {
+  const { rows: [m] } = await pool.query('SELECT * FROM training_materials WHERE id = $1', [materialId]);
+  if (!m) return;
+  const { rows: files } = await pool.query(
+    `SELECT original_name, extracted_text FROM uploaded_documents
+       WHERE entity_type = 'training_material_file' AND entity_id = $1
+         AND extracted_text IS NOT NULL AND length(extracted_text) > 0
+       ORDER BY created_at`, [materialId]);
+  const fileText = files.map((f) => `— ${f.original_name}:\n${f.extracted_text}`).join('\n\n');
+  const combined = [m.content, fileText].filter(Boolean).join('\n\n').slice(0, 24000);
+  await syncToRag({
+    table: 'training_materials', row: { ...m, content: combined }, tenant,
+    category: 'training_material', shouldIngest: m.rag_shareable && !!combined,
+  });
 }
 
 // ── Intake (Google form) — reuse intake_forms/responses + the hourly sync ───────
@@ -124,7 +183,11 @@ router.get('/agendas', async (req, res) => {
     const pub = isAdmin(req) ? '' : `AND status = 'published'`;
     const { rows: agendas } = await pool.query(
       `SELECT id, newsroom_id, title, scheduled_for, location, status, notes, created_at, updated_at,
-              doc_kind, doc_url, doc_name, doc_file_id, doc_synced_at, (doc_synced_text IS NOT NULL) AS doc_synced
+              doc_kind, doc_url, doc_name, doc_file_id, doc_synced_at, (doc_synced_text IS NOT NULL) AS doc_synced,
+              (SELECT COALESCE(json_agg(json_build_object('id', ud.id, 'name', ud.original_name, 'size', ud.file_size) ORDER BY ud.created_at), '[]'::json)
+                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_agenda_file' AND ud.entity_id = training_agendas.id) AS files,
+              (SELECT COALESCE(json_agg(json_build_object('id', ud.id, 'name', ud.original_name, 'size', ud.file_size) ORDER BY ud.created_at), '[]'::json)
+                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_report_file' AND ud.entity_id = training_agendas.id) AS reports
          FROM training_agendas WHERE newsroom_id = $1 ${pub} ORDER BY scheduled_for DESC NULLS LAST, created_at DESC`, [newsroomId]);
     for (const a of agendas) {
       const { rows: items } = await pool.query(
@@ -225,6 +288,9 @@ router.post('/agendas/:id/doc/upload', requireRole('admin'), upload.single('file
       `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
        VALUES ($1,$2,$3,$4,$5,'training_agenda',$6,$7) RETURNING id`,
       [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, req.params.id, req.user.id]);
+    // Harvest the agenda's text immediately so the strategy AI can read what was
+    // planned/delivered rather than treating the PDF as opaque.
+    await harvestFileText(doc.id);
     const { rows } = await pool.query(
       `UPDATE training_agendas SET doc_kind='pdf', doc_file_id=$1, doc_name=$2, doc_url=NULL,
          doc_synced_text=NULL, doc_synced_at=NULL, updated_at=NOW() WHERE id=$3 RETURNING *`,
@@ -271,47 +337,53 @@ const KINDS = ['doc', 'slide', 'video', 'link', 'exercise'];
 router.get('/materials', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const pub = isAdmin(req) ? '' : 'AND published = true';
+    const pub = isAdmin(req) ? '' : 'AND m.published = true';
     const { rows } = await pool.query(
-      `SELECT * FROM training_materials WHERE newsroom_id = $1 ${pub} ORDER BY order_index, created_at`, [newsroomId]);
+      `SELECT m.*, a.title AS agenda_title, a.scheduled_for AS agenda_date,
+              (SELECT COALESCE(json_agg(json_build_object('id', ud.id, 'name', ud.original_name, 'size', ud.file_size) ORDER BY ud.created_at), '[]'::json)
+                 FROM uploaded_documents ud WHERE ud.entity_type = 'training_material_file' AND ud.entity_id = m.id) AS files
+         FROM training_materials m LEFT JOIN training_agendas a ON a.id = m.agenda_id
+        WHERE m.newsroom_id = $1 ${pub} ORDER BY m.order_index, m.created_at`, [newsroomId]);
     res.json(rows);
   } catch (err) { console.error('[bair-train/materials:get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 router.post('/materials', requireRole('admin'), async (req, res) => {
   try {
-    const { newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable } = req.body || {};
+    const { newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable, agenda_id } = req.body || {};
     if (!newsroom_id || !title) return res.status(400).json({ message: 'newsroom_id, title required' });
     if (kind && !KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${KINDS.join(', ')}` });
     const { rows } = await pool.query(
-      `INSERT INTO training_materials (newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable, created_by)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'doc'),COALESCE($7,0),COALESCE($8,true),COALESCE($9,true),$10) RETURNING *`,
+      `INSERT INTO training_materials (newsroom_id, title, description, content, url, kind, order_index, published, rag_shareable, agenda_id, created_by)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'doc'),COALESCE($7,0),COALESCE($8,true),COALESCE($9,true),$10,$11) RETURNING *`,
       [newsroom_id, title, description || null, content || null, url || null, kind || null,
        order_index ?? null, typeof published === 'boolean' ? published : null,
-       typeof rag_shareable === 'boolean' ? rag_shareable : null, req.user.id]);
+       typeof rag_shareable === 'boolean' ? rag_shareable : null, agenda_id || null, req.user.id]);
     const row = rows[0];
-    const tenant = await tenantContext(req);
-    await syncToRag({ table: 'training_materials', row, tenant, category: 'training_material', shouldIngest: row.rag_shareable && !!row.content });
+    await syncMaterialToRag(row.id, await tenantContext(req));
     res.status(201).json(row);
   } catch (err) { console.error('[bair-train/materials:post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 router.put('/materials/:id', requireRole('admin'), async (req, res) => {
   try {
-    const { title, description, content, url, kind, order_index, published, rag_shareable } = req.body || {};
+    const b = req.body || {};
+    const { title, description, content, url, kind, order_index, published, rag_shareable, agenda_id } = b;
     if (kind && !KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${KINDS.join(', ')}` });
+    const hasAgenda = Object.prototype.hasOwnProperty.call(b, 'agenda_id');   // presence-aware so it can be set or cleared
     const { rows } = await pool.query(
       `UPDATE training_materials SET title = COALESCE($1,title), description = COALESCE($2,description),
          content = COALESCE($3,content), url = COALESCE($4,url), kind = COALESCE($5,kind),
          order_index = COALESCE($6,order_index), published = COALESCE($7,published),
-         rag_shareable = COALESCE($8,rag_shareable), updated_at = NOW() WHERE id = $9 RETURNING *`,
+         rag_shareable = COALESCE($8,rag_shareable),
+         agenda_id = CASE WHEN $9 THEN $10 ELSE agenda_id END,
+         updated_at = NOW() WHERE id = $11 RETURNING *`,
       [title || null, description ?? null, content ?? null, url ?? null, kind || null,
        order_index ?? null, typeof published === 'boolean' ? published : null,
-       typeof rag_shareable === 'boolean' ? rag_shareable : null, req.params.id]);
+       typeof rag_shareable === 'boolean' ? rag_shareable : null, hasAgenda, agenda_id || null, req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Material not found' });
     const row = rows[0];
-    const tenant = await tenantContext(req);
-    await syncToRag({ table: 'training_materials', row, tenant, category: 'training_material', shouldIngest: row.rag_shareable && !!row.content });
+    await syncMaterialToRag(row.id, await tenantContext(req));
     res.json(row);
   } catch (err) { console.error('[bair-train/materials:put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -323,6 +395,84 @@ router.delete('/materials/:id', requireRole('admin'), async (req, res) => {
     if (rows[0].knowledge_id) await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [rows[0].knowledge_id]).catch(() => {});
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/materials:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Attachments (multiple files per agenda or material) ──────────────────────────
+// Agendas can carry several documents (the agenda PDF, a second PDF, a training
+// report); materials can carry many PDFs (slides/handouts per session). Stored in
+// uploaded_documents under a *_file entity_type so they don't collide with the
+// agenda's single primary doc. Tenant-scoped; members can download only when the
+// parent (agenda/material) is published.
+const FILE_SCOPES = {
+  training_agenda_file:   { table: 'training_agendas',   pub: "status = 'published'" },
+  training_report_file:   { table: 'training_agendas',   pub: "status = 'published'" },
+  training_material_file: { table: 'training_materials', pub: 'published = true' },
+};
+
+router.post('/files', requireRole('admin'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const { entity_type, entity_id } = req.body || {};
+    const scope = FILE_SCOPES[entity_type];
+    if (!scope || !entity_id) { fs.unlink(req.file.path, () => {}); return res.status(400).json({ message: 'entity_type + entity_id required' }); }
+    const { newsroomId } = await tenantContext(req);
+    const { rows: [ent] } = await pool.query(`SELECT id FROM ${scope.table} WHERE id = $1 AND newsroom_id = $2`, [entity_id, newsroomId]);
+    if (!ent) { fs.unlink(req.file.path, () => {}); return res.status(404).json({ message: 'Not found for this client' }); }
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, original_name AS name, file_size AS size`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, entity_type, entity_id, req.user.id]);
+    // Harvest the file's text so reports/handouts feed the AI; for shareable
+    // material files, fold that text into the sector knowledge base too.
+    const text = await harvestFileText(doc.id);
+    if (entity_type === 'training_material_file' && text) {
+      try { await syncMaterialToRag(entity_id, await tenantContext(req)); }
+      catch (e) { console.error('[bair-train/files:post rag]', e.message); }
+    }
+    res.status(201).json({ ...doc, harvested: text != null });
+  } catch (err) { console.error('[bair-train/files:post]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+router.delete('/files/:docId', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows: [doc] } = await pool.query('SELECT * FROM uploaded_documents WHERE id = $1', [req.params.docId]);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    const scope = FILE_SCOPES[doc.entity_type];
+    if (scope) {
+      const { newsroomId } = await tenantContext(req);
+      const { rows: [ent] } = await pool.query(`SELECT id FROM ${scope.table} WHERE id = $1 AND newsroom_id = $2`, [doc.entity_id, newsroomId]);
+      if (!ent) return res.status(404).json({ message: 'Not found for this client' });
+    }
+    await pool.query('DELETE FROM uploaded_documents WHERE id = $1', [req.params.docId]);
+    if (doc.file_path) fs.unlink(doc.file_path, () => {});
+    // Re-index the material so the knowledge base drops the removed file's text.
+    if (doc.entity_type === 'training_material_file') {
+      try { await syncMaterialToRag(doc.entity_id, await tenantContext(req)); }
+      catch (e) { console.error('[bair-train/files:del rag]', e.message); }
+    }
+    res.json({ deleted: true });
+  } catch (err) { console.error('[bair-train/files:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Download an attachment. Member-reachable but tenant-scoped — members only get a
+// file whose parent agenda/material is published.
+router.get('/files/:docId/download', async (req, res) => {
+  try {
+    const { rows: [doc] } = await pool.query('SELECT * FROM uploaded_documents WHERE id = $1', [req.params.docId]);
+    const scope = doc && FILE_SCOPES[doc.entity_type];
+    if (!doc || !scope || !doc.file_path || !fs.existsSync(doc.file_path)) return res.status(404).json({ message: 'Not found' });
+    // Admins (who manage every client) reach any training attachment — an <a> GET
+    // can't carry the X-Newsroom-Id header. Members get only their own tenant's
+    // PUBLISHED parent agenda/material.
+    if (!isAdmin(req)) {
+      const { newsroomId } = await tenantContext(req);
+      const { rows: [ent] } = await pool.query(`SELECT id FROM ${scope.table} WHERE id = $1 AND newsroom_id = $2 AND ${scope.pub}`, [doc.entity_id, newsroomId]);
+      if (!ent) return res.status(404).json({ message: 'Not found' });
+    }
+    res.setHeader('Content-Disposition', `inline; filename="${doc.original_name}"`);
+    res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+    fs.createReadStream(doc.file_path).pipe(res);
+  } catch (err) { console.error('[bair-train/files:download]', err); res.status(500).json({ message: 'Download failed' }); }
 });
 
 // ── Outcome documents (linked to strategy; RAG-ingested when FINAL) ──────────────
@@ -391,25 +541,30 @@ const cleanSize = (v) => (SIZE.includes(v) ? v : null);
 router.get('/strategy', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const pub = isAdmin(req) ? '' : `AND status = 'published'`;
+    const pub = isAdmin(req) ? '' : `AND s.status = 'published'`;
     const { rows } = await pool.query(
-      `SELECT * FROM training_strategy_items WHERE newsroom_id = $1 ${pub}
-        ORDER BY kind, order_index, created_at`, [newsroomId]);
+      `SELECT s.*, a.title AS agenda_title, a.scheduled_for AS agenda_date
+         FROM training_strategy_items s LEFT JOIN training_agendas a ON a.id = s.agenda_id
+        WHERE s.newsroom_id = $1 ${pub}
+        ORDER BY s.kind, s.target_date NULLS LAST, s.order_index, s.created_at`, [newsroomId]);
     res.json(rows);
   } catch (err) { console.error('[bair-train/strategy:get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 router.post('/strategy', requireRole('admin'), async (req, res) => {
   try {
-    const { newsroom_id, kind, title, detail, effort, payoff, order_index, status } = req.body || {};
+    const { newsroom_id, kind, title, detail, effort, payoff, order_index, status, agenda_id, target_date } = req.body || {};
     if (!newsroom_id || !title) return res.status(400).json({ message: 'newsroom_id, title required' });
     if (kind && !STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
     const { rows } = await pool.query(
-      `INSERT INTO training_strategy_items (newsroom_id, kind, title, detail, effort, payoff, order_index, status, created_by)
-       VALUES ($1,COALESCE($2,'goal'),$3,$4,$5,$6,COALESCE($7,0),COALESCE($8,'draft'),$9) RETURNING *`,
+      `INSERT INTO training_strategy_items (newsroom_id, kind, title, detail, effort, payoff, order_index, status, agenda_id, target_date, created_by)
+       VALUES ($1,COALESCE($2,'goal'),$3,$4,$5,$6,COALESCE($7,0),COALESCE($8,'draft'),$9,$10,$11) RETURNING *`,
       [newsroom_id, kind || null, title, detail || null, cleanSize(effort), cleanSize(payoff),
-       order_index ?? null, status || null, req.user.id]);
-    res.status(201).json(rows[0]);
+       order_index ?? null, status || null, agenda_id || null, target_date || null, req.user.id]);
+    const row = rows[0];
+    const tenant = await tenantContext(req);
+    await syncToRag({ table: 'training_strategy_items', row, tenant, category: 'training_strategy', shouldIngest: row.status === 'published' });
+    res.status(201).json(row);
   } catch (err) { console.error('[bair-train/strategy:post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
@@ -422,26 +577,279 @@ router.put('/strategy/:id', requireRole('admin'), async (req, res) => {
     // but sending the field (incl. empty → null) updates or clears it.
     const hasEffort = Object.prototype.hasOwnProperty.call(b, 'effort');
     const hasPayoff = Object.prototype.hasOwnProperty.call(b, 'payoff');
+    const hasAgenda = Object.prototype.hasOwnProperty.call(b, 'agenda_id');
+    const hasTarget = Object.prototype.hasOwnProperty.call(b, 'target_date');
+    const { agenda_id, target_date } = b;
     const { rows } = await pool.query(
       `UPDATE training_strategy_items SET kind = COALESCE($1,kind), title = COALESCE($2,title),
          detail = COALESCE($3,detail),
          effort = CASE WHEN $4 THEN $5 ELSE effort END,
          payoff = CASE WHEN $6 THEN $7 ELSE payoff END,
-         order_index = COALESCE($8,order_index), status = COALESCE($9,status), updated_at = NOW()
-       WHERE id = $10 RETURNING *`,
+         agenda_id = CASE WHEN $8 THEN $9 ELSE agenda_id END,
+         target_date = CASE WHEN $10 THEN $11 ELSE target_date END,
+         order_index = COALESCE($12,order_index), status = COALESCE($13,status), updated_at = NOW()
+       WHERE id = $14 RETURNING *`,
       [kind || null, title || null, detail ?? null, hasEffort, cleanSize(effort), hasPayoff, cleanSize(payoff),
+       hasAgenda, agenda_id || null, hasTarget, target_date || null,
        order_index ?? null, status || null, req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Strategy item not found' });
-    res.json(rows[0]);
+    const row = rows[0];
+    const tenant = await tenantContext(req);
+    await syncToRag({ table: 'training_strategy_items', row, tenant, category: 'training_strategy', shouldIngest: row.status === 'published' });
+    res.json(row);
   } catch (err) { console.error('[bair-train/strategy:put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 router.delete('/strategy/:id', requireRole('admin'), async (req, res) => {
   try {
-    const { rowCount } = await pool.query('DELETE FROM training_strategy_items WHERE id = $1', [req.params.id]);
-    if (!rowCount) return res.status(404).json({ message: 'Strategy item not found' });
+    const { rows } = await pool.query('DELETE FROM training_strategy_items WHERE id = $1 RETURNING knowledge_id', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ message: 'Strategy item not found' });
+    if (rows[0].knowledge_id) await pool.query('DELETE FROM knowledge_entries WHERE id = $1', [rows[0].knowledge_id]).catch(() => {});
     res.json({ deleted: true });
   } catch (err) { console.error('[bair-train/strategy:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Company knowledge (per-client context the AI reasons over) ───────────────────
+// Uploaded docs, a scraped website, or a typed note. Admin-only; never shown to a
+// client. The extracted text is what the strategy suggestions are grounded in.
+router.get('/company-knowledge', async (req, res) => {
+  try {
+    if (!isAdmin(req)) return res.json([]);   // internal context only
+    const { newsroomId } = await tenantContext(req);
+    // Fetch the full (possibly encrypted) text and decrypt in memory — we can't
+    // SQL-truncate ciphertext, so the snippet is built after decryption.
+    const { rows } = await pool.query(
+      `SELECT id, kind, title, url, file_id, extracted_text, created_at
+         FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]);
+    res.json(rows.map((r) => {
+      const text = decryptFor(newsroomId, r.extracted_text) || '';
+      return { id: r.id, kind: r.kind, title: r.title, url: r.url, file_id: r.file_id, created_at: r.created_at, snippet: text.slice(0, 220), has_text: text.length > 0 };
+    }));
+  } catch (err) { console.error('[bair-train/company-knowledge:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/company-knowledge/website', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroom_id, url } = req.body || {};
+    if (!newsroom_id || !url) return res.status(400).json({ message: 'newsroom_id, url required' });
+    const scraped = await scrapeArticle(url);
+    if (!scraped.success || !scraped.text) return res.status(400).json({ message: `Couldn't read that page${scraped.error ? `: ${scraped.error}` : ''}` });
+    const { rows } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
+       VALUES ($1,'website',$2,$3,$4,$5) RETURNING id, kind, title, url, created_at`,
+      [newsroom_id, scraped.title || url, url, encryptFor(newsroom_id, scraped.text), req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/company-knowledge:website]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/company-knowledge/upload', requireRole('admin'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const { newsroom_id } = req.body || {};
+    if (!newsroom_id) { fs.unlink(req.file.path, () => {}); return res.status(400).json({ message: 'newsroom_id required' }); }
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,'company_knowledge',$6,$7) RETURNING id`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, newsroom_id, req.user.id]);
+    let text = '';
+    try { text = await extractText(req.file.path, req.file.mimetype); } catch (e) { console.error('[company-knowledge extract]', e.message); }
+    const { rows } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by)
+       VALUES ($1,'doc',$2,$3,$4,$5) RETURNING id, kind, title, file_id, created_at`,
+      [newsroom_id, req.file.originalname, doc.id, encryptFor(newsroom_id, (text || '').slice(0, 20000)), req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/company-knowledge:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+router.post('/company-knowledge/note', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroom_id, title, text } = req.body || {};
+    if (!newsroom_id || !text?.trim()) return res.status(400).json({ message: 'newsroom_id and text required' });
+    const { rows } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
+       VALUES ($1,'note',$2,$3,$4) RETURNING id, kind, title, created_at`,
+      [newsroom_id, title || 'Note', encryptFor(newsroom_id, text.trim()), req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[bair-train/company-knowledge:note]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/company-knowledge/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows: [s] } = await pool.query('SELECT file_id FROM beaiready_company_sources WHERE id = $1', [req.params.id]);
+    if (!s) return res.status(404).json({ message: 'Not found' });
+    if (s.file_id) await pool.query('DELETE FROM uploaded_documents WHERE id = $1', [s.file_id]).catch(() => {});
+    await pool.query('DELETE FROM beaiready_company_sources WHERE id = $1', [req.params.id]);
+    res.json({ deleted: true });
+  } catch (err) { console.error('[bair-train/company-knowledge:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Everything the AI knows about this client, as one text blob for prompting.
+async function gatherBusinessContext(newsroomId) {
+  const parts = [];
+  const { rows: [t] } = await pool.query(
+    `SELECT o.name AS org, s.name AS sector FROM newsrooms n
+       LEFT JOIN organisations o ON o.id = n.organisation_id
+       LEFT JOIN sectors s ON s.id = o.sector_id WHERE n.id = $1`, [newsroomId]).catch(() => ({ rows: [{}] }));
+  if (t?.org) parts.push(`Business: ${t.org}${t.sector ? ` (sector: ${t.sector})` : ''}`);
+  const { rows: intake } = await pool.query(
+    `SELECT response FROM intake_responses WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
+  if (intake.length) {
+    const lines = intake.map((r) => Object.entries(r.response || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')).filter(Boolean);
+    parts.push(`Intake / staff survey responses (${intake.length}):\n${lines.join('\n').slice(0, 6000)}`);
+  }
+  const { rows: srcs } = await pool.query(
+    `SELECT kind, title, extracted_text FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC LIMIT 20`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const s of srcs) {
+    const text = decryptFor(newsroomId, s.extracted_text);
+    if (text) parts.push(`[${s.kind}] ${s.title || ''}:\n${text.slice(0, 3000)}`);
+  }
+
+  // What we've actually delivered to this client — the harvested training record.
+  // Agendas (what was planned/run, incl. the PDF/Google-Doc text), training reports
+  // (what happened + recommendations), and the materials themselves (incl. the text
+  // pulled from their handouts). This is the difference between deciding from a real
+  // engagement history and guessing from a survey.
+  const { rows: agendas } = await pool.query(
+    `SELECT a.title, a.scheduled_for, a.doc_synced_text,
+            (SELECT string_agg(
+                      CASE WHEN i.time_label IS NOT NULL THEN i.time_label || ' — ' ELSE '' END || i.topic ||
+                      CASE WHEN i.detail IS NOT NULL THEN ': ' || i.detail ELSE '' END, E'\n' ORDER BY i.order_index)
+               FROM training_agenda_items i WHERE i.agenda_id = a.id) AS items,
+            (SELECT ud.extracted_text FROM uploaded_documents ud WHERE ud.id = a.doc_file_id) AS doc_text
+       FROM training_agendas a WHERE a.newsroom_id = $1
+      ORDER BY a.scheduled_for DESC NULLS LAST LIMIT 12`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const a of agendas) {
+    const body = [a.items, a.doc_synced_text || a.doc_text].filter(Boolean).join('\n');
+    if (a.title || body) parts.push(`Training session — ${a.title || 'session'}${a.scheduled_for ? ` (${new Date(a.scheduled_for).toISOString().slice(0, 10)})` : ''}:\n${body.slice(0, 2500)}`);
+  }
+  const { rows: reports } = await pool.query(
+    `SELECT a.title, ud.original_name, ud.extracted_text
+       FROM uploaded_documents ud JOIN training_agendas a ON a.id = ud.entity_id
+      WHERE ud.entity_type = 'training_report_file' AND a.newsroom_id = $1
+        AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 0
+      ORDER BY ud.created_at DESC LIMIT 10`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const r of reports) parts.push(`Training report (${r.original_name}) for "${r.title}":\n${r.extracted_text.slice(0, 3000)}`);
+  const { rows: mats } = await pool.query(
+    `SELECT m.title, m.content,
+            (SELECT string_agg(ud.extracted_text, E'\n\n' ORDER BY ud.created_at)
+               FROM uploaded_documents ud
+              WHERE ud.entity_type = 'training_material_file' AND ud.entity_id = m.id
+                AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 0) AS file_text
+       FROM training_materials m WHERE m.newsroom_id = $1 ORDER BY m.order_index, m.created_at LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
+  for (const m of mats) {
+    const body = [m.content, m.file_text].filter(Boolean).join('\n');
+    if (body) parts.push(`Training material — ${m.title}:\n${body.slice(0, 2500)}`);
+  }
+
+  const { rows: existing } = await pool.query(
+    `SELECT kind, title FROM training_strategy_items WHERE newsroom_id = $1`, [newsroomId]).catch(() => ({ rows: [] }));
+  if (existing.length) parts.push(`Existing strategy items (do not duplicate):\n${existing.map((e) => `- [${e.kind}] ${e.title}`).join('\n')}`);
+  return parts.join('\n\n').slice(0, 24000);
+}
+
+function parseSuggestions(text) {
+  if (!text) return [];
+  const m = text.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  try { const a = JSON.parse(m[0]); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+
+// Suggest Goals or Automation items from everything we know about the business.
+// Returns suggestions only (not saved) — the consultant adds the ones they want.
+router.post('/strategy/suggest', requireRole('admin'), async (req, res) => {
+  try {
+    const { kind } = req.body || {};
+    if (!STRAT_KINDS.includes(kind)) return res.status(400).json({ message: `kind must be one of: ${STRAT_KINDS.join(', ')}` });
+    const { newsroomId, organisationId, sectorId } = await tenantContext(req);
+    const context = await gatherBusinessContext(newsroomId);
+    if (!context.trim()) return res.json({ suggestions: [], note: 'No company knowledge yet — add intake responses, a website or a doc first.' });
+    const auto = kind === 'automation';
+
+    // Cross-company learning: pull platform-curated guidance + ANONYMISED patterns from
+    // similar (same-sector) businesses. Passing orgId enforces tenant isolation — this
+    // never returns another client's private content, only 'global' + 'pattern' entries.
+    let sectorLessons = '', lessonsUsed = 0;
+    try {
+      const kb = await getRelevantKnowledge({ orgId: organisationId, sectorId, searchTerms: `AI ${auto ? 'automation workflow' : 'goals strategy'} ${context.slice(0, 400)}`, limit: 6 });
+      if (kb && kb.length) {
+        lessonsUsed = kb.length;
+        sectorLessons = '\n\nWhat has worked for similar businesses in this sector (draw on these patterns — adapt, do not copy blindly):\n' +
+          kb.map((k) => `- ${k.title}: ${(k.content || '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n');
+      }
+    } catch (e) { console.error('[strategy:suggest rag]', e.message); }
+
+    const system =
+      'You are an AI strategy consultant for South African SMEs on the Be AI Ready platform. From what is known ' +
+      'about ONE specific business — and the patterns that worked for similar businesses — propose concrete, realistic ' +
+      (auto ? 'automation-roadmap items (specific workflows/tasks to automate with AI).' : 'AI goals (outcomes the business wants from AI).') +
+      ' Ground every suggestion in the provided context — no generic filler. Output ONLY a JSON array, no prose. Each element: ' +
+      (auto ? '{"title": string, "detail": string, "effort": "low"|"medium"|"high", "payoff": "low"|"medium"|"high"}.'
+            : '{"title": string, "detail": string}.') +
+      ' 4–6 items. Do not duplicate the existing items listed.';
+    const userContent = `What we know about this business:\n\n${context}${sectorLessons}\n\nSuggest the ${auto ? 'automation items' : 'goals'} now as a JSON array.`;
+    const raw = await callClaude({ system, userContent, maxTokens: 1400, temperature: 0.5 });
+    const suggestions = parseSuggestions(raw).filter((s) => s && s.title).slice(0, 8);
+    res.json({ suggestions, sector_lessons_used: lessonsUsed });
+  } catch (err) { console.error('[bair-train/strategy:suggest]', err); res.status(500).json({ message: err.message || 'Suggestion failed' }); }
+});
+
+// ── Training-data harvest: extract & index everything, backfill old uploads ───────
+// Resolves every training file (agenda PDF, second doc, report, material handout)
+// to the client that owns it, so status/backfill are tenant-scoped like the rest.
+const HARVEST_FILE_TYPES = ['training_agenda', 'training_agenda_file', 'training_report_file', 'training_material_file'];
+const HARVEST_CTE = `
+  WITH training_files AS (
+    SELECT ud.id, ud.entity_type, ud.entity_id, ud.original_name, ud.mime_type,
+           ud.extracted_text, ud.extraction_status,
+           COALESCE(ta.newsroom_id, tm.newsroom_id) AS newsroom_id
+      FROM uploaded_documents ud
+      LEFT JOIN training_agendas   ta ON ta.id = ud.entity_id
+             AND ud.entity_type IN ('training_agenda','training_agenda_file','training_report_file')
+      LEFT JOIN training_materials tm ON tm.id = ud.entity_id
+             AND ud.entity_type = 'training_material_file'
+     WHERE ud.entity_type = ANY($1)
+  )`;
+
+// How much of this client's training corpus has been harvested into text the AI uses.
+router.get('/harvest/status', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: [c] } = await pool.query(
+      `${HARVEST_CTE}
+       SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE extracted_text IS NOT NULL AND length(extracted_text) > 0)::int AS harvested,
+              COUNT(*) FILTER (WHERE extraction_status = 'failed')::int AS failed,
+              COUNT(*) FILTER (WHERE (extracted_text IS NULL OR length(extracted_text) = 0) AND COALESCE(extraction_status,'pending') <> 'failed')::int AS pending
+         FROM training_files WHERE newsroom_id = $2`,
+      [HARVEST_FILE_TYPES, newsroomId]);
+    res.json(c || { total: 0, harvested: 0, failed: 0, pending: 0 });
+  } catch (err) { console.error('[bair-train/harvest:status]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Backfill: extract text for this client's training files that were uploaded before
+// harvesting existed (or that previously failed), then re-index affected materials.
+router.post('/harvest/backfill', requireRole('admin'), async (req, res) => {
+  try {
+    const tenant = await tenantContext(req);
+    const { rows: pending } = await pool.query(
+      `${HARVEST_CTE}
+       SELECT id, entity_type, entity_id FROM training_files
+        WHERE newsroom_id = $2
+          AND (extracted_text IS NULL OR length(extracted_text) = 0)
+        ORDER BY id LIMIT 100`,
+      [HARVEST_FILE_TYPES, tenant.newsroomId]);
+    let harvested = 0, failed = 0;
+    const materialsToResync = new Set();
+    for (const f of pending) {
+      const text = await harvestFileText(f.id);
+      if (text != null) { harvested++; if (f.entity_type === 'training_material_file') materialsToResync.add(f.entity_id); }
+      else failed++;
+    }
+    for (const mid of materialsToResync) {
+      try { await syncMaterialToRag(mid, tenant); } catch (e) { console.error('[bair-train/harvest:backfill rag]', e.message); }
+    }
+    res.json({ processed: pending.length, harvested, failed, reindexed_materials: materialsToResync.size });
+  } catch (err) { console.error('[bair-train/harvest:backfill]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

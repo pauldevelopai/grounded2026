@@ -2,7 +2,7 @@
 // A coherent map of everything they have: the five productivity metrics, a card
 // per client-facing pillar (each linking to its tool + showing that pillar's
 // recommendations), the live toolbox, and the law/regulation tracker. The fuller
-// training detail (agenda, materials) lives on /dashboard/training and the strategy
+// training detail (agenda, materials) lives on the public /training page and the strategy
 // (goals, automation roadmap, Staff AI Needs) on /dashboard/strategy; this just
 // summarises + links. Real data only, honest empty states; scoped server-side to
 // the caller's own tenant.
@@ -19,14 +19,19 @@ const METRICS = [
   ['client_outcomes', 'Client outcomes'],
 ];
 
-// The client-facing pillars, each with the tool it opens.
+// The client-facing pillars, each with the tool it opens — the six-part Be AI Ready
+// model (Paul, 2026-06-24): Knowledge (the foundation, holds the visibility scan +
+// KnowHow), Training, Governance (holds the data-security tools log + acceptable
+// use), Tools, Strategy, Measurement (the productivity metrics + goals).
+// `absorbs` lists legacy recommendation pillar keys this card should also show, so
+// recs authored before the re-map still surface under their new home.
 const PILLARS = [
-  { key: 'visibility', label: 'Visibility', to: '/dashboard/visibility', cta: 'How AI sees your business' },
-  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Build your AI policy' },
-  { key: 'data-security', label: 'Data Security', to: '/dashboard/security', cta: 'Your AI tools & data exposure' },
-  { key: 'productivity', label: 'Productivity', to: '/dashboard/productivity', cta: 'Track productivity' },
-  { key: 'training', label: 'Training', to: '/dashboard/training', cta: 'Agenda & materials' },
-  { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals, automation roadmap & Staff AI Needs' },
+  { key: 'knowledge', label: 'Knowledge', to: '/dashboard/visibility', cta: 'How AI sees your business', absorbs: ['visibility'] },
+  { key: 'training', label: 'Training', to: '/training', cta: 'Agenda & materials' },
+  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Policy, tools log & acceptable use', absorbs: ['data-security'] },
+  { key: 'productivity', label: 'Tools', to: '/toolbox', cta: 'Toolbox, prompts & Nodes' },
+  { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals & automation roadmap' },
+  { key: 'measurement', label: 'Measurement', to: '/dashboard/productivity', cta: 'Goals & productivity' },
 ];
 
 const PRIORITY_STYLE = {
@@ -39,11 +44,13 @@ export default function BusinessDashboard() {
   const [recs, setRecs] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [policy, setPolicy] = useState(undefined);
+  const [insights, setInsights] = useState(null);
 
   useEffect(() => {
     apiFetch('/beaiready/recommendations').then(setRecs).catch(() => setRecs([]));
     apiFetch('/beaiready/metrics').then(setMetrics).catch(() => setMetrics([]));
     apiFetch('/beaiready/policy').then(setPolicy).catch(() => setPolicy(null));
+    apiFetch('/beaiready/insights/mine').then(setInsights).catch(() => setInsights([]));
   }, []);
 
   const metricVal = (key) => {
@@ -82,7 +89,7 @@ export default function BusinessDashboard() {
       <div className="hub-section-label" id="pillars">Your pillars</div>
       <section className="hub-grid" style={{ marginBottom: 28 }}>
         {PILLARS.map((p) => {
-          const list = recsFor(p.key);
+          const list = recsFor(p.key, ...(p.absorbs || []));
           return (
             <div key={p.key} className="hub-card hub-card-section" style={{ '--accent': '#c75b39' }}>
               <div className="hub-card-kicker">{p.label}</div>
@@ -117,6 +124,52 @@ export default function BusinessDashboard() {
         })}
       </section>
 
+      {/* ── Team AI workspace — the pooled, knowledge-grounded company AI ── */}
+      <div className="hub-section-label">Team AI workspace</div>
+      <section className="hub-band" style={{ marginBottom: 24, background: '#fbf7f4', border: '1px solid #eaddd3' }}>
+        <p style={{ margin: 0 }}>
+          Your team's shared AI — ask anything, grounded in your own knowledge, and every answer is pooled so the
+          business builds on it instead of losing it. <Link to="/dashboard/workspace">Open the workspace →</Link>
+        </p>
+      </section>
+
+      {/* ── Your documents — a member's private extraction space (Tier 1) ── */}
+      <div className="hub-section-label">Your documents</div>
+      <section className="hub-band" style={{ marginBottom: 24 }}>
+        <p style={{ margin: 0 }}>
+          Drop in a contract, report or spreadsheet and get the text, a plain‑language summary and the key
+          facts pulled out — private to you. <Link to="/dashboard/extraction">Open your documents →</Link>
+        </p>
+      </section>
+
+      {/* ── KnowHow — Tier-1 personal base + the company-grounded new-staff coach ── */}
+      <div className="hub-section-label">KnowHow</div>
+      <section className="hub-band" style={{ marginBottom: 24, background: '#fbf7f4', border: '1px solid #eaddd3' }}>
+        <p style={{ margin: 0 }}>
+          Build your own knowledge &amp; workflows, and let new staff learn the ropes from a coach grounded in your
+          company's shared know‑how. <Link to="/dashboard/knowhow">My knowledge &amp; workflows →</Link> · <Link to="/dashboard/coach">New‑staff coach →</Link>
+        </p>
+      </section>
+
+      {/* ── What works for businesses like yours — anonymised cross-business patterns ── */}
+      {insights && insights.length > 0 && (
+        <>
+          <div className="hub-section-label">What works for businesses like yours</div>
+          <p style={{ color: '#8a8076', fontSize: 13, margin: '-2px 0 10px', maxWidth: '64ch' }}>
+            Patterns learned across similar businesses that chose to share — anonymised, never traceable to any one company.
+          </p>
+          <section style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
+            {insights.slice(0, 5).map((it) => (
+              <div key={it.id} style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 10, padding: '12px 14px' }}>
+                <strong style={{ fontSize: 14 }}>{it.title}</strong>
+                <p style={{ fontSize: 13, color: '#5b5249', margin: '4px 0 0', lineHeight: 1.5 }}>{it.insight}</p>
+                <div style={{ fontSize: 11, color: '#a89e92', marginTop: 4 }}>from {it.supporting_orgs} similar businesses</div>
+              </div>
+            ))}
+          </section>
+        </>
+      )}
+
       {/* ── Toolbox + roadmap ── */}
       <div className="hub-section-label">Active AI toolbox</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>
@@ -134,13 +187,6 @@ export default function BusinessDashboard() {
         </p>
       </section>
 
-      <div className="hub-section-label">On the roadmap</div>
-      <section className="hub-band" style={{ background: '#f4f1ec' }}>
-        <p style={{ margin: 0 }}>
-          <strong>BetterBoss</strong> — clone a senior leader's expertise to coach your team.
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#8a8076' }}>Coming soon</span>
-        </p>
-      </section>
     </div>
   );
 }
