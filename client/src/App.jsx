@@ -96,6 +96,8 @@ import BusinessStrategy from './pages/beaiready/BusinessStrategy.jsx';
 import BusinessWorkspace from './pages/beaiready/BusinessWorkspace.jsx';
 import BusinessStaffNeeds from './pages/beaiready/BusinessStaffNeeds.jsx';
 import BusinessExtraction from './pages/beaiready/BusinessExtraction.jsx';
+import BusinessKnowHow from './pages/beaiready/BusinessKnowHow.jsx';
+import BusinessCoach from './pages/beaiready/BusinessCoach.jsx';
 import BeAIReadyPrompts from './pages/beaiready/BeAIReadyPrompts.jsx';
 import BeAIReadyMyPrompts from './pages/beaiready/BeAIReadyMyPrompts.jsx';
 import BairShell from './pages/bair/BairShell.jsx';
@@ -327,6 +329,8 @@ export default function App() {
                 <Route path="/dashboard/workspace" element={<BusinessWorkspace />} />
                 <Route path="/dashboard/staff-needs" element={<BusinessStaffNeeds />} />
                 <Route path="/dashboard/extraction" element={<BusinessExtraction />} />
+                <Route path="/dashboard/knowhow" element={<BusinessKnowHow />} />
+                <Route path="/dashboard/coach" element={<BusinessCoach />} />
                 <Route path="/dashboard/prompts" element={<BeAIReadyPrompts mode="library" />} />
                 <Route path="/dashboard/prompts/:id" element={<BeAIReadyPrompts mode="detail" />} />
                 <Route path="/dashboard/my-prompts" element={<BeAIReadyMyPrompts />} />

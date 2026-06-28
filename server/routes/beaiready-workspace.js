@@ -10,9 +10,36 @@ import pool from '../db/pool.js';
 import { resolveNewsroomId, OFFICE_NEWSROOM_ID } from '../lib/tenancy.js';
 import { askCompanyAI } from '../services/company-ai.js';
 import { createKnowledgeEntry } from '../services/knowledge.js';
+import { ensureKnowhowTenantForNewsroom, ensureKnowhowPerson } from '../knowhow/identity.js';
+import { addCorpusItem } from '../knowhow/corpus.js';
 
 const router = Router();
 const isAdmin = (req) => req.user?.role === 'admin';
+
+// 3.2 — A pooled answer the team marks USEFUL accrues to the asker's private Tier-1
+// KnowHow base (origin='interaction', tier defaults to 'individual'). This is how KnowHow
+// grows from people's own use, not only from questions sent to them. Private to the asker
+// until an admin promotes it (Gate 1); idempotent (one Tier-1 row per interaction).
+async function captureUsefulInteraction(newsroomId, it) {
+  if (!it.user_id) return;                         // anonymous ask — no personal base to accrue to
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [n] } = await client.query('SELECT name FROM newsrooms WHERE id = $1', [newsroomId]);
+    const tenantId = await ensureKnowhowTenantForNewsroom(client, { newsroomId, name: n?.name });
+    const { rows: dup } = await client.query(
+      "SELECT 1 FROM knowhow.corpus_items WHERE tenant_id = $1 AND origin = 'interaction' AND origin_id = $2 LIMIT 1",
+      [tenantId, it.id]);
+    if (!dup.length) {
+      const { rows: [tm] } = await client.query('SELECT name FROM team_members WHERE id = $1', [it.user_id]);
+      const personId = await ensureKnowhowPerson(client, { tenantId, teamMemberId: it.user_id, name: tm?.name });
+      const text = `Q: ${it.question}\nA: ${it.answer || ''}`.slice(0, 8000);
+      await addCorpusItem(client, { tenant_id: tenantId, person_id: personId, origin: 'interaction', origin_id: it.id, text, consent_ok: false });
+    }
+    await client.query('COMMIT');
+  } catch (e) { await client.query('ROLLBACK'); console.error('[workspace/pin capture]', e.message); }
+  finally { client.release(); }
+}
 
 async function tenant(req) {
   const newsroomId = await resolveNewsroomId(req);
@@ -62,10 +89,12 @@ router.post('/interactions/:id/pin', async (req, res) => {
   try {
     const { newsroomId } = await tenant(req);
     const { rows } = await pool.query(
-      `UPDATE bair_interactions SET is_pinned = NOT is_pinned WHERE id = $1 AND newsroom_id = $2 RETURNING id, is_pinned`,
+      `UPDATE bair_interactions SET is_pinned = NOT is_pinned WHERE id = $1 AND newsroom_id = $2
+       RETURNING id, is_pinned, question, answer, user_id`,
       [req.params.id, newsroomId]);
     if (!rows.length) return res.status(404).json({ message: 'Not found' });
-    res.json(rows[0]);
+    if (rows[0].is_pinned) await captureUsefulInteraction(newsroomId, rows[0]);   // useful → accrue to Tier 1
+    res.json({ id: rows[0].id, is_pinned: rows[0].is_pinned });
   } catch (err) { console.error('[workspace/pin]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 

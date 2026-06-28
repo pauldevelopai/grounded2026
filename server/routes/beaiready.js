@@ -336,10 +336,15 @@ router.post('/policy/generate', async (req, res) => {
     const businessName = body.businessName || tName || '';
     const sector = body.sector || tSector || '';
     const aiUses = body.aiUses || '';
-    // Auto-grounding is for the tenant's OWN policy (empty/light body). If the caller
-    // names a different business explicitly, respect that override and don't inject
-    // this tenant's identity/intake — it would contradict the brief.
-    const known = (!body.businessName && knownLines.length)
+    // Auto-grounding is for the tenant's OWN policy. Suppress it ONLY when the caller
+    // names a DIFFERENT business than this tenant (an explicit override for someone
+    // else) — injecting this tenant's identity/intake would then contradict the brief.
+    // If they leave it blank, OR type their own business name, keep the grounding so an
+    // L2B member who fills in "Leads 2 Business" still gets a policy specific to them.
+    const overrideName = (body.businessName || '').trim();
+    const namesOwnBusiness = overrideName && tName && overrideName.toLowerCase() === tName.trim().toLowerCase();
+    const suppressGrounding = overrideName && !namesOwnBusiness;
+    const known = (!suppressGrounding && knownLines.length)
       ? `\n\nWHAT WE KNOW ABOUT THIS BUSINESS (ground the policy in this — be specific to them, never generic):\n${knownLines.join('\n')}`
       : '';
 

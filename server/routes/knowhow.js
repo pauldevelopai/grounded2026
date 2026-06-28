@@ -225,6 +225,79 @@ router.post('/tenants/:tid/responses/:rid/promote', wrap(async (req, res) => {
      VALUES ($1,'note',$2,$3,$4) RETURNING id`,
     [t.newsroom_id, title, encryptFor(t.newsroom_id, r.body), req.user.id]);
   await pool.query('UPDATE knowhow.responses SET promoted_source_id = $1 WHERE id = $2', [src.id, r.id]);
+  // Lift the response's Tier-1 corpus row(s) to company tier so the new-staff coach sees it.
+  await pool.query("UPDATE knowhow.corpus_items SET tier = 'company' WHERE origin = 'response' AND origin_id = $1 AND tenant_id = $2", [r.id, t.id]);
+  res.json({ source_id: src.id });
+}));
+
+// ── Gate-1 promotion of pooled interactions + authored workflows (admin-led) ──
+// The same deliberate consultant act as response promotion, extended so the company tier
+// can also draw on (a) workspace exchanges the team marked useful and (b) authored
+// workflows. Each writes ONE durable, encrypted company-knowledge source (read by the
+// workspace, strategy AI and new-staff coach), flips the source row to company tier, and
+// is idempotent. Stays admin-only (this whole router is requireRole('admin')).
+// TODO: self-promote is a future, consent-gated option — deliberately not enabled here.
+
+// Promotable Tier-1 interactions captured for this tenant.
+router.get('/tenants/:tid/interactions', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  const { rows } = await pool.query(
+    `SELECT c.id, c.text, c.tier, c.created_at, p.name AS person_name
+       FROM knowhow.corpus_items c LEFT JOIN knowhow.people p ON p.id = c.person_id
+      WHERE c.tenant_id = $1 AND c.origin = 'interaction'
+      ORDER BY c.created_at DESC LIMIT 100`, [t.id]);
+  res.json(rows);
+}));
+
+// Promote a captured interaction (a Tier-1 corpus item) into company knowledge.
+router.post('/tenants/:tid/corpus/:cid/promote', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  if (!t.newsroom_id) return res.status(400).json({ message: 'Link this KnowHow tenant to a client first.' });
+  const { rows: [c] } = await pool.query(
+    'SELECT id, text, tier FROM knowhow.corpus_items WHERE id = $1 AND tenant_id = $2', [req.params.cid, t.id]);
+  if (!c) return res.status(404).json({ message: 'Item not found' });
+  if (c.tier === 'company') return res.json({ already: true });
+  if (!c.text || !c.text.trim()) return res.status(400).json({ message: 'Empty item — nothing to promote.' });
+  const title = `KnowHow — ${c.text.replace(/\s+/g, ' ').slice(0, 80)}`;
+  const { rows: [src] } = await pool.query(
+    `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
+     VALUES ($1,'note',$2,$3,$4) RETURNING id`,
+    [t.newsroom_id, title, encryptFor(t.newsroom_id, c.text), req.user.id]);
+  await pool.query("UPDATE knowhow.corpus_items SET tier = 'company' WHERE id = $1", [c.id]);
+  res.json({ source_id: src.id });
+}));
+
+// Workflows captured for this tenant (any tier).
+router.get('/tenants/:tid/workflows', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  const { rows } = await pool.query(
+    `SELECT w.id, w.title, w.steps, w.tier, w.created_at, p.name AS person_name
+       FROM knowhow.workflows w LEFT JOIN knowhow.people p ON p.id = w.person_id
+      WHERE w.tenant_id = $1 ORDER BY w.created_at DESC LIMIT 100`, [t.id]);
+  res.json(rows);
+}));
+
+// Promote a workflow: serialise its ordered steps into a durable source AND flip it to
+// company tier so the coach can walk a hire through it.
+router.post('/tenants/:tid/workflows/:wid/promote', wrap(async (req, res) => {
+  const t = await tenant(req.params.tid);
+  if (!t) return res.status(404).json({ message: 'Unknown tenant' });
+  if (!t.newsroom_id) return res.status(400).json({ message: 'Link this KnowHow tenant to a client first.' });
+  const { rows: [w] } = await pool.query(
+    'SELECT id, title, steps, tier, promoted_source_id FROM knowhow.workflows WHERE id = $1 AND tenant_id = $2',
+    [req.params.wid, t.id]);
+  if (!w) return res.status(404).json({ message: 'Workflow not found' });
+  if (w.promoted_source_id || w.tier === 'company') return res.json({ already: true, source_id: w.promoted_source_id });
+  const steps = Array.isArray(w.steps) ? w.steps : [];
+  const text = `Workflow: ${w.title}\n` + steps.map((s, i) => `${i + 1}. ${s.step || ''}${s.detail ? ` — ${s.detail}` : ''}`).join('\n');
+  const { rows: [src] } = await pool.query(
+    `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
+     VALUES ($1,'note',$2,$3,$4) RETURNING id`,
+    [t.newsroom_id, `Workflow — ${w.title}`.slice(0, 160), encryptFor(t.newsroom_id, text), req.user.id]);
+  await pool.query("UPDATE knowhow.workflows SET tier = 'company', promoted_source_id = $1, updated_at = NOW() WHERE id = $2", [src.id, w.id]);
   res.json({ source_id: src.id });
 }));
 
