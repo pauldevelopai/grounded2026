@@ -13,6 +13,8 @@ import { providerStatus, getModelConfig, saveModelConfig, saveProviderSecret, FU
 import fs from 'node:fs';
 import { upload } from '../middleware/upload.js';
 import { processUpload } from '../services/document-processor.js';
+import { getRelevantKnowledge } from '../services/knowledge.js';
+import { ingestGovernanceDocument } from '../services/governance-ingest.js';
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -478,13 +480,14 @@ router.get('/security/inventory', async (req, res) => {
 router.post('/security/inventory', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const { tool_name, used_by, data_shared } = req.body || {};
+    const { tool_name, used_by, data_shared, purpose, owner_person, paid_free, lifecycle_status } = req.body || {};
     if (!tool_name || !tool_name.trim()) return res.status(400).json({ message: 'tool_name required' });
     const match = await matchTool(tool_name);
     const { rows } = await pool.query(
-      `INSERT INTO ai_tool_inventory (newsroom_id, tool_name, used_by, data_shared, matched_tool_id)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [newsroomId, tool_name.trim(), used_by || null, data_shared || null, match?.id || null]
+      `INSERT INTO ai_tool_inventory (newsroom_id, tool_name, used_by, data_shared, matched_tool_id, purpose, owner_person, paid_free, lifecycle_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [newsroomId, tool_name.trim(), used_by || null, data_shared || null, match?.id || null,
+       purpose || null, owner_person || null, paid_free || null, lifecycle_status || null]
     );
     res.status(201).json({ ...rows[0], matched_name: match?.name || null });
   } catch (err) { console.error('[beaiready/inv/post]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -493,14 +496,20 @@ router.post('/security/inventory', async (req, res) => {
 router.put('/security/inventory/:id', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const { used_by, data_shared, acceptability, ruling, fix } = req.body || {};
+    const { used_by, data_shared, acceptability, ruling, fix,
+            purpose, owner_person, paid_free, lifecycle_status, risk_tier } = req.body || {};
     const { rows } = await pool.query(
       `UPDATE ai_tool_inventory SET
          used_by = COALESCE($1, used_by), data_shared = COALESCE($2, data_shared),
          acceptability = COALESCE($3, acceptability), ruling = COALESCE($4, ruling),
-         fix = COALESCE($5, fix), updated_at = NOW()
-       WHERE id = $6 AND newsroom_id = $7 RETURNING *`,
-      [used_by ?? null, data_shared ?? null, acceptability ?? null, ruling ?? null, fix ?? null, req.params.id, newsroomId]
+         fix = COALESCE($5, fix), purpose = COALESCE($6, purpose),
+         owner_person = COALESCE($7, owner_person), paid_free = COALESCE($8, paid_free),
+         lifecycle_status = COALESCE($9, lifecycle_status), risk_tier = COALESCE($10, risk_tier),
+         updated_at = NOW()
+       WHERE id = $11 AND newsroom_id = $12 RETURNING *`,
+      [used_by ?? null, data_shared ?? null, acceptability ?? null, ruling ?? null, fix ?? null,
+       purpose ?? null, owner_person ?? null, paid_free ?? null, lifecycle_status ?? null, risk_tier ?? null,
+       req.params.id, newsroomId]
     );
     if (!rows.length) return res.status(404).json({ message: 'not found' });
     res.json(rows[0]);
@@ -551,6 +560,102 @@ Data the business puts into it: ${it.data_shared || 'unspecified'}`;
     );
     res.json(upd[0]);
   } catch (err) { console.error('[beaiready/inv/assess]', err); res.status(500).json({ message: err.message || 'Assessment failed' }); }
+});
+
+// ── Governance · EU AI Act risk classification (GROUNDED + CITED) ────────────
+// Classify one register system's risk tier, grounded in the global 'ai_governance'
+// corpus and citing the sources used. If the corpus has nothing relevant, still
+// classify but flag it ungrounded ("verify") — never fabricate a citation.
+const RISK_TIERS = ['unacceptable', 'high', 'limited', 'minimal'];
+router.post('/security/inventory/:id/classify', async (req, res) => {
+  try {
+    const { newsroomId, organisationId, sectorId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      'SELECT * FROM ai_tool_inventory WHERE id = $1 AND newsroom_id = $2',
+      [req.params.id, newsroomId]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'not found' });
+    const it = rows[0];
+
+    // Retrieve grounding from the global governance corpus, ranked to this system.
+    const searchTerms = [it.tool_name, it.purpose, it.data_shared, 'EU AI Act risk tier'].filter(Boolean).join(' ');
+    const sources = await getRelevantKnowledge({
+      categories: ['ai_governance'], orgId: organisationId, sectorId, searchTerms, limit: 6,
+    }).catch(() => []);
+    const grounded = sources.length > 0;
+    const sourceBlock = grounded
+      ? sources.map((s, i) => `[${i + 1}] ${s.title}: ${(s.content || '').slice(0, 500)}`).join('\n\n')
+      : '';
+
+    const system = `You classify an AI system's risk tier under the EU AI Act four-level model: "unacceptable", "high", "limited", or "minimal". ${
+      grounded
+        ? 'Ground your reasoning ONLY in the numbered SOURCES provided and cite the source numbers you used.'
+        : 'No governance sources are available; classify from general principles and return "cited": [].'
+    } Return ONLY a single-line JSON object:
+{"risk_tier":"unacceptable"|"high"|"limited"|"minimal","rationale":"one or two plain sentences — the why","cited":[source numbers used]}
+This is generated guidance, not legal advice — verify with counsel.`;
+    const userContent = `AI SYSTEM
+Name: ${it.tool_name}
+Purpose: ${it.purpose || '(unspecified)'}
+Data it touches: ${it.data_shared || '(unspecified)'}
+Used by: ${it.used_by || '(unspecified)'}${grounded ? `\n\nSOURCES\n${sourceBlock}` : ''}`;
+
+    const raw = String(await callClaude({ system, userContent, maxTokens: 600, temperature: 0 }));
+    let out = {};
+    const a = raw.indexOf('{'), b = raw.lastIndexOf('}');
+    if (a >= 0 && b > a) { try { out = JSON.parse(raw.slice(a, b + 1)); } catch { /* keep defaults */ } }
+    const tier = RISK_TIERS.includes(out.risk_tier) ? out.risk_tier : 'unclassified';
+    const citations = grounded && Array.isArray(out.cited)
+      ? out.cited.map((n) => sources[n - 1]).filter(Boolean).map((s) => ({ id: s.id, title: (s.title || '').replace(/ — part \d+\/\d+$/, ''), url: s.source_description || null }))
+      : [];
+
+    const { rows: upd } = await pool.query(
+      `UPDATE ai_tool_inventory SET risk_tier=$1, risk_rationale=$2, risk_citations=$3::jsonb,
+         risk_grounded=$4, last_reviewed=NOW(), updated_at=NOW()
+       WHERE id=$5 AND newsroom_id=$6 RETURNING *`,
+      [tier, out.rationale || null, JSON.stringify(citations), grounded, req.params.id, newsroomId]
+    );
+    // 'unacceptable' AI must be stopped, not managed (manual). Surface it loudly; the
+    // auto-creation of a bair.finding is wired in Phase 6, where audit linkage exists.
+    res.json({ ...upd[0], grounded, citations, stop: tier === 'unacceptable' });
+  } catch (err) { console.error('[beaiready/inv/classify]', err); res.status(500).json({ message: err.message || 'Classification failed' }); }
+});
+
+// ── Governance Knowledge Engine · admin corpus (global, shared across tenants) ─
+// Ingest a governance document (regulation / framework / guidance / report) into the
+// global 'ai_governance' corpus — chunked + embedded — so every tenant's governance
+// AI grounds + cites against it. Admin-only.
+router.post('/admin/governance/ingest', requireRole('admin'), async (req, res) => {
+  try {
+    const { title, text, framework, jurisdiction, sourceUrl } = req.body || {};
+    if (!title || !title.trim() || !text || !text.trim()) {
+      return res.status(400).json({ message: 'title and text are required' });
+    }
+    const result = await ingestGovernanceDocument({
+      title: title.trim(), text, framework: framework || null,
+      jurisdiction: jurisdiction || null, sourceUrl: sourceUrl || null,
+    });
+    res.status(201).json(result);
+  } catch (err) { console.error('[beaiready/gov/ingest]', err); res.status(500).json({ message: err.message || 'Ingest failed' }); }
+});
+
+// List the governance corpus, grouped by source document. Admin-only.
+router.get('/admin/governance/corpus', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(parent_document_id::text, id::text) AS document_id,
+              MIN(split_part(title, ' — part', 1)) AS title,
+              MIN(framework) AS framework, MIN(jurisdiction) AS jurisdiction,
+              MIN(source_description) AS source, COUNT(*)::int AS chunks,
+              bool_and(embedding IS NOT NULL) AS embedded,
+              MAX(created_at) AS created_at
+         FROM knowledge_entries
+        WHERE category = 'ai_governance' AND is_active = true
+        GROUP BY COALESCE(parent_document_id::text, id::text)
+        ORDER BY MAX(created_at) DESC`
+    );
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/gov/corpus]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── Admin · manage client businesses (each business = one tenant/login) ─────

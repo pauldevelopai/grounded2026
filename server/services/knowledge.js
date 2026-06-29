@@ -49,7 +49,7 @@ async function hybridVectorSearch({ queryEmbedding, searchTerms, categories, sec
 
   const query = `
     SELECT ke.id, ke.category, ke.title, ke.content, ke.confidence, ke.is_verified,
-      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id, ke.visibility,
+      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id, ke.visibility, ke.source_description,
       CASE WHEN ke.embedding IS NOT NULL THEN 1 - (ke.embedding <=> $1::vector) ELSE 0 END AS vector_score,
       ts_rank(to_tsvector('english', coalesce(ke.title, '') || ' ' || coalesce(ke.content, '')), plainto_tsquery('english', $2)) AS text_score
     FROM knowledge_entries ke
@@ -101,7 +101,7 @@ async function textSearch({ searchTerms, categories, sectorId, orgId, courseId, 
 
   const query = `
     SELECT ke.id, ke.category, ke.title, ke.content, ke.confidence, ke.is_verified,
-      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id, ke.visibility,
+      ke.usage_count, ke.sector_id, ke.organisation_id, ke.course_id, ke.visibility, ke.source_description,
       ${rankSelect}
     FROM knowledge_entries ke
     WHERE ${conditions.join(' AND ')}
@@ -221,15 +221,17 @@ export async function recordInteraction({ interactionType, sectorId, entityType,
 /**
  * Create a knowledge entry from any source.
  */
-export async function createKnowledgeEntry({ category, subcategory, title, content, sectorId, organisationId, courseId, sourceType, sourceId, sourceDescription, confidence, tags, visibility }) {
+export async function createKnowledgeEntry({ category, subcategory, title, content, sectorId, organisationId, courseId, sourceType, sourceId, sourceDescription, confidence, tags, visibility, parentDocumentId, chunkIndex, framework, jurisdiction, isVerified }) {
   // Default visibility from scope: org-scoped entries are private to that org; entries
   // with no org are platform-curated ('global'). Anonymised cross-business patterns
   // pass visibility:'pattern' explicitly. Raw client content must pass an organisationId.
   const vis = visibility || (organisationId ? 'private' : 'global');
+  // parent_document_id/chunk_index group a chunked document (governance corpus, mig 123);
+  // framework/jurisdiction are governance taxonomy tags. All optional + backward-compatible.
   const { rows } = await pool.query(
-    `INSERT INTO knowledge_entries (category, subcategory, title, content, sector_id, organisation_id, course_id, source_type, source_id, source_description, confidence, visibility)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
-    [category, subcategory || null, title, content, sectorId || null, organisationId || null, courseId || null, sourceType, sourceId || null, sourceDescription || null, confidence || 0.5, vis]
+    `INSERT INTO knowledge_entries (category, subcategory, title, content, sector_id, organisation_id, course_id, source_type, source_id, source_description, confidence, visibility, parent_document_id, chunk_index, framework, jurisdiction, is_verified)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+    [category, subcategory || null, title, content, sectorId || null, organisationId || null, courseId || null, sourceType, sourceId || null, sourceDescription || null, confidence || 0.5, vis, parentDocumentId || null, (chunkIndex ?? null), framework || null, jurisdiction || null, (isVerified ?? false)]
   );
   const knowledgeId = rows[0].id;
 
