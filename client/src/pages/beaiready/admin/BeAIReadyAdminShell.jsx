@@ -14,6 +14,7 @@ const NAV = [
   { to: '/admin/tools', label: 'Toolbox' },
   { to: '/admin/nodes', label: 'Nodes' },
   { to: '/admin/tracker', label: 'Tracker review' },
+  { to: '/admin/governance', label: 'Governance corpus' },
   { to: '/admin/training', label: 'Training' },
   { to: '/admin/strategy', label: 'Strategy' },
   { to: '/admin/insights', label: 'Insight' },

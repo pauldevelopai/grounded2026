@@ -621,6 +621,39 @@ Used by: ${it.used_by || '(unspecified)'}${grounded ? `\n\nSOURCES\n${sourceBloc
   } catch (err) { console.error('[beaiready/inv/classify]', err); res.status(500).json({ message: err.message || 'Classification failed' }); }
 });
 
+// ── Discovery (manual Phase 1): seed the register from the staff survey ───────
+// Surface candidate AI systems from the tenant's OWN intake-survey responses, so the
+// register is populated from what staff actually reported (the manual's shadow-AI
+// discovery) rather than only typed by hand. Reads private intake_responses, extracts
+// with Claude; the caller then adds the real ones. Suggestions are NOT saved, and this
+// uses the org's own data only (never the shared corpus).
+router.get('/security/discover', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      'SELECT response FROM intake_responses WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 50',
+      [newsroomId]
+    );
+    if (!rows.length) return res.json({ responses: 0, suggestions: [] });
+    const text = rows
+      .map((r) => Object.entries(r.response || {}).map(([k, v]) => `${k}: ${v}`).join(' | '))
+      .filter(Boolean).join('\n').slice(0, 8000);
+    const { rows: ex } = await pool.query('SELECT lower(tool_name) AS n FROM ai_tool_inventory WHERE newsroom_id = $1', [newsroomId]);
+    const have = new Set(ex.map((r) => r.n));
+    const system = `From staff survey responses, extract the distinct AI tools/systems the business actually uses. For each, infer a short purpose, who uses it, and what data goes in — only where stated or strongly implied. Do NOT invent tools that aren't mentioned. Return ONLY a single-line JSON array:
+[{"tool_name":"...","purpose":"...","used_by":"...","data_shared":"..."}]
+Return an empty array [] if no specific AI tools are named.`;
+    const raw = String(await callClaude({ system, userContent: `STAFF SURVEY RESPONSES:\n${text}`, maxTokens: 800, temperature: 0 }));
+    let arr = [];
+    const a = raw.indexOf('['), b = raw.lastIndexOf(']');
+    if (a >= 0 && b > a) { try { arr = JSON.parse(raw.slice(a, b + 1)); } catch { /* keep [] */ } }
+    const suggestions = (Array.isArray(arr) ? arr : [])
+      .filter((s) => s && s.tool_name && !have.has(String(s.tool_name).toLowerCase().trim()))
+      .map((s) => ({ tool_name: String(s.tool_name).slice(0, 120), purpose: s.purpose || '', used_by: s.used_by || '', data_shared: s.data_shared || '' }));
+    res.json({ responses: rows.length, suggestions });
+  } catch (err) { console.error('[beaiready/security/discover]', err); res.status(500).json({ message: err.message || 'Discovery failed' }); }
+});
+
 // ── Governance Knowledge Engine · admin corpus (global, shared across tenants) ─
 // Ingest a governance document (regulation / framework / guidance / report) into the
 // global 'ai_governance' corpus — chunked + embedded — so every tenant's governance

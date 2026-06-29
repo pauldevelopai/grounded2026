@@ -34,6 +34,8 @@ export default function BusinessSecurity() {
   const [assessing, setAssessing] = useState(null);
   const [classifying, setClassifying] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [suggestions, setSuggestions] = useState(null); // null=not run, []=ran/none, [..]=found
+  const [discovering, setDiscovering] = useState(false);
   const [err, setErr] = useState('');
 
   const load = () => apiFetch('/beaiready/security/inventory').then(setTools).catch((e) => { setErr(e.message); setTools([]); });
@@ -48,6 +50,26 @@ export default function BusinessSecurity() {
     try {
       await apiFetch('/beaiready/security/inventory', { method: 'POST', body: JSON.stringify(form) });
       setForm(blankForm);
+      await load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const discover = async () => {
+    setDiscovering(true); setErr('');
+    try {
+      const r = await apiFetch('/beaiready/security/discover', { timeout: 60000 });
+      if (!r.responses) { setSuggestions([]); setErr('No staff survey responses yet — connect a staff survey under Training first.'); }
+      else setSuggestions(r.suggestions || []);
+    } catch (e) { setErr(e.message); }
+    setDiscovering(false);
+  };
+
+  const addSuggestion = async (s) => {
+    setBusy(true); setErr('');
+    try {
+      await apiFetch('/beaiready/security/inventory', { method: 'POST', body: JSON.stringify(s) });
+      setSuggestions((cur) => (cur || []).filter((x) => x.tool_name !== s.tool_name));
       await load();
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -103,6 +125,34 @@ export default function BusinessSecurity() {
             </button>
           ))}
         </div>
+      )}
+
+      {/* Discover from the staff survey */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button onClick={discover} disabled={discovering} style={btnGhostSmall}>{discovering ? 'Scanning survey…' : '✨ Discover from staff survey'}</button>
+        <span style={{ fontSize: 12, color: '#8a8076' }}>Pull the AI tools your team named in the staff survey into the register.</span>
+      </div>
+      {suggestions && suggestions.length > 0 && (
+        <div className="hub-card" style={{ marginBottom: 18, background: '#fffaf5', border: '1px solid #f0e2d4' }}>
+          <div className="hub-card-kicker">From your staff survey — add the ones that are real</div>
+          <div style={{ display: 'grid', gap: 8, marginTop: 6 }}>
+            {suggestions.map((s, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 0', borderTop: i ? '1px solid #f0e2d4' : 'none' }}>
+                <div style={{ minWidth: 0 }}>
+                  <strong style={{ fontSize: 14 }}>{s.tool_name}</strong>
+                  <div style={{ fontSize: 12.5, color: '#8a8076' }}>{[s.purpose, s.used_by && `used by ${s.used_by}`, s.data_shared && `data: ${s.data_shared}`].filter(Boolean).join(' · ') || '—'}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => addSuggestion(s)} disabled={busy} style={btnSmall}>Add to register</button>
+                  <button onClick={() => setSuggestions((cur) => cur.filter((x) => x.tool_name !== s.tool_name))} style={btnGhostSmall}>Dismiss</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {suggestions && suggestions.length === 0 && !discovering && (
+        <p style={{ fontSize: 12.5, color: '#8a8076', marginBottom: 14 }}>No new AI tools found in the survey responses.</p>
       )}
 
       {/* Add a system */}
