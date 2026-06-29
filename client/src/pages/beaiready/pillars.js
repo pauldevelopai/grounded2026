@@ -57,6 +57,8 @@ export const PILLARS = [
         what: 'A daily-updated feed of AI lawsuits and regulations worldwide — in one place, newest first — the live infrastructure that keeps your governance current.' },
       { name: 'Build your AI policy', status: 'live', dash: '/dashboard/governance', slug: 'ai-policy',
         what: 'A bespoke AI-use policy, generated from a short brief, then edited and owned by you — aligned with POPIA. Lives in your dashboard.' },
+      { name: 'Controls Library', status: 'live', dash: '/dashboard/governance/controls', slug: 'controls-library',
+        what: 'The safeguards your business runs — adopt framework-backed starters, get suggestions grounded in governance sources, and link each control to the AI systems it covers.' },
     ],
   },
   {

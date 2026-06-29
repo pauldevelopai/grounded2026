@@ -21,48 +21,57 @@ const PILLARS = ['visibility', 'governance', 'security', 'productivity', 'capabi
 const PILLAR_ZERO_AT = 25;   // damage points at which a pillar scores 0 — the one tunable knob
 const round2 = (n) => Math.round(n * 100) / 100;
 
+// Recompute an audit's score from its CURRENT, UNRESOLVED findings, persist it, and
+// return the breakdown. Exported so the controls flow can recompute when adopting a
+// control resolves a finding (the finding → control → score chain). Returns null if
+// the audit doesn't exist.
+export async function computeAndSaveScore(auditId) {
+  const { rows: auditRows } = await pool.query('SELECT id, sector_id FROM bair.audits WHERE id = $1', [auditId]);
+  if (!auditRows.length) return null;
+  const { sector_id } = auditRows[0];
+
+  // Each unresolved finding with its resolved weight (sector override → global → 1.0).
+  const { rows } = await pool.query(`
+    SELECT f.pillar, f.severity, COALESCE(w.weight, 1.0) AS weight
+    FROM bair.findings f
+    LEFT JOIN LATERAL (
+      SELECT sw.weight
+      FROM bair.score_weights sw
+      WHERE sw.pillar = f.pillar AND sw.finding_type = f.finding_type
+        AND (sw.sector_id = $2 OR sw.sector_id IS NULL)
+      ORDER BY (sw.sector_id = $2) DESC NULLS LAST,   -- sector-specific first
+               (sw.source = 'learned') DESC            -- learned beats prior
+      LIMIT 1
+    ) w ON true
+    WHERE f.audit_id = $1 AND f.resolved_at IS NULL`,
+    [auditId, sector_id]);
+
+  const damage = {}, counts = {};
+  PILLARS.forEach((p) => { damage[p] = 0; counts[p] = 0; });
+  for (const r of rows) {
+    if (!(r.pillar in damage)) { damage[r.pillar] = 0; counts[r.pillar] = 0; } // defensive: unknown pillar
+    damage[r.pillar] += Number(r.severity) * Number(r.weight);
+    counts[r.pillar] += 1;
+  }
+
+  const pillars = PILLARS.map((p) => ({
+    pillar: p,
+    finding_count: counts[p],
+    damage: round2(damage[p]),
+    score: round2(Math.max(0, 100 * (1 - damage[p] / PILLAR_ZERO_AT))),
+  }));
+  const readiness = round2(pillars.reduce((s, x) => s + x.score, 0) / PILLARS.length);
+
+  await pool.query('UPDATE bair.audits SET readiness_score = $1, updated_at = NOW() WHERE id = $2', [readiness, auditId]);
+  return { audit_id: auditId, readiness_score: readiness, cap: PILLAR_ZERO_AT, pillars };
+}
+
 // POST /:auditId — recompute from current findings, persist, return the breakdown.
 router.post('/:auditId', async (req, res) => {
   try {
-    const { rows: auditRows } = await pool.query('SELECT id, sector_id FROM bair.audits WHERE id = $1', [req.params.auditId]);
-    if (!auditRows.length) return res.status(404).json({ message: 'Audit not found' });
-    const { sector_id } = auditRows[0];
-
-    // Each finding with its resolved weight (sector override → global → 1.0).
-    const { rows } = await pool.query(`
-      SELECT f.pillar, f.severity, COALESCE(w.weight, 1.0) AS weight
-      FROM bair.findings f
-      LEFT JOIN LATERAL (
-        SELECT sw.weight
-        FROM bair.score_weights sw
-        WHERE sw.pillar = f.pillar AND sw.finding_type = f.finding_type
-          AND (sw.sector_id = $2 OR sw.sector_id IS NULL)
-        ORDER BY (sw.sector_id = $2) DESC NULLS LAST,   -- sector-specific first
-                 (sw.source = 'learned') DESC            -- learned beats prior
-        LIMIT 1
-      ) w ON true
-      WHERE f.audit_id = $1`,
-      [req.params.auditId, sector_id]);
-
-    const damage = {}, counts = {};
-    PILLARS.forEach((p) => { damage[p] = 0; counts[p] = 0; });
-    for (const r of rows) {
-      if (!(r.pillar in damage)) { damage[r.pillar] = 0; counts[r.pillar] = 0; } // defensive: unknown pillar
-      damage[r.pillar] += Number(r.severity) * Number(r.weight);
-      counts[r.pillar] += 1;
-    }
-
-    const pillars = PILLARS.map((p) => ({
-      pillar: p,
-      finding_count: counts[p],
-      damage: round2(damage[p]),
-      score: round2(Math.max(0, 100 * (1 - damage[p] / PILLAR_ZERO_AT))),
-    }));
-    const readiness = round2(pillars.reduce((s, x) => s + x.score, 0) / PILLARS.length);
-
-    await pool.query('UPDATE bair.audits SET readiness_score = $1, updated_at = NOW() WHERE id = $2', [readiness, req.params.auditId]);
-
-    res.json({ audit_id: req.params.auditId, readiness_score: readiness, cap: PILLAR_ZERO_AT, pillars });
+    const out = await computeAndSaveScore(req.params.auditId);
+    if (!out) return res.status(404).json({ message: 'Audit not found' });
+    res.json(out);
   } catch (err) { console.error('[bair/score]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 

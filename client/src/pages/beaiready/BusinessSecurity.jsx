@@ -109,6 +109,7 @@ export default function BusinessSecurity() {
       </p>
       <p style={{ marginBottom: 18 }}>
         <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
+        <Link to="/dashboard/governance/controls">Controls library</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance">Your AI policy</Link> &nbsp;·&nbsp;
         <Link to="/tracker">Legal &amp; regulation tracker</Link>
       </p>

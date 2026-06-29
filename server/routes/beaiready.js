@@ -15,6 +15,7 @@ import { upload } from '../middleware/upload.js';
 import { processUpload } from '../services/document-processor.js';
 import { getRelevantKnowledge } from '../services/knowledge.js';
 import { ingestGovernanceDocument } from '../services/governance-ingest.js';
+import { computeAndSaveScore } from './bair-score.js';
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -652,6 +653,167 @@ Return an empty array [] if no specific AI tools are named.`;
       .map((s) => ({ tool_name: String(s.tool_name).slice(0, 120), purpose: s.purpose || '', used_by: s.used_by || '', data_shared: s.data_shared || '' }));
     res.json({ responses: rows.length, suggestions });
   } catch (err) { console.error('[beaiready/security/discover]', err); res.status(500).json({ message: err.message || 'Discovery failed' }); }
+});
+
+// ── Governance · Controls Library (manual Component 3) ───────────────────────
+// The manual's six starter controls — a framework-cited template the client adopts
+// BY CHOICE (never auto-seeded). No fake data: nothing exists until they adopt it.
+const STARTER_CONTROLS = [
+  { key: 'no-pii-public', title: 'No personal or confidential data in public AI tools', applies_to_tier: 'any', framework_ref: 'ISO/IEC 42001 A.8 · NIST AI RMF MANAGE', description: 'Staff may not paste customer personal data or confidential business information into free/public AI tools. Use approved tools for anything sensitive.' },
+  { key: 'human-approval-high', title: 'Human approval for high-risk AI decisions', applies_to_tier: 'high', framework_ref: 'EU AI Act Art. 14 (human oversight) · NIST GOVERN', description: 'A named person must review and approve any AI-influenced decision about a person — hiring, credit, evaluation — before it takes effect.' },
+  { key: 'disclose-customer-ai', title: 'Disclosure on customer-facing AI', applies_to_tier: 'limited', framework_ref: 'EU AI Act Art. 50 (transparency)', description: 'Where customers interact with AI (e.g. a chatbot), tell them clearly they are dealing with an AI system.' },
+  { key: 'approved-tools-list', title: 'Approved-tools list', applies_to_tier: 'any', framework_ref: 'ISO/IEC 42001 A.6 · NIST GOVERN', description: 'Only tools on an approved list may be used for work involving sensitive data, with safe alternatives provided so staff are not forced into workarounds.' },
+  { key: 'log-high-risk-use', title: 'Logging of high-risk AI use', applies_to_tier: 'high', framework_ref: 'EU AI Act Art. 12 (record-keeping) · NIST MEASURE', description: 'Keep a record of what high-risk AI systems were asked to do and what they produced, so decisions can be reviewed after the fact.' },
+  { key: 'new-tool-vetting', title: 'New-tool vetting', applies_to_tier: 'any', framework_ref: 'NIST AI RMF MAP · ISO/IEC 42001 A.6.2', description: 'Before a new AI tool is adopted it goes through a short check against the risk scheme — what data, what risk tier, who owns it.' },
+];
+const CONTROL_TIERS = ['unacceptable', 'high', 'limited', 'minimal', 'any'];
+
+// A control may link to the gap (bair.findings) it closes — but only one in the
+// SAME organisation as the caller's tenant (fact 2: findings are org/audit-keyed,
+// controls newsroom-keyed). Resolve via newsrooms.organisation_id and guard.
+async function findingBelongsToTenant(findingId, organisationId) {
+  if (!findingId) return true;
+  if (!organisationId) return false;
+  const { rows } = await pool.query(
+    'SELECT 1 FROM bair.findings f JOIN bair.audits a ON a.id = f.audit_id WHERE f.id = $1 AND a.organisation_id = $2',
+    [findingId, organisationId]
+  );
+  return rows.length > 0;
+}
+// A finding is resolved iff at least one ACTIVE control closes it; recompute its
+// audit's readiness score after any control change (the finding → control → score chain).
+async function syncFindingResolution(findingId) {
+  if (!findingId) return;
+  const { rows } = await pool.query('SELECT audit_id FROM bair.findings WHERE id = $1', [findingId]);
+  if (!rows.length) return;
+  await pool.query(
+    `UPDATE bair.findings SET resolved_at = CASE
+        WHEN EXISTS (SELECT 1 FROM ai_controls c WHERE c.closes_finding_id = $1 AND c.status = 'active')
+        THEN COALESCE(resolved_at, NOW()) ELSE NULL END
+      WHERE id = $1`, [findingId]
+  );
+  await computeAndSaveScore(rows[0].audit_id).catch((e) => console.error('[controls/score]', e.message));
+}
+// Replace a control's linked systems with the given set (tenant-validated).
+async function setControlSystems(controlId, newsroomId, systemIds) {
+  const { rows } = await pool.query('SELECT id FROM ai_tool_inventory WHERE newsroom_id = $1 AND id = ANY($2::uuid[])', [newsroomId, systemIds]);
+  await pool.query('DELETE FROM ai_system_controls WHERE control_id = $1', [controlId]);
+  for (const sid of rows.map((r) => r.id)) {
+    await pool.query('INSERT INTO ai_system_controls (control_id, system_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [controlId, sid]);
+  }
+}
+
+router.get('/governance/controls', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT c.*,
+              COALESCE(json_agg(json_build_object('id', s.id, 'name', s.tool_name) ORDER BY s.tool_name)
+                       FILTER (WHERE s.id IS NOT NULL), '[]') AS systems
+         FROM ai_controls c
+         LEFT JOIN ai_system_controls sc ON sc.control_id = c.id
+         LEFT JOIN ai_tool_inventory s ON s.id = sc.system_id
+        WHERE c.newsroom_id = $1
+        GROUP BY c.id ORDER BY c.created_at DESC`, [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/controls/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.get('/governance/controls/starters', async (req, res) => res.json(STARTER_CONTROLS));
+
+router.post('/governance/controls/adopt', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const s = STARTER_CONTROLS.find((x) => x.key === (req.body || {}).key);
+    if (!s) return res.status(400).json({ message: 'unknown starter control' });
+    const { rows } = await pool.query(
+      `INSERT INTO ai_controls (newsroom_id, title, description, applies_to_tier, status, framework_ref)
+       VALUES ($1,$2,$3,$4,'active',$5) RETURNING *`,
+      [newsroomId, s.title, s.description, s.applies_to_tier, s.framework_ref]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/controls/adopt]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Grounded + cited control suggestions for a system (or general). Not saved.
+router.post('/governance/controls/suggest', async (req, res) => {
+  try {
+    const { newsroomId, organisationId, sectorId } = await tenantContext(req);
+    const { system_id } = req.body || {};
+    let sys = null;
+    if (system_id) {
+      const { rows } = await pool.query('SELECT * FROM ai_tool_inventory WHERE id = $1 AND newsroom_id = $2', [system_id, newsroomId]);
+      sys = rows[0] || null;
+    }
+    const searchTerms = [sys?.tool_name, sys?.purpose, sys?.data_shared, sys?.risk_tier, 'AI governance controls safeguards'].filter(Boolean).join(' ');
+    const sources = await getRelevantKnowledge({ categories: ['ai_governance'], orgId: organisationId, sectorId, searchTerms, limit: 6 }).catch(() => []);
+    const grounded = sources.length > 0;
+    const sourceBlock = grounded ? sources.map((s, i) => `[${i + 1}] ${s.title}: ${(s.content || '').slice(0, 500)}`).join('\n\n') : '';
+    const system = `You propose concrete, practical AI-governance CONTROLS (safeguards) for a small business${sys ? ' for the AI system described' : ''}. ${grounded ? 'Ground each control in the numbered SOURCES and cite the source numbers used.' : 'No governance sources are available; propose sensible controls and return "cited": [].'} Return ONLY a single-line JSON array of 2–4 items:
+[{"title":"...","description":"one practical sentence","applies_to_tier":"unacceptable|high|limited|minimal|any","framework_ref":"the framework/article","cited":[source numbers used]}]
+This is generated guidance, not legal advice — verify with counsel.`;
+    const userContent = `${sys ? `AI SYSTEM\nName: ${sys.tool_name}\nPurpose: ${sys.purpose || '(unspecified)'}\nData: ${sys.data_shared || '(unspecified)'}\nRisk tier: ${sys.risk_tier || 'unclassified'}` : 'General controls for a small business using AI.'}${grounded ? `\n\nSOURCES\n${sourceBlock}` : ''}`;
+    const raw = String(await callClaude({ system, userContent, maxTokens: 900, temperature: 0.2 }));
+    let arr = []; const a = raw.indexOf('['), b = raw.lastIndexOf(']');
+    if (a >= 0 && b > a) { try { arr = JSON.parse(raw.slice(a, b + 1)); } catch { /* keep [] */ } }
+    const suggestions = (Array.isArray(arr) ? arr : []).map((x) => ({
+      title: String(x.title || '').slice(0, 200),
+      description: x.description || '',
+      applies_to_tier: CONTROL_TIERS.includes(x.applies_to_tier) ? x.applies_to_tier : 'any',
+      framework_ref: x.framework_ref || '',
+      citations: grounded && Array.isArray(x.cited) ? x.cited.map((n) => sources[n - 1]).filter(Boolean).map((s) => ({ title: (s.title || '').replace(/ — part \d+\/\d+$/, ''), url: s.source_description || null })) : [],
+    })).filter((x) => x.title);
+    res.json({ grounded, suggestions });
+  } catch (err) { console.error('[beaiready/controls/suggest]', err); res.status(500).json({ message: err.message || 'Suggestion failed' }); }
+});
+
+router.post('/governance/controls', async (req, res) => {
+  try {
+    const { newsroomId, organisationId } = await tenantContext(req);
+    const { title, description, applies_to_tier, owner_person, status, framework_ref, closes_finding_id, system_ids } = req.body || {};
+    if (!title || !title.trim()) return res.status(400).json({ message: 'title required' });
+    if (closes_finding_id && !(await findingBelongsToTenant(closes_finding_id, organisationId)))
+      return res.status(400).json({ message: 'finding not found for this tenant' });
+    const { rows } = await pool.query(
+      `INSERT INTO ai_controls (newsroom_id, title, description, applies_to_tier, owner_person, status, framework_ref, closes_finding_id)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'active'),$7,$8) RETURNING *`,
+      [newsroomId, title.trim(), description || null, applies_to_tier || null, owner_person || null, status || null, framework_ref || null, closes_finding_id || null]);
+    const control = rows[0];
+    if (Array.isArray(system_ids) && system_ids.length) await setControlSystems(control.id, newsroomId, system_ids);
+    if (control.closes_finding_id) await syncFindingResolution(control.closes_finding_id);
+    res.status(201).json(control);
+  } catch (err) { console.error('[beaiready/controls/post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/governance/controls/:id', async (req, res) => {
+  try {
+    const { newsroomId, organisationId } = await tenantContext(req);
+    const { rows: cur } = await pool.query('SELECT * FROM ai_controls WHERE id = $1 AND newsroom_id = $2', [req.params.id, newsroomId]);
+    if (!cur.length) return res.status(404).json({ message: 'not found' });
+    const prev = cur[0];
+    const b = req.body || {};
+    const nextFinding = b.closes_finding_id === undefined ? prev.closes_finding_id : (b.closes_finding_id || null);
+    if (nextFinding && nextFinding !== prev.closes_finding_id && !(await findingBelongsToTenant(nextFinding, organisationId)))
+      return res.status(400).json({ message: 'finding not found for this tenant' });
+    const { rows } = await pool.query(
+      `UPDATE ai_controls SET title=COALESCE($1,title), description=COALESCE($2,description),
+         applies_to_tier=COALESCE($3,applies_to_tier), owner_person=COALESCE($4,owner_person),
+         status=COALESCE($5,status), framework_ref=COALESCE($6,framework_ref),
+         closes_finding_id=$7, updated_at=NOW()
+       WHERE id=$8 AND newsroom_id=$9 RETURNING *`,
+      [b.title ?? null, b.description ?? null, b.applies_to_tier ?? null, b.owner_person ?? null, b.status ?? null, b.framework_ref ?? null, nextFinding, req.params.id, newsroomId]);
+    if (Array.isArray(b.system_ids)) await setControlSystems(req.params.id, newsroomId, b.system_ids);
+    for (const fid of new Set([prev.closes_finding_id, rows[0].closes_finding_id].filter(Boolean))) await syncFindingResolution(fid);
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready/controls/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/governance/controls/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query('DELETE FROM ai_controls WHERE id = $1 AND newsroom_id = $2 RETURNING closes_finding_id', [req.params.id, newsroomId]);
+    if (rows.length && rows[0].closes_finding_id) await syncFindingResolution(rows[0].closes_finding_id);
+    res.json({ ok: true });
+  } catch (err) { console.error('[beaiready/controls/del]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── Governance Knowledge Engine · admin corpus (global, shared across tenants) ─
