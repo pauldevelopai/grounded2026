@@ -68,8 +68,8 @@ export const PILLARS = [
       'Every interaction with AI is a data decision. Log the AI tools your company actually uses, see what ' +
       'each one collects, and get a clear ruling on what is acceptable — and what to stop.',
     features: [
-      { name: 'Log your company’s AI tools', status: 'live', dash: '/dashboard/security', slug: 'ai-tools-log',
-        what: 'Log every AI tool in use — official and unofficial — and what data goes into each. Auto-matched to our assessed-tools database.' },
+      { name: 'AI System Register & Risk', status: 'live', dash: '/dashboard/security', slug: 'ai-tools-log',
+        what: 'A living register of every AI system — purpose, owner, data, paid/free, lifecycle — with an EU AI Act risk tier for each, classified against live governance sources and cited.' },
       { name: 'What’s acceptable, what isn’t', status: 'live', dash: '/dashboard/security', slug: 'acceptable-use',
         what: 'An acceptability ruling per tool (approved / restricted / avoid) with a prioritised fix — which leaks to plug first, and how.' },
     ],
