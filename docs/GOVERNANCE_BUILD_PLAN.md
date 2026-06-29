@@ -26,6 +26,16 @@
 
 ---
 
+## Status
+
+- **Phase 1 — DONE** (branch `governance-engine-phase1`, not yet merged/deployed). Migrations 122
+  (register fields) + 123 (corpus chunking + governance `prompt_templates`); ingestion spine
+  (`services/governance-ingest.js`, ≤170-word chunks → global corpus); grounded + cited risk-classify
+  endpoint; register CRUD + new fields; **AI System Register & Risk** client page; **admin Governance
+  corpus** page (`/admin/governance`); survey **discovery** (`/security/discover`). Verified in-browser
+  end to end. **Next free migration: 124.**
+- **Phases 2–6** — not started. Phase 2 = Controls Library next.
+
 ## What already exists (reuse, don't rebuild)
 
 **The operational/assessment machinery:**
