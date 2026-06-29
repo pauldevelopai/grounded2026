@@ -33,8 +33,14 @@
   (`services/governance-ingest.js`, ≤170-word chunks → global corpus); grounded + cited risk-classify
   endpoint; register CRUD + new fields; **AI System Register & Risk** client page; **admin Governance
   corpus** page (`/admin/governance`); survey **discovery** (`/security/discover`). Verified in-browser
-  end to end. **Next free migration: 124.**
-- **Phases 2–6** — not started. Phase 2 = Controls Library next.
+  end to end.
+- **Phase 2 — DONE** (same branch). Migration 124 (`ai_controls` + `ai_system_controls` +
+  `bair.findings.resolved_at`); Controls Library CRUD + grounded `/controls/suggest` + six
+  framework-cited starter controls; the **finding → control → score** chain (`computeAndSaveScore`
+  exported from `bair-score.js`, resolved findings excluded; cross-tenant link guarded via
+  `newsrooms.organisation_id`); **Controls Library** client page (`/dashboard/governance/controls`).
+  Verified over HTTP (89.33 → 100 → reopened) + in-browser. **Next free migration: 125.**
+- **Phases 3–6** — not started. Phase 3 = Roles, Review Routine & Incidents next.
 
 ## What already exists (reuse, don't rebuild)
 
