@@ -56,8 +56,16 @@
   reusable `EvidencePanel` wired onto the policy, controls and reviews. The "show us how you control
   your AI" trail. Verified over HTTP (link+file attach, list, download, delete) + in-browser.
   **Next free migration: 127.**
-- **Phase 6** — not started. Findings grounding, monitoring (the continuous ingest), and the admin
-  engagement runner over `bair.audits`.
+- **Phase 6 — DONE** (branch `governance-engine-phase6`). No migration. The **admin Engagement runner**
+  (`/admin/engagement`) — the delivery manual as a per-client workflow: the six phases (Scope → Discovery
+  → Classify → Gap → Controls/Policy → Monitor) with status **computed from each client's real data**
+  (register, risk tiers, controls, policy, profile, reviews, the org's latest `bair.audit`). Findings
+  grounding + cross-client consent already exist via Phase 2's score chain + `consent_scope`; monitoring =
+  the continuous daily ingest (surfaced in the runner). Verified over the runner endpoint + in-browser.
+  **Next free migration: 127.**
+
+**BUILD COMPLETE — the manual's full organisational layer (Components 1–7) + the 6-phase delivery
+workflow are implemented, grounded + cited, with honest empty states throughout.**
 
 ## What already exists (reuse, don't rebuild)
 

@@ -1074,6 +1074,48 @@ router.get('/admin/governance/corpus', requireRole('admin'), async (req, res) =>
   } catch (err) { console.error('[beaiready/gov/corpus]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Governance · Engagement runner (manual Part 7 — the 6 phases as a workflow) ─
+// The delivery manual AS a per-client status view: Scope → Discovery → Classify →
+// Gap → Controls/Policy → Monitor, each phase's progress COMPUTED from the real
+// governance data the client has built. Admin-only; pick any client via newsroom_id.
+router.get('/admin/governance/runner', requireRole('admin'), async (req, res) => {
+  try {
+    const newsroomId = req.query.newsroom_id || (await resolveNewsroomId(req));
+    const { rows: [nr] } = await pool.query('SELECT organisation_id FROM newsrooms WHERE id = $1', [newsroomId]);
+    if (!nr) return res.status(404).json({ message: 'client not found' });
+    const orgId = nr.organisation_id;
+
+    const sys = (await pool.query(
+      `SELECT count(*)::int n,
+              count(*) FILTER (WHERE risk_tier IS NOT NULL AND risk_tier <> 'unclassified')::int classified,
+              count(*) FILTER (WHERE risk_tier = 'unacceptable')::int unacceptable
+         FROM ai_tool_inventory WHERE newsroom_id = $1`, [newsroomId])).rows[0];
+    const controls = (await pool.query("SELECT count(*)::int n FROM ai_controls WHERE newsroom_id = $1 AND status = 'active'", [newsroomId])).rows[0].n;
+    const policy = (await pool.query('SELECT 1 FROM ai_policies WHERE newsroom_id = $1', [newsroomId])).rowCount;
+    const profile = (await pool.query('SELECT accountable_owner, review_cadence, next_review_date FROM ai_governance_profile WHERE newsroom_id = $1', [newsroomId])).rows[0] || null;
+    const reviews = (await pool.query('SELECT count(*)::int n FROM ai_reviews WHERE newsroom_id = $1', [newsroomId])).rows[0].n;
+    const inc = (await pool.query("SELECT count(*) FILTER (WHERE status = 'open')::int open FROM ai_incidents WHERE newsroom_id = $1", [newsroomId])).rows[0];
+    const evidence = (await pool.query('SELECT count(*)::int n FROM ai_evidence WHERE newsroom_id = $1', [newsroomId])).rows[0].n;
+
+    let audit = null, openFindings = 0;
+    if (orgId) {
+      audit = (await pool.query('SELECT id, readiness_score FROM bair.audits WHERE organisation_id = $1 ORDER BY created_at DESC LIMIT 1', [orgId])).rows[0] || null;
+      if (audit) openFindings = (await pool.query('SELECT count(*)::int n FROM bair.findings WHERE audit_id = $1 AND resolved_at IS NULL', [audit.id])).rows[0].n;
+    }
+
+    const dueForReview = profile?.next_review_date && new Date(profile.next_review_date) <= new Date();
+    const phases = [
+      { key: 'scope', label: 'Scope & setup', status: 'done', detail: 'Client onboarded' },
+      { key: 'discovery', label: 'Discovery — AI register', status: sys.n > 0 ? 'done' : 'todo', detail: `${sys.n} system${sys.n === 1 ? '' : 's'} in the register` },
+      { key: 'classify', label: 'Risk classification', status: sys.n === 0 ? 'todo' : (sys.classified >= sys.n ? 'done' : 'in_progress'), detail: `${sys.classified}/${sys.n} classified${sys.unacceptable ? ` · ${sys.unacceptable} unacceptable` : ''}` },
+      { key: 'gap', label: 'Gap analysis', status: audit ? (openFindings > 0 ? 'in_progress' : 'done') : 'todo', detail: audit ? `readiness ${audit.readiness_score ?? '—'} · ${openFindings} open finding${openFindings === 1 ? '' : 's'}` : 'no audit yet' },
+      { key: 'controls', label: 'Controls & policy', status: (controls > 0 && policy > 0) ? 'done' : (controls > 0 || policy > 0) ? 'in_progress' : 'todo', detail: `${controls} control${controls === 1 ? '' : 's'} · policy ${policy ? 'saved' : 'not set'}` },
+      { key: 'monitor', label: 'Monitoring & review', status: profile?.accountable_owner ? (reviews > 0 ? 'done' : 'in_progress') : 'todo', detail: `${profile?.accountable_owner ? `owner set · ${profile.review_cadence || 'quarterly'}` : 'no owner named'} · ${reviews} review${reviews === 1 ? '' : 's'}${inc.open ? ` · ${inc.open} open incident` : ''}${dueForReview ? ' · review due' : ''}` },
+    ];
+    res.json({ newsroom_id: newsroomId, phases, done: phases.filter((p) => p.status === 'done').length, total: phases.length, evidence });
+  } catch (err) { console.error('[beaiready/gov/runner]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Admin · manage client businesses (each business = one tenant/login) ─────
 // All admin-only. A "client" is a newsrooms row with kind='business' + a linked
 // organisation; its users are team_members homed in that newsroom.

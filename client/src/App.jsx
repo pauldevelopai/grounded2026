@@ -112,6 +112,7 @@ import BeAIReadyAdminPillars from './pages/beaiready/admin/BeAIReadyAdminPillars
 import BeAIReadyAdminTools from './pages/beaiready/admin/BeAIReadyAdminTools.jsx';
 import BeAIReadyAdminTracker from './pages/beaiready/admin/BeAIReadyAdminTracker.jsx';
 import BeAIReadyAdminGovernance from './pages/beaiready/admin/BeAIReadyAdminGovernance.jsx';
+import BeAIReadyAdminEngagement from './pages/beaiready/admin/BeAIReadyAdminEngagement.jsx';
 import BeAIReadyAdminNodes from './pages/beaiready/admin/BeAIReadyAdminNodes.jsx';
 import BeAIReadyAdminTraining from './pages/beaiready/admin/BeAIReadyAdminTraining.jsx';
 import BeAIReadyAdminStrategy from './pages/beaiready/admin/BeAIReadyAdminStrategy.jsx';
@@ -304,6 +305,7 @@ export default function App() {
                   <Route path="/admin/tools" element={<BeAIReadyAdminTools />} />
                   <Route path="/admin/tracker" element={<BeAIReadyAdminTracker />} />
                   <Route path="/admin/governance" element={<BeAIReadyAdminGovernance />} />
+                  <Route path="/admin/engagement" element={<BeAIReadyAdminEngagement />} />
                   <Route path="/admin/nodes" element={<BeAIReadyAdminNodes />} />
                   <Route path="/admin/training" element={<BeAIReadyAdminTraining />} />
                   <Route path="/admin/strategy" element={<BeAIReadyAdminStrategy />} />
