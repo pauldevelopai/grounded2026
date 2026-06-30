@@ -39,8 +39,13 @@
   framework-cited starter controls; the **finding → control → score** chain (`computeAndSaveScore`
   exported from `bair-score.js`, resolved findings excluded; cross-tenant link guarded via
   `newsrooms.organisation_id`); **Controls Library** client page (`/dashboard/governance/controls`).
-  Verified over HTTP (89.33 → 100 → reopened) + in-browser. **Next free migration: 125.**
-- **Phases 3–6** — not started. Phase 3 = Roles, Review Routine & Incidents next.
+  Verified over HTTP (89.33 → 100 → reopened) + in-browser.
+- **Phase 3 — DONE** (branch `governance-engine-phase3`). Migration 125 (`ai_governance_profile` +
+  `ai_reviews` + `ai_incidents`); profile (accountable owner + role + cadence + next-review date +
+  escalation path), review log, incident log (open/resolved), grounded+cited `/governance/review/
+  suggest-agenda`; **Roles & Review** client page (`/dashboard/governance/review`) with a due-for-review
+  flag. Verified over HTTP + in-browser. **Next free migration: 126.**
+- **Phases 4–6** — not started. Phase 4 = AI Policy (derived + grounded), depends on Phases 1–3.
 
 ## What already exists (reuse, don't rebuild)
 

@@ -59,6 +59,8 @@ export const PILLARS = [
         what: 'A bespoke AI-use policy, generated from a short brief, then edited and owned by you — aligned with POPIA. Lives in your dashboard.' },
       { name: 'Controls Library', status: 'live', dash: '/dashboard/governance/controls', slug: 'controls-library',
         what: 'The safeguards your business runs — adopt framework-backed starters, get suggestions grounded in governance sources, and link each control to the AI systems it covers.' },
+      { name: 'Roles & Review', status: 'live', dash: '/dashboard/governance/review', slug: 'roles-review',
+        what: 'Name who’s accountable, set a review cadence, and keep the log of reviews and incidents — the routine that stops your governance going stale.' },
     ],
   },
   {

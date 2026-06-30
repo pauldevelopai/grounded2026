@@ -86,6 +86,7 @@ export default function BusinessControls() {
       <p style={{ marginBottom: 18 }}>
         <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/security">AI System Register &amp; Risk</Link> &nbsp;·&nbsp;
+        <Link to="/dashboard/governance/review">Roles &amp; review</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance">Your AI policy</Link>
       </p>
 

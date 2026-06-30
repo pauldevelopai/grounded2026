@@ -816,6 +816,127 @@ router.delete('/governance/controls/:id', async (req, res) => {
   } catch (err) { console.error('[beaiready/controls/del]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Governance · Roles, Review Routine & Incidents (manual Components 5 + 7) ──
+// The named accountable owner + cadence + escalation path (one row per tenant), the
+// log of review meetings, and the incident log. The heartbeat that keeps governance
+// from decaying into fiction.
+router.get('/governance/profile', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query('SELECT * FROM ai_governance_profile WHERE newsroom_id = $1', [newsroomId]);
+    res.json(rows[0] || null);
+  } catch (err) { console.error('[beaiready/gov/profile/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/governance/profile', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { accountable_owner, owner_role, review_cadence, next_review_date, incident_escalation_path } = req.body || {};
+    const { rows } = await pool.query(
+      `INSERT INTO ai_governance_profile (newsroom_id, accountable_owner, owner_role, review_cadence, next_review_date, incident_escalation_path)
+       VALUES ($1,$2,$3,COALESCE($4,'quarterly'),$5,$6)
+       ON CONFLICT (newsroom_id) DO UPDATE SET
+         accountable_owner = EXCLUDED.accountable_owner, owner_role = EXCLUDED.owner_role,
+         review_cadence = EXCLUDED.review_cadence, next_review_date = EXCLUDED.next_review_date,
+         incident_escalation_path = EXCLUDED.incident_escalation_path, updated_at = NOW()
+       RETURNING *`,
+      [newsroomId, accountable_owner || null, owner_role || null, review_cadence || null, next_review_date || null, incident_escalation_path || null]);
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready/gov/profile/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.get('/governance/reviews', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query('SELECT * FROM ai_reviews WHERE newsroom_id = $1 ORDER BY review_date DESC NULLS LAST, created_at DESC', [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/gov/reviews/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/governance/reviews', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { review_date, attendees, what_checked, actions } = req.body || {};
+    const { rows } = await pool.query(
+      'INSERT INTO ai_reviews (newsroom_id, review_date, attendees, what_checked, actions) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [newsroomId, review_date || null, attendees || null, what_checked || null, actions || null]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/gov/reviews/post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/governance/reviews/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    await pool.query('DELETE FROM ai_reviews WHERE id = $1 AND newsroom_id = $2', [req.params.id, newsroomId]);
+    res.json({ ok: true });
+  } catch (err) { console.error('[beaiready/gov/reviews/del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.get('/governance/incidents', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query('SELECT * FROM ai_incidents WHERE newsroom_id = $1 ORDER BY occurred_at DESC NULLS LAST, created_at DESC', [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/gov/incidents/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/governance/incidents', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { occurred_at, what_happened, who_told, action_taken, status } = req.body || {};
+    if (!what_happened || !what_happened.trim()) return res.status(400).json({ message: 'what_happened required' });
+    const { rows } = await pool.query(
+      `INSERT INTO ai_incidents (newsroom_id, occurred_at, what_happened, who_told, action_taken, status)
+       VALUES ($1,$2,$3,$4,$5,COALESCE($6,'open')) RETURNING *`,
+      [newsroomId, occurred_at || null, what_happened.trim(), who_told || null, action_taken || null, status || null]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/gov/incidents/post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/governance/incidents/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { occurred_at, what_happened, who_told, action_taken, status } = req.body || {};
+    const { rows } = await pool.query(
+      `UPDATE ai_incidents SET occurred_at = COALESCE($1, occurred_at), what_happened = COALESCE($2, what_happened),
+         who_told = COALESCE($3, who_told), action_taken = COALESCE($4, action_taken), status = COALESCE($5, status)
+       WHERE id = $6 AND newsroom_id = $7 RETURNING *`,
+      [occurred_at ?? null, what_happened ?? null, who_told ?? null, action_taken ?? null, status ?? null, req.params.id, newsroomId]);
+    if (!rows.length) return res.status(404).json({ message: 'not found' });
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready/gov/incidents/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/governance/incidents/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    await pool.query('DELETE FROM ai_incidents WHERE id = $1 AND newsroom_id = $2', [req.params.id, newsroomId]);
+    res.json({ ok: true });
+  } catch (err) { console.error('[beaiready/gov/incidents/del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Grounded + cited suggestion for a standing review agenda + escalation path. Not saved.
+router.post('/governance/review/suggest-agenda', async (req, res) => {
+  try {
+    const { organisationId, sectorId } = await tenantContext(req);
+    const sources = await getRelevantKnowledge({
+      categories: ['ai_governance'], orgId: organisationId, sectorId,
+      searchTerms: 'AI governance review cadence monitoring standing agenda incident escalation path', limit: 6,
+    }).catch(() => []);
+    const grounded = sources.length > 0;
+    const sourceBlock = grounded ? sources.map((s, i) => `[${i + 1}] ${s.title}: ${(s.content || '').slice(0, 400)}`).join('\n\n') : '';
+    const system = `Propose a short STANDING AGENDA for a small business's periodic AI-governance review, plus a simple incident-escalation path. ${grounded ? 'Ground in the numbered SOURCES and cite the numbers used.' : 'No governance sources are available; use sensible general practice and return "cited": [].'} Return ONLY single-line JSON:
+{"agenda":["short agenda items"],"escalation":"one or two sentences — who is told, who acts, in what order","cited":[source numbers used]}
+This is generated guidance, not legal advice — verify with counsel.`;
+    const userContent = grounded ? `SOURCES\n${sourceBlock}` : 'A small/medium business reviewing its AI use on a regular cadence.';
+    const raw = String(await callClaude({ system, userContent, maxTokens: 600, temperature: 0.2 }));
+    let out = {}; const a = raw.indexOf('{'), b = raw.lastIndexOf('}');
+    if (a >= 0 && b > a) { try { out = JSON.parse(raw.slice(a, b + 1)); } catch { /* keep */ } }
+    const citations = grounded && Array.isArray(out.cited) ? out.cited.map((n) => sources[n - 1]).filter(Boolean).map((s) => ({ title: (s.title || '').replace(/ — part \d+\/\d+$/, ''), url: s.source_description || null })) : [];
+    res.json({ agenda: Array.isArray(out.agenda) ? out.agenda : [], escalation: out.escalation || '', grounded, citations });
+  } catch (err) { console.error('[beaiready/gov/suggest-agenda]', err); res.status(500).json({ message: err.message || 'Suggestion failed' }); }
+});
+
 // ── Governance Knowledge Engine · admin corpus (global, shared across tenants) ─
 // Ingest a governance document (regulation / framework / guidance / report) into the
 // global 'ai_governance' corpus — chunked + embedded — so every tenant's governance
