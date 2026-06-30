@@ -304,82 +304,96 @@ router.get('/policy', async (req, res) => {
   } catch (err) { console.error('[beaiready/policy/get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
-// Generate a business AI-use policy draft from a short brief (does NOT save —
-// the client reviews, edits and saves with PUT). Business-framed, ZA/POPIA aware.
+// Generate a business AI-use policy DERIVED from the tenant's own operational layer —
+// the AI System Register + risk tiers (P1), the adopted Controls (P2), and the
+// accountable owner + cadence + escalation path (P3) — and GROUNDED in the governance
+// corpus with citations. The policy is the human-readable summary of what the business
+// actually runs, not a brief. Does NOT save (client reviews, edits, PUTs).
 router.post('/policy/generate', async (req, res) => {
   try {
+    const { newsroomId, organisationId, sectorId } = await tenantContext(req);
     const body = req.body || {};
-    const existingPolicy = body.existingPolicy || '';
-    if (existingPolicy.length > 20000) {
-      return res.status(400).json({ message: 'Policy text is too long (max ~20,000 characters).' });
+
+    const { rows: [t] } = await pool.query(
+      `SELECT o.name AS org, o.country, s.name AS sector FROM newsrooms n
+         LEFT JOIN organisations o ON o.id = n.organisation_id
+         LEFT JOIN sectors s ON s.id = o.sector_id WHERE n.id = $1`, [newsroomId]).catch(() => ({ rows: [{}] }));
+    const businessName = body.businessName || t?.org || 'the business';
+    const sector = body.sector || t?.sector || '';
+    const country = t?.country || 'South Africa';
+
+    // ── The tenant's real operational layer (P1 register, P2 controls, P3 roles) ──
+    const { rows: systems } = await pool.query(
+      `SELECT tool_name, purpose, owner_person, data_shared, risk_tier, paid_free
+         FROM ai_tool_inventory WHERE newsroom_id = $1
+        ORDER BY CASE risk_tier WHEN 'unacceptable' THEN 0 WHEN 'high' THEN 1 WHEN 'limited' THEN 2 WHEN 'minimal' THEN 3 ELSE 4 END, tool_name`,
+      [newsroomId]).catch(() => ({ rows: [] }));
+    const { rows: controls } = await pool.query(
+      `SELECT title, description, applies_to_tier, framework_ref FROM ai_controls
+        WHERE newsroom_id = $1 AND status = 'active' ORDER BY title`, [newsroomId]).catch(() => ({ rows: [] }));
+    const { rows: [profile] } = await pool.query(
+      'SELECT accountable_owner, owner_role, review_cadence, incident_escalation_path FROM ai_governance_profile WHERE newsroom_id = $1',
+      [newsroomId]).catch(() => ({ rows: [] }));
+
+    // Enforce the method (no fake data): a credible policy is DERIVED, not minted from
+    // nothing. Empty register AND no controls → honest state, not boilerplate.
+    if (systems.length === 0 && controls.length === 0) {
+      return res.json({ empty: true, message: 'Build your AI System Register and adopt some controls first — your policy is generated from them, not from a blank brief.' });
     }
 
-    // Ground the policy in what we actually know about THIS business (tenant-scoped),
-    // so it's specific, not boilerplate. Body fields stay as optional overrides.
-    const newsroomId = await resolveNewsroomId(req);
-    const knownLines = [];
-    let tName = '', tSector = '';
-    try {
-      const { rows: [t] } = await pool.query(
-        `SELECT o.name AS org, o.country, s.name AS sector FROM newsrooms n
-           LEFT JOIN organisations o ON o.id = n.organisation_id
-           LEFT JOIN sectors s ON s.id = o.sector_id WHERE n.id = $1`, [newsroomId]);
-      tName = t?.org || ''; tSector = t?.sector || '';
-      if (t?.org) knownLines.push(`Business: ${t.org}${t.sector ? ` (sector: ${t.sector})` : ''}${t.country ? `, ${t.country}` : ''}`);
-      const { rows: tools } = await pool.query(
-        `SELECT tool_name, data_shared FROM ai_tool_inventory WHERE newsroom_id = $1 ORDER BY created_at DESC LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
-      if (tools.length) knownLines.push(`AI tools the team actually uses: ${tools.map((x) => `${x.tool_name}${x.data_shared ? ` (data put in: ${x.data_shared})` : ''}`).join('; ')}`);
-      const { rows: intake } = await pool.query(
-        `SELECT response FROM intake_responses WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 20`, [newsroomId]).catch(() => ({ rows: [] }));
-      if (intake.length) {
-        const ans = intake.map((r) => Object.entries(r.response || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')).filter(Boolean);
-        knownLines.push(`Staff AI-readiness survey (${intake.length} responses):\n${ans.join('\n').slice(0, 3500)}`);
-      }
-    } catch (e) { console.error('[policy/generate context]', e.message); }
-    const businessName = body.businessName || tName || '';
-    const sector = body.sector || tSector || '';
-    const aiUses = body.aiUses || '';
-    // Auto-grounding is for the tenant's OWN policy. Suppress it ONLY when the caller
-    // names a DIFFERENT business than this tenant (an explicit override for someone
-    // else) — injecting this tenant's identity/intake would then contradict the brief.
-    // If they leave it blank, OR type their own business name, keep the grounding so an
-    // L2B member who fills in "Leads 2 Business" still gets a policy specific to them.
-    const overrideName = (body.businessName || '').trim();
-    const namesOwnBusiness = overrideName && tName && overrideName.toLowerCase() === tName.trim().toLowerCase();
-    const suppressGrounding = overrideName && !namesOwnBusiness;
-    const known = (!suppressGrounding && knownLines.length)
-      ? `\n\nWHAT WE KNOW ABOUT THIS BUSINESS (ground the policy in this — be specific to them, never generic):\n${knownLines.join('\n')}`
-      : '';
+    // ── Grounding from the governance corpus (cited) ──
+    const searchTerms = [businessName, sector, country, 'AI use policy acceptable use POPIA EU AI Act data protection human oversight'].filter(Boolean).join(' ');
+    const sources = await getRelevantKnowledge({ categories: ['ai_governance'], orgId: organisationId, sectorId, searchTerms, limit: 8 }).catch(() => []);
+    const grounded = sources.length > 0;
+    const sourceBlock = grounded ? sources.map((s, i) => `[${i + 1}] ${s.title}: ${(s.content || '').slice(0, 450)}`).join('\n\n') : '';
 
-    const system = `You are an AI-governance adviser helping a SMALL OR MEDIUM BUSINESS (not a newsroom) write its AI-use policy. Be concrete and practical for a business — covering: acceptable AI use by staff, what company/client/personal data may and may not be put into AI tools, approved vs unapproved tools, accountability (who approves AI use, who answers when something goes wrong), POPIA and emerging AI-regulation alignment, and review cadence. Plain language a manager can adopt and defend — never generic boilerplate.
+    const systemsBlock = systems.length
+      ? systems.map((s) => `- ${s.tool_name}${s.risk_tier && s.risk_tier !== 'unclassified' ? ` [${s.risk_tier}-risk]` : ''}${s.purpose ? ` — ${s.purpose}` : ''}${s.owner_person ? ` (owner: ${s.owner_person})` : ''}${s.data_shared ? ` — data: ${s.data_shared}` : ''}${s.paid_free && s.paid_free !== 'unknown' ? ` — ${s.paid_free}` : ''}`).join('\n')
+      : '(no systems logged)';
+    const controlsBlock = controls.length
+      ? controls.map((c) => `- ${c.title}${c.applies_to_tier && c.applies_to_tier !== 'any' ? ` [${c.applies_to_tier}-risk]` : ''}${c.description ? ` — ${c.description}` : ''}${c.framework_ref ? ` (${c.framework_ref})` : ''}`).join('\n')
+      : '(no controls adopted yet)';
+    const rolesBlock = profile
+      ? `Accountable owner: ${profile.accountable_owner || '(unnamed)'}${profile.owner_role ? `, ${profile.owner_role}` : ''}. Review cadence: ${profile.review_cadence || 'quarterly'}. Incident escalation: ${profile.incident_escalation_path || '(undefined)'}.`
+      : '(no accountable owner named yet)';
+
+    const system = `You are an AI-governance adviser writing a SMALL/MEDIUM BUSINESS's AI-use policy. CRITICAL: DERIVE the policy from the business's OWN governance data below (its AI System Register, risk tiers, adopted controls, and accountable owner) and ground it in the cited SOURCES — never generic boilerplate. Name the business's ACTUAL systems and controls. Cover: acceptable use; what data may/may not go into which tools (reflect the register); approved vs forbidden tools; human approval for high-risk systems; accountability (the named owner); POPIA + AI-regulation alignment (cite sources); and the review cadence. ${grounded ? 'Cite the SOURCE numbers you rely on.' : 'No governance sources are available; write from general principle and return "cited": [].'}
 
 Respond in TWO parts, in this exact order:
-
-PART 1 — a single-line JSON object (NO code fence, NO newlines inside it) with keys:
-  "title": string,
-  "summary": "1-2 sentence overview",
-  "checklist": ["short adoptable action items the business should do to put this policy in place"]
-
+PART 1 — a single-line JSON object (no code fence, no newlines): {"title":string,"summary":"1-2 sentences","checklist":["short adoptable steps to put this policy in place"],"cited":[source numbers used]}
 PART 2 — a line containing exactly:
 ---POLICY---
-…then the full policy as markdown (clear sections, concrete rules a business can actually follow). Put NO JSON here.`;
+…then the full policy as markdown (clear sections, concrete rules tied to THIS business's systems and controls). End with the line: "Generated guidance, not legal advice — verify with counsel." Put NO JSON in part 2.`;
 
-    const brief = (existingPolicy && existingPolicy.trim().length >= 40
-      ? `MODE: review and improve this existing policy for a business.\nBusiness: ${businessName || '(unspecified)'}\nSector: ${sector || '(unspecified)'}\n\nEXISTING POLICY:\n${existingPolicy}`
-      : `MODE: draft a new AI-use policy from this brief.\nBusiness: ${businessName || 'a small/medium business'}\nSector: ${sector || '(unspecified)'}\nHow they use (or plan to use) AI: ${aiUses || '(unspecified — cover common SME uses: drafting, summarising, customer comms, analysis)'}\nJurisdiction: South Africa (POPIA).`) + known;
+    const userContent = `BUSINESS: ${businessName}${sector ? ` (sector: ${sector})` : ''} — ${country}
 
-    const raw = String(await callClaude({ system, userContent: brief, maxTokens: 3000, temperature: 0.3 }));
+AI SYSTEM REGISTER (by risk tier):
+${systemsBlock}
+
+ADOPTED CONTROLS:
+${controlsBlock}
+
+ROLES & REVIEW:
+${rolesBlock}${grounded ? `\n\nSOURCES (ground + cite these):\n${sourceBlock}` : ''}`;
+
+    const raw = String(await callClaude({ system, userContent, maxTokens: 3500, temperature: 0.3 }));
     const [metaPart, ...rest] = raw.split('---POLICY---');
     const policyMarkdown = rest.join('---POLICY---').trim();
     let meta = {};
     const jsonStr = metaPart.replace(/```json|```/g, '');
     const a = jsonStr.indexOf('{'), b = jsonStr.lastIndexOf('}');
     if (a >= 0 && b > a) { try { meta = JSON.parse(jsonStr.slice(a, b + 1)); } catch { /* defaults */ } }
+    const citations = grounded && Array.isArray(meta.cited)
+      ? meta.cited.map((n) => sources[n - 1]).filter(Boolean).map((s) => ({ title: (s.title || '').replace(/ — part \d+\/\d+$/, ''), url: s.source_description || null }))
+      : [];
     res.json({
-      title: meta.title || 'AI-use policy',
+      title: meta.title || `${businessName} — AI-use policy`,
       summary: meta.summary || '',
       checklist: Array.isArray(meta.checklist) ? meta.checklist : [],
       content: policyMarkdown || raw.replace('---POLICY---', '').trim(),
+      grounded,
+      citations,
+      derived_from: { systems: systems.length, controls: controls.length, owner: profile?.accountable_owner || null, sources: sources.length },
     });
   } catch (err) {
     console.error('[beaiready/policy/generate]', err);

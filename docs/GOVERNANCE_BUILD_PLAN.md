@@ -45,7 +45,13 @@
   escalation path), review log, incident log (open/resolved), grounded+cited `/governance/review/
   suggest-agenda`; **Roles & Review** client page (`/dashboard/governance/review`) with a due-for-review
   flag. Verified over HTTP + in-browser. **Next free migration: 126.**
-- **Phases 4–6** — not started. Phase 4 = AI Policy (derived + grounded), depends on Phases 1–3.
+- **Phase 4 — DONE** (branch `governance-engine-phase4`). No migration. Rewrote `/policy/generate` to
+  **derive** the policy from the tenant's register + risk tiers (P1) + adopted controls (P2) + accountable
+  owner/cadence (P3), **grounded in the corpus + cited**, with an honest empty state when there's nothing
+  to derive from. `BusinessGovernance.jsx` replaces the brief form with a "generate from your governance
+  data" flow (shows what it draws on; surfaces citations). Fixes the original "generic policy" problem.
+  Verified over HTTP (names real system/control/owner, cited; empty tenant → honest state) + in-browser.
+- **Phases 5–6** — not started. Phase 5 = Evidence Trail next.
 
 ## What already exists (reuse, don't rebuild)
 
