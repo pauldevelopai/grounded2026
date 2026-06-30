@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
+import EvidencePanel from './EvidencePanel.jsx';
 
 export default function BusinessGovernance() {
   const [saved, setSaved] = useState(undefined); // undefined=loading, null=none, obj=saved
@@ -75,6 +76,7 @@ export default function BusinessGovernance() {
             <button onClick={() => setEditing(true)} style={btn}>Edit</button>
             <button onClick={() => setSaved(null)} style={btnGhost}>Re-generate from current data</button>
           </div>
+          <EvidencePanel entityType="ai_policy" entityId={saved.id} />
         </section>
       )}
 

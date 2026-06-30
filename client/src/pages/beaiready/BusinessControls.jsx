@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
+import EvidencePanel from './EvidencePanel.jsx';
 
 const TIER = {
   unacceptable: { bg: '#fee2e2', fg: '#991b1b', label: 'Unacceptable' },
@@ -197,6 +198,7 @@ export default function BusinessControls() {
                 </div>
                 <button onClick={() => remove(c.id)} style={btnGhostSmall}>Remove</button>
               </div>
+              <EvidencePanel entityType="ai_control" entityId={c.id} />
             </div>
           );
         })}

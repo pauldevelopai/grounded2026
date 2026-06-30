@@ -951,6 +951,92 @@ This is generated guidance, not legal advice — verify with counsel.`;
   } catch (err) { console.error('[beaiready/gov/suggest-agenda]', err); res.status(500).json({ message: err.message || 'Suggestion failed' }); }
 });
 
+// ── Governance · Evidence Trail (manual Component 6) ─────────────────────────
+// Files (reusing the uploads pipeline) or links attached to a governance entity —
+// the policy, a control, a review, or a register system. The proof that governance
+// is real. Tenant-scoped; member-reachable.
+const EVIDENCE_ENTITIES = ['ai_policy', 'ai_control', 'ai_review', 'ai_system'];
+
+router.get('/governance/evidence', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { entity_type, entity_id } = req.query;
+    const { rows } = await pool.query(
+      `SELECT e.id, e.entity_type, e.entity_id, e.kind, e.url, e.label, e.upload_id, e.created_at,
+              d.original_name, d.mime_type
+         FROM ai_evidence e LEFT JOIN uploaded_documents d ON d.id = e.upload_id
+        WHERE e.newsroom_id = $1
+          AND ($2::text IS NULL OR e.entity_type = $2)
+          AND ($3::uuid IS NULL OR e.entity_id = $3)
+        ORDER BY e.created_at DESC`,
+      [newsroomId, entity_type || null, entity_id || null]);
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/gov/evidence/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Attach a link (JSON).
+router.post('/governance/evidence/link', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { entity_type, entity_id, url, label } = req.body || {};
+    if (!EVIDENCE_ENTITIES.includes(entity_type) || !entity_id || !url || !url.trim()) {
+      return res.status(400).json({ message: 'entity_type, entity_id and url are required' });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO ai_evidence (newsroom_id, entity_type, entity_id, kind, url, label, created_by)
+       VALUES ($1,$2,$3,'link',$4,$5,$6) RETURNING *`,
+      [newsroomId, entity_type, entity_id, url.trim(), label || null, req.user?.id || null]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/gov/evidence/link]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Attach a file (multipart — entity_type/entity_id/label must precede the file).
+router.post('/governance/evidence', upload.single('file'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { entity_type, entity_id, label } = req.body || {};
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    if (!EVIDENCE_ENTITIES.includes(entity_type) || !entity_id) return res.status(400).json({ message: 'entity_type and entity_id are required' });
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by, newsroom_id)
+       VALUES ($1,$2,$3,$4,$5,'governance_evidence',$6,$7,$8) RETURNING id`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path, entity_id, req.user?.id || null, newsroomId]);
+    const { rows } = await pool.query(
+      `INSERT INTO ai_evidence (newsroom_id, entity_type, entity_id, kind, upload_id, label, created_by)
+       VALUES ($1,$2,$3,'upload',$4,$5,$6) RETURNING *`,
+      [newsroomId, entity_type, entity_id, doc.id, label || req.file.originalname, req.user?.id || null]);
+    res.status(201).json({ ...rows[0], original_name: req.file.originalname });
+  } catch (err) { console.error('[beaiready/gov/evidence/upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+router.get('/governance/evidence/:id/download', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT d.file_path, d.original_name FROM ai_evidence e
+         JOIN uploaded_documents d ON d.id = e.upload_id
+        WHERE e.id = $1 AND e.newsroom_id = $2 AND e.kind = 'upload'`,
+      [req.params.id, newsroomId]);
+    if (!rows.length) return res.status(404).json({ message: 'not found' });
+    const doc = rows[0];
+    if (!fs.existsSync(doc.file_path)) return res.status(404).json({ message: 'file missing' });
+    res.setHeader('Content-Disposition', `inline; filename="${doc.original_name}"`);
+    fs.createReadStream(doc.file_path).pipe(res);
+  } catch (err) { console.error('[beaiready/gov/evidence/download]', err); res.status(500).json({ message: 'Download failed' }); }
+});
+
+router.delete('/governance/evidence/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query('DELETE FROM ai_evidence WHERE id = $1 AND newsroom_id = $2 RETURNING upload_id', [req.params.id, newsroomId]);
+    if (rows.length && rows[0].upload_id) {
+      const { rows: [d] } = await pool.query('DELETE FROM uploaded_documents WHERE id = $1 AND newsroom_id = $2 RETURNING file_path', [rows[0].upload_id, newsroomId]);
+      if (d?.file_path) { try { fs.unlinkSync(d.file_path); } catch { /* file already gone */ } }
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error('[beaiready/gov/evidence/del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Governance Knowledge Engine · admin corpus (global, shared across tenants) ─
 // Ingest a governance document (regulation / framework / guidance / report) into the
 // global 'ai_governance' corpus — chunked + embedded — so every tenant's governance

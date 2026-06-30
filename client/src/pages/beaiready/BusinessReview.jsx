@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
+import EvidencePanel from './EvidencePanel.jsx';
 
 const CADENCES = ['monthly', 'quarterly', 'biannual', 'annual'];
 const fmt = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
@@ -142,6 +143,7 @@ export default function BusinessReview() {
                 {r.attendees && <p style={{ fontSize: 12.5, color: '#8a8076', margin: '2px 0 0' }}>Attendees: {r.attendees}</p>}
                 {r.what_checked && <p style={{ fontSize: 13, margin: '6px 0 0' }}><b>Checked:</b> {r.what_checked}</p>}
                 {r.actions && <p style={{ fontSize: 13, margin: '4px 0 0' }}><b>Actions:</b> {r.actions}</p>}
+                <EvidencePanel entityType="ai_review" entityId={r.id} />
               </div>
             ))}
           </div>

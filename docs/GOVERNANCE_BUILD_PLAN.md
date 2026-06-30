@@ -51,7 +51,13 @@
   to derive from. `BusinessGovernance.jsx` replaces the brief form with a "generate from your governance
   data" flow (shows what it draws on; surfaces citations). Fixes the original "generic policy" problem.
   Verified over HTTP (names real system/control/owner, cited; empty tenant → honest state) + in-browser.
-- **Phases 5–6** — not started. Phase 5 = Evidence Trail next.
+- **Phase 5 — DONE** (branch `governance-engine-phase5`). Migration 126 (`ai_evidence`); evidence
+  endpoints (attach link / upload file reusing the uploads pipeline, list, download, delete) + a
+  reusable `EvidencePanel` wired onto the policy, controls and reviews. The "show us how you control
+  your AI" trail. Verified over HTTP (link+file attach, list, download, delete) + in-browser.
+  **Next free migration: 127.**
+- **Phase 6** — not started. Findings grounding, monitoring (the continuous ingest), and the admin
+  engagement runner over `bair.audits`.
 
 ## What already exists (reuse, don't rebuild)
 
