@@ -47,8 +47,11 @@ export async function apiFetch(path, options = {}) {
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || 'Request failed');
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.message || 'Request failed');
+    err.status = res.status;                 // e.g. 409 for a blocked assessment
+    if (body.code) err.code = body.code;     // server-provided error code, when present
+    throw err;
   }
 
   return res.json();

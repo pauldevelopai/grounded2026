@@ -16,6 +16,7 @@ import { processUpload } from '../services/document-processor.js';
 import { getRelevantKnowledge } from '../services/knowledge.js';
 import { ingestGovernanceDocument } from '../services/governance-ingest.js';
 import { computeAndSaveScore } from './bair-score.js';
+import { loadAssessment, submitAnswers, computeGovernanceScorecard, resolveOrCreateAudit, AssessmentError } from '../services/gov-assessment.js';
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -1035,6 +1036,57 @@ router.delete('/governance/evidence/:id', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) { console.error('[beaiready/gov/evidence/del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Governance Assessment (Part 3) — self-serve, four AIGP domains ────────────
+// Extends the bair.audits engine: the client's newsroom resolves to its organisation's
+// audit; governance questions → self_serve findings (carrying domain); scored per domain.
+// Tenant-scoped throughout via tenantContext → newsroom → organisation. A business with
+// no organisation linked gets a friendly 409 (the org-keyed engine can't attach).
+router.get('/governance/assessment', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    res.json(await loadAssessment(newsroomId));
+  } catch (err) {
+    if (err instanceof AssessmentError) return res.status(409).json({ message: err.message, code: err.code });
+    console.error('[beaiready/gov/assessment/get]', err); res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+router.post('/governance/assessment/answers', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    res.json(await submitAnswers(newsroomId, req.body?.answers));
+  } catch (err) {
+    if (err instanceof AssessmentError) return res.status(err.code === 'bad_input' ? 400 : 409).json({ message: err.message, code: err.code });
+    console.error('[beaiready/gov/assessment/answers]', err); res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+router.get('/governance/assessment/scorecard', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const auditId = await resolveOrCreateAudit(newsroomId);
+    res.json(await computeGovernanceScorecard(auditId));
+  } catch (err) {
+    if (err instanceof AssessmentError) return res.status(409).json({ message: err.message, code: err.code });
+    console.error('[beaiready/gov/assessment/scorecard]', err); res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Admin attestation — an admin stamps the tenant's governance result as reviewed.
+router.post('/governance/assessment/attest', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const auditId = await resolveOrCreateAudit(newsroomId);
+    const { rows } = await pool.query(
+      `UPDATE bair.audits SET attested_by = $1, attested_at = NOW(), updated_at = NOW()
+        WHERE id = $2 RETURNING attested_by, attested_at`, [req.user.id, auditId]);
+    res.json(rows[0]);
+  } catch (err) {
+    if (err instanceof AssessmentError) return res.status(409).json({ message: err.message, code: err.code });
+    console.error('[beaiready/gov/assessment/attest]', err); res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 // ── Governance Knowledge Engine · admin corpus (global, shared across tenants) ─

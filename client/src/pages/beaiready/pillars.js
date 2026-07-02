@@ -61,6 +61,8 @@ export const PILLARS = [
         what: 'The safeguards your business runs — adopt framework-backed starters, get suggestions grounded in governance sources, and link each control to the AI systems it covers.' },
       { name: 'Roles & Review', status: 'live', dash: '/dashboard/governance/review', slug: 'roles-review',
         what: 'Name who’s accountable, set a review cadence, and keep the log of reviews and incidents — the routine that stops your governance going stale.' },
+      { name: 'Governance Assessment', status: 'live', dash: '/dashboard/governance/assessment', slug: 'gov-assessment',
+        what: 'Self-assess whether your business is up to scratch on AI governance — scored across four domains, with a clear picture of your gaps.' },
     ],
   },
   {

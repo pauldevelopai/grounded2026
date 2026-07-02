@@ -178,7 +178,8 @@ export async function submitAnswers(newsroomId, answers) {
 // resolved weight → damage → score), grouped by domain. Also refreshes the whole-audit
 // six-pillar readiness (governance now contributes real findings).
 export async function computeGovernanceScorecard(auditId) {
-  const { rows: audit } = await pool.query(`SELECT sector_id FROM bair.audits WHERE id = $1`, [auditId]);
+  const { rows: audit } = await pool.query(
+    `SELECT sector_id, attested_by, attested_at FROM bair.audits WHERE id = $1`, [auditId]);
   if (!audit.length) return null;
   const sectorId = audit[0].sector_id;
 
@@ -216,5 +217,8 @@ export async function computeGovernanceScorecard(auditId) {
   // Refresh the whole-business six-pillar readiness (governance contributes). Non-fatal.
   await computeAndSaveScore(auditId).catch(() => {});
 
-  return { audit_id: auditId, governance_score, cap: DOMAIN_ZERO_AT, domains };
+  return {
+    audit_id: auditId, governance_score, cap: DOMAIN_ZERO_AT, domains,
+    attested_at: audit[0].attested_at || null,
+  };
 }
