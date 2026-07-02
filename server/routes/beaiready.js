@@ -1089,6 +1089,52 @@ router.post('/governance/assessment/attest', requireRole('admin'), async (req, r
   }
 });
 
+// ── Governance Learning (Part 5) — the four-unit course, per-person progress ──
+// Units are a GLOBAL catalogue (bair.gov_learning_unit); progress is per tenant + per
+// person (bair.gov_learning_progress). Section content lives client-side in
+// govLearningContent.js — this returns the catalogue joined with the caller's progress.
+const LEARNING_STATUSES = ['not_started', 'in_progress', 'complete'];
+
+router.get('/governance/learning', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(`
+      SELECT u.unit_no, u.domain, u.title, u.summary,
+             COALESCE(p.status, 'not_started') AS status, p.completed_at
+        FROM bair.gov_learning_unit u
+        LEFT JOIN bair.gov_learning_progress p
+          ON p.unit_no = u.unit_no AND p.newsroom_id = $1 AND p.user_id = $2
+       ORDER BY u.unit_no`, [newsroomId, req.user.id]);
+    res.json({ units: rows, complete: rows.filter((r) => r.status === 'complete').length, total: rows.length });
+  } catch (err) { console.error('[beaiready/gov/learning/get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/governance/learning/:unitNo/progress', async (req, res) => {
+  try {
+    const unitNo = Number(req.params.unitNo);
+    const { status } = req.body || {};
+    if (!Number.isInteger(unitNo)) return res.status(400).json({ message: 'unitNo must be an integer' });
+    if (!LEARNING_STATUSES.includes(status)) return res.status(400).json({ message: `status must be one of: ${LEARNING_STATUSES.join(', ')}` });
+    const { newsroomId } = await tenantContext(req);
+    // Guard: only progress against a unit that exists in the catalogue.
+    const { rows: unit } = await pool.query('SELECT 1 FROM bair.gov_learning_unit WHERE unit_no = $1', [unitNo]);
+    if (!unit.length) return res.status(404).json({ message: 'Unknown learning unit' });
+    // completed_at computed here (as its own typed param) so no parameter is reused across
+    // two type contexts — otherwise Postgres can't deduce a consistent type for it.
+    const completedAt = status === 'complete' ? new Date() : null;
+    const { rows } = await pool.query(`
+      INSERT INTO bair.gov_learning_progress (newsroom_id, user_id, unit_no, status, completed_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      ON CONFLICT (newsroom_id, user_id, unit_no) DO UPDATE
+        SET status = EXCLUDED.status,
+            completed_at = CASE WHEN EXCLUDED.status = 'complete'
+                                THEN COALESCE(bair.gov_learning_progress.completed_at, EXCLUDED.completed_at) ELSE NULL END,
+            updated_at = NOW()
+      RETURNING unit_no, status, completed_at`, [newsroomId, req.user.id, unitNo, status, completedAt]);
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready/gov/learning/progress]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Governance Knowledge Engine · admin corpus (global, shared across tenants) ─
 // Ingest a governance document (regulation / framework / guidance / report) into the
 // global 'ai_governance' corpus — chunked + embedded — so every tenant's governance

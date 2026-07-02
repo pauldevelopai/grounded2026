@@ -63,6 +63,8 @@ export const PILLARS = [
         what: 'Name who’s accountable, set a review cadence, and keep the log of reviews and incidents — the routine that stops your governance going stale.' },
       { name: 'Governance Assessment', status: 'live', dash: '/dashboard/governance/assessment', slug: 'gov-assessment',
         what: 'Self-assess whether your business is up to scratch on AI governance — scored across four domains, with a clear picture of your gaps.' },
+      { name: 'Governance Learning', status: 'live', dash: '/dashboard/governance/learning', slug: 'gov-learning',
+        what: 'A four-part course teaching your staff the ins and outs of AI governance — foundations, the rules, building it in, and governing AI in use.' },
     ],
   },
   {

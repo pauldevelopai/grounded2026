@@ -94,6 +94,7 @@ import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessControls from './pages/beaiready/BusinessControls.jsx';
 import BusinessReview from './pages/beaiready/BusinessReview.jsx';
 import BusinessGovAssessment from './pages/beaiready/BusinessGovAssessment.jsx';
+import BusinessGovLearning from './pages/beaiready/BusinessGovLearning.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
 import BusinessStrategy from './pages/beaiready/BusinessStrategy.jsx';
 import BusinessWorkspace from './pages/beaiready/BusinessWorkspace.jsx';
@@ -332,6 +333,7 @@ export default function App() {
                 <Route path="/dashboard/governance/controls" element={<BusinessControls />} />
                 <Route path="/dashboard/governance/review" element={<BusinessReview />} />
                 <Route path="/dashboard/governance/assessment" element={<BusinessGovAssessment />} />
+                <Route path="/dashboard/governance/learning" element={<BusinessGovLearning />} />
                 <Route path="/dashboard/productivity" element={<BusinessProductivity />} />
                 {/* /dashboard/training merged into the public /training page (shown when signed in). */}
                 <Route path="/dashboard/training" element={<Navigate to="/training" replace />} />
