@@ -146,9 +146,15 @@ export default function BusinessGovAssessment() {
                 <div style={{ width: `${d.score}%`, height: '100%', background: levelColour(d.score) }} />
               </div>
               {d.gaps.length > 0 ? (
-                <ul className="hub-card-points" style={{ marginTop: 8 }}>
-                  {d.gaps.map((g, i) => <li key={i} style={{ color: '#9a3412' }}>{g.note || g.finding_type}</li>)}
-                </ul>
+                <>
+                  <ul className="hub-card-points" style={{ marginTop: 8 }}>
+                    {d.gaps.map((g, i) => <li key={i} style={{ color: '#9a3412' }}>{g.note || g.finding_type}</li>)}
+                  </ul>
+                  {/* Light link to the matching learning unit (domain N → unit N). */}
+                  <Link to={`/dashboard/governance/learning?unit=${d.domain}`} style={{ fontSize: 12.5, fontWeight: 600, color: '#c75b39' }}>
+                    Weak here? Learn Unit {d.domain} → {d.title} →
+                  </Link>
+                </>
               ) : (
                 <p style={{ fontSize: 12.5, color: '#166534', margin: '6px 0 0' }}>No gaps in this domain — strong.</p>
               )}

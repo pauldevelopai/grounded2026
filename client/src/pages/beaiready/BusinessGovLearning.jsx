@@ -3,7 +3,7 @@
 // comes from govLearningContent.js; per-person progress (not_started | in_progress | complete)
 // is tracked server-side in bair.gov_learning_progress. See docs/BUILD_…md.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
 import { GOV_LEARNING_UNITS } from './govLearningContent.js';
 
@@ -14,11 +14,21 @@ export default function BusinessGovLearning() {
   const [units, setUnits] = useState(null);   // [{unit_no,domain,title,summary,status,completed_at}]
   const [open, setOpen] = useState(null);      // unit_no currently expanded
   const [err, setErr] = useState('');
+  const [searchParams] = useSearchParams();
 
   useEffect(() => { load(); }, []);
   async function load() {
-    try { const d = await apiFetch('/beaiready/governance/learning'); setUnits(d.units); }
-    catch (e) { setErr(e.message); }
+    try {
+      const d = await apiFetch('/beaiready/governance/learning');
+      setUnits(d.units);
+      // Deep link from the assessment scorecard: ?unit=N auto-opens that unit.
+      const u = Number(searchParams.get('unit'));
+      const target = Number.isInteger(u) && d.units.find((x) => x.unit_no === u);
+      if (target) {
+        setOpen(u);
+        if (target.status === 'not_started') setProgress(u, 'in_progress');
+      }
+    } catch (e) { setErr(e.message); }
   }
 
   async function setProgress(unitNo, status) {
@@ -96,10 +106,16 @@ function UnitBody({ unit, status, onComplete, onClose }) {
           {unit.check.map((c, i) => <CheckQuestion key={i} c={c} />)}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap', alignItems: 'center' }}>
         {status !== 'complete' && <button onClick={onComplete} style={btn}>Mark this unit complete</button>}
-        {status === 'complete' && <span style={{ fontSize: 13, color: '#166534', alignSelf: 'center' }}>✓ Completed</span>}
+        {status === 'complete' && <span style={{ fontSize: 13, color: '#166534' }}>✓ Completed</span>}
         <button onClick={onClose} style={btnGhost}>Close</button>
+        {/* Close the loop: once learned, re-check this domain in the assessment. */}
+        {status === 'complete' && (
+          <Link to="/dashboard/governance/assessment" style={{ fontSize: 12.5, fontWeight: 600, color: '#c75b39' }}>
+            Learned this? Re-assess your governance →
+          </Link>
+        )}
       </div>
     </div>
   );
