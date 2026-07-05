@@ -50,7 +50,7 @@ export default function BusinessProductivity() {
   return (
     <div className="hub hub-beaiready">
       <div className="hub-eyebrow">Productivity · your dashboard</div>
-      <h1 style={{ fontSize: 26, fontWeight: 800, margin: '4px 0 6px' }}>Productivity — without surveillance</h1>
+      <h1 style={{ fontSize: 26, fontWeight: 800, margin: '4px 0 6px' }}>Measure what AI is saving your team</h1>
       <p style={{ color: '#6b6359', maxWidth: '64ch', marginBottom: 14 }}>
         Five measures that matter — tracked at the business level with your own baselines, never used to
         police individuals. Enter a value when you have one; an em-dash just means it's not set yet.

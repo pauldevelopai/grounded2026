@@ -54,20 +54,33 @@ function truncate(s, n) {
   return flat.length <= n ? flat : flat.slice(0, n - 1).trimEnd() + '…';
 }
 
-function originOf(req) {
-  const proto = req.get('X-Forwarded-Proto') || req.protocol || 'https';
-  const host  = req.get('X-Forwarded-Host')  || req.get('Host') || 'grounded.developai.co.za';
-  return `${proto}://${host}`;
+function hostOf(req) {
+  return (req.get('X-Forwarded-Host') || req.get('Host') || 'grounded.developai.co.za').toLowerCase();
 }
 
-function renderOgBlock({ title, description, url, image, type = 'article' }) {
+function originOf(req) {
+  const proto = req.get('X-Forwarded-Proto') || req.protocol || 'https';
+  return `${proto}://${hostOf(req)}`;
+}
+
+// The same server serves detail-page OG for both doors. Brand the OG block by
+// host so a BAIR (beaiready.*) share reads "Be AI Ready", not "Grounded: AI
+// Legal" (item 7). Everything else (grounded.*) keeps the Grounded branding.
+function brandOf(req) {
+  return hostOf(req).startsWith('beaiready')
+    ? { siteName: 'Be AI Ready',      label: 'Be AI Ready' }
+    : { siteName: 'Grounded: AI Legal', label: 'Grounded: AI Legal' };
+}
+
+function renderOgBlock({ title, description, url, image, type = 'article', siteName = 'Grounded: AI Legal' }) {
   const t = escapeHtml(title);
   const d = escapeHtml(description);
   const u = escapeHtml(url);
   const i = escapeHtml(image);
+  const s = escapeHtml(siteName);
   return `<!-- og-begin -->
     <meta name="description" content="${d}" />
-    <meta property="og:site_name" content="Grounded: AI Legal" />
+    <meta property="og:site_name" content="${s}" />
     <meta property="og:type" content="${type}" />
     <meta property="og:title" content="${t}" />
     <meta property="og:description" content="${d}" />
@@ -103,6 +116,44 @@ function serveHtml(res, og) {
 
 const router = express.Router();
 
+// ── / (marketing root) → host-aware SPA shell for crawlers ──────────────────
+// The marketing root is the most-shared URL, and social crawlers don't run JS,
+// so the client head-manager (client/src/beaiready/brand.js) can't fix their
+// link previews. The static index.html hard-codes "Grounded", so on the BAIR
+// door (beaiready.*) a shared root link would preview as "Grounded". Serving the
+// root through Node lets us inject the right OG per host (item 7).
+//
+// PROD WIRING (box Caddy): on the beaiready.developai.co.za block, route the
+// bare root to Node so this handler fires — e.g.
+//     handle / { reverse_proxy localhost:3001 }
+// placed BEFORE the static SPA-fallback `handle { … try_files … }`. The grounded
+// door can keep serving `/` statically (this handler is host-aware and harmless
+// if it also fires there). See deploy/caddy/beaiready.developai.co.za.caddy.
+const ROOT_OG = {
+  beaiready: {
+    title:       'Be AI Ready — get your business AI-ready',
+    description: 'Be AI Ready gets your business ready to use AI safely and well — capture your knowledge, train your team, put governance in place, and measure what AI saves you. By Develop AI.',
+    siteName:    'Be AI Ready',
+  },
+  grounded: {
+    title:       'Grounded — Newsroom-owned AI',
+    description: 'Small AI tools newsrooms run and own, plus an open tracker of AI in law and regulation. By Develop AI.',
+    siteName:    'Grounded',
+  },
+};
+router.get('/', (req, res) => {
+  const origin = originOf(req);
+  const brand  = hostOf(req).startsWith('beaiready') ? ROOT_OG.beaiready : ROOT_OG.grounded;
+  serveHtml(res, {
+    title:       brand.title,
+    description: brand.description,
+    url:         `${origin}/`,
+    image:       `${origin}${DEFAULT_IMAGE}`,
+    type:        'website',
+    siteName:    brand.siteName,
+  });
+});
+
 // ── /lawsuits/:id ──────────────────────────────────────────────────────────
 router.get('/lawsuits/:id', async (req, res, next) => {
   try {
@@ -114,12 +165,14 @@ router.get('/lawsuits/:id', async (req, res, next) => {
     if (rows.length === 0) return next();
     const l = rows[0];
     const origin = originOf(req);
+    const brand = brandOf(req);
     serveHtml(res, {
-      title:       `${l.case_name} — Grounded: AI Legal`,
+      title:       `${l.case_name} — ${brand.label}`,
       description: truncate(l.summary || `${l.case_name} · ${l.jurisdiction || 'Jurisdiction unknown'} · ${l.case_type || 'AI lawsuit'}.`, 300),
       url:         `${origin}/lawsuits/${l.id}`,
       image:       `${origin}${DEFAULT_IMAGE}`,
       type:        'article',
+      siteName:    brand.siteName,
     });
   } catch (err) {
     next(err);
@@ -138,12 +191,14 @@ router.get('/regulations/:id', async (req, res, next) => {
     const r = rows[0];
     const label = r.short_name ? `${r.short_name} — ${r.regulation_name}` : r.regulation_name;
     const origin = originOf(req);
+    const brand = brandOf(req);
     serveHtml(res, {
-      title:       `${label} — Grounded: AI Legal`,
+      title:       `${label} — ${brand.label}`,
       description: truncate(r.summary || `${label} · ${r.jurisdiction || 'Jurisdiction unknown'} · ${r.regulation_type || 'AI regulation'}.`, 300),
       url:         `${origin}/regulations/${r.id}`,
       image:       `${origin}${DEFAULT_IMAGE}`,
       type:        'article',
+      siteName:    brand.siteName,
     });
   } catch (err) {
     next(err);
@@ -161,12 +216,14 @@ router.get('/usecases/:id', async (req, res, next) => {
     if (rows.length === 0) return next();
     const u = rows[0];
     const origin = originOf(req);
+    const brand = brandOf(req);
     serveHtml(res, {
-      title:       `${u.firm_name}: ${u.use_case_title} — Grounded: AI Legal`,
+      title:       `${u.firm_name}: ${u.use_case_title} — ${brand.label}`,
       description: truncate(u.summary || `How ${u.firm_name} is using AI. ${u.jurisdiction || ''}`, 300),
       url:         `${origin}/usecases/${u.id}`,
       image:       `${origin}${DEFAULT_IMAGE}`,
       type:        'article',
+      siteName:    brand.siteName,
     });
   } catch (err) {
     next(err);

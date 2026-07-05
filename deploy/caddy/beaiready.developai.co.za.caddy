@@ -1,0 +1,75 @@
+# Caddy block for the BE AI READY door (beaiready.developai.co.za).
+#
+# BE AI READY is NOT a separate app — it's the SAME Vite bundle + the SAME
+# client/dist as the Grounded door, switched by hostname (IS_BEAIREADY in
+# client/src/App.jsx). So this block serves the identical static SPA; the only
+# BAIR-specific wiring is the marketing-root reverse_proxy below.
+#
+# WHY the root goes to Node: social crawlers don't run JS, so the client-side
+# head-manager (client/src/beaiready/brand.js) can't fix their link previews.
+# The static index.html hard-codes "Grounded", so without this a shared BAIR
+# root link would preview as "Grounded". Routing the bare root to Node lets
+# server/routes/public-html.js inject the "Be AI Ready" OG per host (item 7).
+#
+# Append to /etc/caddy/sites/ (or the box Caddyfile). If a beaiready block
+# already exists on the box, just add the `handle /` reverse_proxy rule to it,
+# placed BEFORE the static SPA-fallback handle.
+
+beaiready.developai.co.za {
+    encode gzip zstd
+    root * /home/ubuntu/tracker/client/dist
+
+    # ── All /api/* → Node ────────────────────────────────────────────────
+    handle /api/* {
+        reverse_proxy localhost:3001
+    }
+
+    # ── Detail pages with UUIDs → Node (server-rendered, host-aware OG) ──
+    @detailPages path_regexp ^/(lawsuits|regulations|usecases)/[0-9a-f-]{36}/?$
+    handle @detailPages {
+        reverse_proxy localhost:3001
+    }
+
+    # ── Dynamic sitemap → Node ───────────────────────────────────────────
+    handle /sitemap.xml {
+        reverse_proxy localhost:3001
+    }
+
+    # ── Marketing root → Node (host-aware "Be AI Ready" OG for crawlers) ─
+    # Exact-match the bare root only; every other path still falls through to
+    # the static SPA shell below. public-html.js's GET / handler brands the OG
+    # by Host, so this is safe and self-contained.
+    handle / {
+        reverse_proxy localhost:3001
+    }
+
+    # ── /tools/* → Node ──────────────────────────────────────────────────
+    handle /tools/* {
+        reverse_proxy localhost:3001
+    }
+    handle /tools {
+        redir /tools/ 301
+    }
+
+    # ── Hashed Vite bundles → static + year-long immutable cache ─────────
+    handle /assets/* {
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }
+
+    # ── Everything else: static file, fall through to SPA shell ──────────
+    handle {
+        header Cache-Control "no-cache, no-store, must-revalidate"
+        header Pragma "no-cache"
+        header Expires "0"
+        try_files {path} /index.html
+        file_server
+    }
+
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}

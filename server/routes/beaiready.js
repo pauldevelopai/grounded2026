@@ -293,6 +293,35 @@ router.get('/intake', async (req, res) => {
   } catch (err) { console.error('[beaiready/intake]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Governance · pick-and-mix policy modules (item 5) ───────────────────────
+// The AI policy is DERIVED from the tenant's real governance data (see
+// /policy/generate). The business chooses WHICH sections to include; each
+// module carries a directive that steers the generator's coverage for that
+// section. This is the "modular policy" idea proven for newsrooms, per business.
+// Server-owned so the picker renders from a single source of truth.
+const POLICY_MODULES = [
+  { key: 'acceptable_use',   label: 'Acceptable use',        description: 'What staff may and may not do with AI.',
+    directive: 'Acceptable use — what staff may and may not do with AI, in concrete terms tied to how THIS business works.' },
+  { key: 'data_handling',    label: 'Data handling & POPIA', description: 'Which data may go into which tools; POPIA alignment.',
+    directive: 'Data handling & POPIA — what data may/may not go into which tools (reflect the register), personal-information handling, and POPIA alignment (cite sources).' },
+  { key: 'tool_rules',       label: 'Model & tool rules',    description: 'Approved, restricted and forbidden tools/models.',
+    directive: "Model & tool rules — approved vs restricted vs forbidden tools/models, naming the business's ACTUAL systems from the register." },
+  { key: 'human_oversight',  label: 'Human oversight',       description: 'Human approval for high-risk AI use.',
+    directive: 'Human oversight — where a human must review or approve, especially for the high-risk systems in the register.' },
+  { key: 'incident_response',label: 'Incident response',     description: 'Reporting and handling AI incidents; escalation.',
+    directive: 'Incident response — how to report and handle AI incidents, and the escalation path (reflect the roles & review data).' },
+  { key: 'eu_ai_act',        label: 'EU AI Act alignment',   description: 'Risk-tier obligations under the EU AI Act.',
+    directive: "EU AI Act alignment — obligations implied by the register's risk tiers, and how the business meets them (cite sources)." },
+  { key: 'accountability',   label: 'Accountability & review', description: 'Who is accountable; the review cadence.',
+    directive: 'Accountability & review — the named accountable owner and the review cadence that keeps this policy current.' },
+];
+const POLICY_MODULE_KEYS = POLICY_MODULES.map((m) => m.key);
+
+// Catalog for the client picker (no directives — those stay server-side).
+router.get('/policy/modules', (req, res) => {
+  res.json(POLICY_MODULES.map(({ key, label, description }) => ({ key, label, description })));
+});
+
 // ── Governance · the tenant's AI-use policy (lives in the dashboard) ─────────
 router.get('/policy', async (req, res) => {
   try {
@@ -314,6 +343,15 @@ router.post('/policy/generate', async (req, res) => {
   try {
     const { newsroomId, organisationId, sectorId } = await tenantContext(req);
     const body = req.body || {};
+
+    // Pick-and-mix (item 5): the business chooses which sections to include.
+    // Default to all modules when none are specified (back-compatible).
+    const requestedSections = Array.isArray(body.sections) && body.sections.length
+      ? body.sections.filter((k) => POLICY_MODULE_KEYS.includes(k))
+      : POLICY_MODULE_KEYS.slice();
+    const selectedModules = POLICY_MODULES.filter((m) => requestedSections.includes(m.key));
+    const sections = selectedModules.length ? selectedModules : POLICY_MODULES; // never zero
+    const coverDirective = sections.map((m) => `- ${m.directive}`).join('\n');
 
     const { rows: [t] } = await pool.query(
       `SELECT o.name AS org, o.country, s.name AS sector FROM newsrooms n
@@ -358,7 +396,9 @@ router.post('/policy/generate', async (req, res) => {
       ? `Accountable owner: ${profile.accountable_owner || '(unnamed)'}${profile.owner_role ? `, ${profile.owner_role}` : ''}. Review cadence: ${profile.review_cadence || 'quarterly'}. Incident escalation: ${profile.incident_escalation_path || '(undefined)'}.`
       : '(no accountable owner named yet)';
 
-    const system = `You are an AI-governance adviser writing a SMALL/MEDIUM BUSINESS's AI-use policy. CRITICAL: DERIVE the policy from the business's OWN governance data below (its AI System Register, risk tiers, adopted controls, and accountable owner) and ground it in the cited SOURCES — never generic boilerplate. Name the business's ACTUAL systems and controls. Cover: acceptable use; what data may/may not go into which tools (reflect the register); approved vs forbidden tools; human approval for high-risk systems; accountability (the named owner); POPIA + AI-regulation alignment (cite sources); and the review cadence. ${grounded ? 'Cite the SOURCE numbers you rely on.' : 'No governance sources are available; write from general principle and return "cited": [].'}
+    const system = `You are an AI-governance adviser writing a SMALL/MEDIUM BUSINESS's AI-use policy. CRITICAL: DERIVE the policy from the business's OWN governance data below (its AI System Register, risk tiers, adopted controls, and accountable owner) and ground it in the cited SOURCES — never generic boilerplate. Name the business's ACTUAL systems and controls. Cover EXACTLY these sections the business has chosen — each as its own clearly-headed section, and no others:
+${coverDirective}
+${grounded ? 'Cite the SOURCE numbers you rely on.' : 'No governance sources are available; write from general principle and return "cited": [].'}
 
 Respond in TWO parts, in this exact order:
 PART 1 — a single-line JSON object (no code fence, no newlines): {"title":string,"summary":"1-2 sentences","checklist":["short adoptable steps to put this policy in place"],"cited":[source numbers used]}
@@ -394,7 +434,8 @@ ${rolesBlock}${grounded ? `\n\nSOURCES (ground + cite these):\n${sourceBlock}` :
       content: policyMarkdown || raw.replace('---POLICY---', '').trim(),
       grounded,
       citations,
-      derived_from: { systems: systems.length, controls: controls.length, owner: profile?.accountable_owner || null, sources: sources.length },
+      sections: sections.map((m) => ({ key: m.key, label: m.label })),
+      derived_from: { systems: systems.length, controls: controls.length, owner: profile?.accountable_owner || null, sources: sources.length, sections: sections.map((m) => m.key) },
     });
   } catch (err) {
     console.error('[beaiready/policy/generate]', err);
@@ -420,6 +461,78 @@ router.put('/policy', async (req, res) => {
     );
     res.json(rows[0]);
   } catch (err) { console.error('[beaiready/policy/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Governance · the legal framework the business operates under (item 6) ────
+// Presentation only — NO new engine. Reference facts about POPIA + the EU AI
+// Act (the two frameworks that bite for an SA business using AI), mapped onto
+// the tenant's OWN AI System Register: its EU AI Act risk tiers and which
+// systems touch personal information. "Here are the rules that apply to you."
+// The reference text below is established law stated plainly, not fabricated
+// business data; the live, dated text lives in the tracker (/regulations).
+const LEGAL_FRAMEWORKS = [
+  {
+    key: 'popia',
+    name: 'POPIA — Protection of Personal Information Act',
+    jurisdiction: 'South Africa',
+    applies_when: 'You process personal information about people (staff, customers, leads) — which almost every business does. Feeding personal data into AI tools counts.',
+    obligations: [
+      'Only process personal information for a lawful, specific purpose people have been told about.',
+      'Collect the minimum needed, keep it accurate, and don’t keep it longer than necessary.',
+      'Secure it — including what you paste into or store in AI tools; check where the tool sends and keeps data.',
+      'Be transparent: people can ask what you hold and object to how it’s used.',
+      'Take special care with special-personal-information (health, race, religion, children) and cross-border transfers.',
+      'Have someone accountable (an Information Officer) and a way to handle a data breach.',
+    ],
+    tracker_query: 'POPIA',
+  },
+  {
+    key: 'eu_ai_act',
+    name: 'EU AI Act',
+    jurisdiction: 'European Union (reaches you if you serve EU users or your AI output is used in the EU)',
+    applies_when: 'You offer AI-driven products/services to people in the EU, or your AI system’s output is used there. Its four-tier risk model is the lens your AI System Register already uses.',
+    // Keyed to the register's risk tiers so the view reuses existing data.
+    tiers: [
+      { tier: 'unacceptable', headline: 'Prohibited', requirement: 'Banned outright — e.g. social scoring, manipulative or exploitative AI. If anything sits here, stop and remove it.' },
+      { tier: 'high',         headline: 'Strict obligations', requirement: 'Risk management, data governance, human oversight, logging, transparency and conformity checks before and during use.' },
+      { tier: 'limited',      headline: 'Transparency duties', requirement: 'Tell people they’re dealing with AI (chatbots, generated content). Light-touch but mandatory.' },
+      { tier: 'minimal',      headline: 'Few extra duties', requirement: 'Most everyday AI. No special obligations beyond good practice — but keep it in your register.' },
+    ],
+    tracker_query: 'EU AI Act',
+  },
+];
+
+router.get('/governance/legal-framework', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: systems } = await pool.query(
+      `SELECT tool_name, risk_tier, data_shared FROM ai_tool_inventory WHERE newsroom_id = $1 ORDER BY tool_name`,
+      [newsroomId]
+    ).catch(() => ({ rows: [] }));
+
+    const byTier = {};
+    for (const s of systems) {
+      const k = s.risk_tier || 'unclassified';
+      (byTier[k] ||= []).push(s.tool_name);
+    }
+    // Systems that record any shared data → the POPIA-relevant set.
+    const personalDataSystems = systems
+      .filter((s) => s.data_shared && String(s.data_shared).trim())
+      .map((s) => ({ tool_name: s.tool_name, data_shared: s.data_shared }));
+
+    res.json({
+      frameworks: LEGAL_FRAMEWORKS,
+      register: {
+        total: systems.length,
+        by_tier: byTier,
+        unclassified: (byTier.unclassified || []).length,
+        personal_data_systems: personalDataSystems,
+      },
+    });
+  } catch (err) {
+    console.error('[beaiready/legal-framework]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 // ── Visibility · how AI sees the business (Claude-only v1) ───────────────────

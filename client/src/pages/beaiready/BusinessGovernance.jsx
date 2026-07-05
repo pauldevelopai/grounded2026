@@ -15,9 +15,14 @@ export default function BusinessGovernance() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [editing, setEditing] = useState(false);
+  const [modules, setModules] = useState([]);        // pick-and-mix catalog (item 5)
+  const [selected, setSelected] = useState(null);    // Set of chosen module keys; null=not loaded
 
   useEffect(() => {
     apiFetch('/beaiready/policy').then(setSaved).catch(() => setSaved(null));
+    apiFetch('/beaiready/policy/modules')
+      .then((m) => { setModules(m); setSelected(new Set(m.map((x) => x.key))); }) // default: all included
+      .catch(() => { setModules([]); setSelected(new Set()); });
     Promise.all([
       apiFetch('/beaiready/security/inventory').catch(() => []),
       apiFetch('/beaiready/governance/controls').catch(() => []),
@@ -25,10 +30,19 @@ export default function BusinessGovernance() {
     ]).then(([sys, ctl, prof]) => setSummary({ systems: sys.length, controls: ctl.length, owner: prof?.accountable_owner || null }));
   }, []);
 
+  const toggleSection = (key) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   const generate = async () => {
     setBusy(true); setErr(''); setDraft(null);
     try {
-      const d = await apiFetch('/beaiready/policy/generate', { method: 'POST', body: JSON.stringify({}), timeout: 90000 });
+      const sections = selected ? [...selected] : [];
+      const d = await apiFetch('/beaiready/policy/generate', { method: 'POST', body: JSON.stringify({ sections }), timeout: 90000 });
       setDraft(d);
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -58,7 +72,8 @@ export default function BusinessGovernance() {
         <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/security">AI System Register</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance/controls">Controls library</Link> &nbsp;·&nbsp;
-        <Link to="/dashboard/governance/review">Roles &amp; review</Link>
+        <Link to="/dashboard/governance/review">Roles &amp; review</Link> &nbsp;·&nbsp;
+        <Link to="/dashboard/governance/legal">The rules that apply to you</Link>
       </p>
 
       {err && <div style={{ background: '#FEF2F2', color: '#B91C1C', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{err}</div>}
@@ -108,7 +123,32 @@ export default function BusinessGovernance() {
                 <li>Accountable owner: {summary?.owner || <span style={{ color: '#9a3412' }}>not yet set</span>}</li>
                 <li>Current law &amp; frameworks from the governance corpus (cited)</li>
               </ul>
-              <button onClick={generate} disabled={busy} style={btn}>{busy ? 'Generating…' : 'Generate policy'}</button>
+
+              {/* Pick-and-mix section picker (item 5): choose which modules the policy covers. */}
+              {modules.length > 0 && (
+                <div style={{ margin: '4px 0 16px' }}>
+                  <div className="hub-card-kicker">Choose what your policy covers</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 8, marginTop: 8 }}>
+                    {modules.map((m) => {
+                      const on = selected?.has(m.key);
+                      return (
+                        <label key={m.key} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', padding: '9px 11px', border: `1px solid ${on ? '#c75b39' : '#e4dcd2'}`, background: on ? '#fdf3ef' : '#fff', borderRadius: 8, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={!!on} onChange={() => toggleSection(m.key)} style={{ marginTop: 2 }} />
+                          <span>
+                            <span style={{ fontWeight: 600, fontSize: 13.5, display: 'block' }}>{m.label}</span>
+                            <span style={{ fontSize: 12, color: '#8a8076' }}>{m.description}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={generate} disabled={busy || (selected && selected.size === 0)} style={btn}>
+                {busy ? 'Generating…' : `Generate policy${selected ? ` (${selected.size} section${selected.size === 1 ? '' : 's'})` : ''}`}
+              </button>
+              {selected && selected.size === 0 && <p style={{ fontSize: 12, color: '#9a3412', marginTop: 8 }}>Pick at least one section to include.</p>}
             </>
           )}
         </section>
@@ -135,6 +175,12 @@ export default function BusinessGovernance() {
               {' '}{draft.derived_from.controls} control{draft.derived_from.controls === 1 ? '' : 's'}
               {draft.derived_from.owner ? ` · owner ${draft.derived_from.owner}` : ''}
               {draft.derived_from.sources ? ` · ${draft.derived_from.sources} cited source${draft.derived_from.sources === 1 ? '' : 's'}` : ''}
+            </p>
+          )}
+          {draft.sections?.length > 0 && (
+            <p style={{ fontSize: 12, marginTop: 0 }}>
+              <span style={{ color: '#8a8076' }}>Sections: </span>
+              {draft.sections.map((s) => s.label).join(' · ')}
             </p>
           )}
           {draft.summary && <p style={{ color: '#6b6359' }}>{draft.summary}</p>}

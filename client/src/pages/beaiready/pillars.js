@@ -56,7 +56,9 @@ export const PILLARS = [
       { name: 'Legal, Ethics & Regulation tracker', status: 'live', to: '/tracker',
         what: 'A daily-updated feed of AI lawsuits and regulations worldwide — in one place, newest first — the live infrastructure that keeps your governance current.' },
       { name: 'Build your AI policy', status: 'live', dash: '/dashboard/governance', slug: 'ai-policy',
-        what: 'A bespoke AI-use policy, generated from a short brief, then edited and owned by you — aligned with POPIA. Lives in your dashboard.' },
+        what: 'A bespoke AI-use policy — pick the sections you need (data & POPIA, acceptable use, tool rules, EU AI Act alignment and more), generated from your own governance data, then edited and owned by you. Lives in your dashboard.' },
+      { name: 'The rules that apply to you', status: 'live', dash: '/dashboard/governance/legal', slug: 'legal-framework',
+        what: 'A plain-language read of the legal frameworks you operate under — POPIA and the EU AI Act — mapped onto the AI systems you\'ve logged, so you can see which rules bite hardest.' },
       { name: 'Controls Library', status: 'live', dash: '/dashboard/governance/controls', slug: 'controls-library',
         what: 'The safeguards your business runs — adopt framework-backed starters, get suggestions grounded in governance sources, and link each control to the AI systems it covers.' },
       { name: 'Roles & Review', status: 'live', dash: '/dashboard/governance/review', slug: 'roles-review',
@@ -92,7 +94,7 @@ export const PILLARS = [
       'and kept, so every useful question and answer builds the business up instead of vanishing. Plus a ' +
       'continuously scored toolbox and the Nodes your business runs and owns.',
     features: [
-      { name: 'Team AI workspace', status: 'live', dash: '/dashboard/workspace', slug: 'team-workspace',
+      { name: 'Team AI assistant', status: 'live', dash: '/dashboard/workspace', slug: 'team-workspace',
         what: 'Where your whole team asks AI — every answer grounded in your own knowledge, and every question and answer pooled in one shared place so the business builds on it. The more it\'s used, the smarter it gets, and good answers can be saved into your knowledge.' },
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
@@ -100,7 +102,7 @@ export const PILLARS = [
         what: 'The prompts we recommend for the AI model your team uses — scored per model — plus your own saved versions. Copy, rate, and build your own library.' },
       { name: 'Nodes', status: 'live', to: '/nodes',
         what: 'Small AI tools your business runs and owns — like Extract PDF: drop in a document, get trusted structured data back. Run them here, or download and run on your own machine.' },
-      { name: 'Track employee productivity', status: 'live', dash: '/dashboard/productivity', slug: 'productivity-tracking',
+      { name: 'Measure what AI is saving your team', status: 'live', dash: '/dashboard/productivity', slug: 'productivity-tracking',
         what: 'Five measures only — deliverables, revenue, time spent, AI hours saved, client outcomes — entered at the business level with your own baselines. Never used to police individuals.' },
     ],
   },

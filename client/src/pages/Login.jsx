@@ -33,6 +33,8 @@ export default function Login() {
   const [companies, setCompanies] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState('');       // forgot-password success message
+  const [resetLink, setResetLink] = useState(''); // dev/test fallback when no real mailer
 
   // Load the list of companies open for self-registration (those an admin has given
   // an access code) when a BAIR visitor switches to register.
@@ -45,11 +47,46 @@ export default function Login() {
   function switchMode() {
     setMode(m => m === 'login' ? 'register' : 'login');
     setError('');
+    setNotice('');
+    setResetLink('');
+  }
+
+  // Toggle in/out of the forgot-password view (item 4).
+  function goForgot(on) {
+    setMode(on ? 'forgot' : 'login');
+    setError('');
+    setNotice('');
+    setResetLink('');
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+
+    // Forgot-password: request a reset link by email. Always shows the same
+    // reassurance whether or not the address has an account (no enumeration).
+    if (mode === 'forgot') {
+      if (!email.trim()) { setError('Enter your email'); return; }
+      setLoading(true);
+      try {
+        const res = await fetch('/api/auth/request-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || 'Could not send a reset link');
+        setNotice(data.message || 'If that email has an account, a reset link is on its way.');
+        // Fallback while prod email isn't wired: the server returns the link so
+        // the flow is testable. Surfaced here as a clickable link.
+        if (data.reset_link) setResetLink(data.reset_link);
+      } catch (err) {
+        setError(err.message || 'Could not send a reset link');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (mode === 'register') {
       if (!name.trim()) { setError('Name is required'); return; }
@@ -97,10 +134,40 @@ export default function Login() {
         <h1>{IS_BEAIREADY ? 'Be AI Ready' : 'Grounded'}</h1>
         <p className="brand-sub">{IS_BEAIREADY ? 'by Develop AI' : 'Newsroom-owned AI · by Develop AI'}</p>
         <p className="login-instruction">
-          {IS_BEAIREADY
-            ? (mode === 'login' ? (next ? 'Sign in to pick up where you left off' : 'Sign in to your dashboard') : 'Create your account')
-            : (mode === 'login' ? 'Sign in to continue' : 'Create your account')}
+          {mode === 'forgot'
+            ? 'Reset your password'
+            : IS_BEAIREADY
+              ? (mode === 'login' ? (next ? 'Sign in to pick up where you left off' : 'Sign in to your dashboard') : 'Create your account')
+              : (mode === 'login' ? 'Sign in to continue' : 'Create your account')}
         </p>
+
+        {mode === 'forgot' && !notice && (
+          <p style={{ fontSize: 13, color: '#6b6359', margin: '0 0 14px', lineHeight: 1.45 }}>
+            Enter your email and we’ll send you a link to set a new password.
+          </p>
+        )}
+
+        {notice && (
+          <div style={{ fontSize: 13, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px', margin: '0 0 14px', lineHeight: 1.45 }}>
+            {notice}
+            {resetLink && (
+              <div style={{ marginTop: 8 }}>
+                Email isn’t configured here yet, so use this link directly:{' '}
+                <a href={resetLink} style={{ color: '#c75b39', fontWeight: 600, wordBreak: 'break-all' }}>Reset your password</a>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Course gate (item 3): access is for businesses who've been on a Develop
+            AI course — the access code is handed out there. Make that plain up front. */}
+        {IS_BEAIREADY && mode === 'register' && (
+          <p style={{ fontSize: 13, color: '#8a6d3b', background: '#fdf6e3', border: '1px solid #f0e2c0', borderRadius: 8, padding: '10px 12px', margin: '0 0 14px', lineHeight: 1.45 }}>
+            Be AI Ready is for businesses who’ve been on a <strong>Develop AI course</strong>. You’ll have
+            been given your company’s access code there — enter it below to join. No code yet?{' '}
+            <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready%20course" style={{ color: '#c75b39', fontWeight: 600 }}>Ask about a course</a>.
+          </p>
+        )}
 
         {error && <div className="login-error">{error}</div>}
 
@@ -130,16 +197,18 @@ export default function Login() {
             />
           </div>
 
-          <div className="form-group">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              minLength={mode === 'register' ? 6 : undefined}
-            />
-          </div>
+          {mode !== 'forgot' && (
+            <div className="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={mode === 'register' ? 6 : undefined}
+              />
+            </div>
+          )}
 
           {mode === 'register' && (
             <div className="form-group">
@@ -168,11 +237,12 @@ export default function Login() {
                   type="password"
                   value={accessCode}
                   onChange={e => setAccessCode(e.target.value)}
-                  placeholder="The code from your company admin"
+                  placeholder="The code from your Develop AI course"
                   required
                 />
                 <p style={{ fontSize: 12, color: '#8a8076', margin: '4px 0 0' }}>
-                  This confirms you’re part of the company — your admin shares it with the team.
+                  Handed out on your Develop AI course — it confirms your company is enrolled. Your
+                  admin can also share it with the rest of your team.
                 </p>
               </div>
             </>
@@ -185,14 +255,32 @@ export default function Login() {
             disabled={loading}
           >
             {loading
-              ? (mode === 'login' ? 'Signing in...' : 'Creating account...')
-              : (mode === 'login' ? 'Sign in' : 'Create account')
+              ? (mode === 'login' ? 'Signing in...' : mode === 'forgot' ? 'Sending...' : 'Creating account...')
+              : (mode === 'login' ? 'Sign in' : mode === 'forgot' ? 'Send reset link' : 'Create account')
             }
           </button>
         </form>
 
+        {/* Forgot-password entry (login) + back-to-sign-in (forgot). item 4 */}
+        {mode === 'login' && (
+          <div style={{ marginTop: '12px', textAlign: 'center' }}>
+            <button type="button" onClick={() => goForgot(true)}
+              style={{ background: 'none', border: 'none', color: '#8a8076', cursor: 'pointer', fontSize: 13, padding: 0, textDecoration: 'underline' }}>
+              Forgot your password?
+            </button>
+          </div>
+        )}
+        {mode === 'forgot' && (
+          <div style={{ marginTop: '12px', textAlign: 'center', fontSize: 13, color: '#8a8076' }}>
+            <button type="button" onClick={() => goForgot(false)}
+              style={{ background: 'none', border: 'none', color: '#c75b39', cursor: 'pointer', fontSize: 13, fontWeight: 600, padding: 0, textDecoration: 'underline' }}>
+              ← Back to sign in
+            </button>
+          </div>
+        )}
+
         {/* BE AI READY self-registration: join your company with its access code. */}
-        {IS_BEAIREADY ? (
+        {mode !== 'forgot' && (IS_BEAIREADY ? (
           <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '13px', color: '#8a8076' }}>
             {mode === 'login' ? (
               <>New here?{' '}
@@ -239,7 +327,7 @@ export default function Login() {
             </>
           )}
         </div>
-        )}
+        ))}
       </div>
     </div>
   );

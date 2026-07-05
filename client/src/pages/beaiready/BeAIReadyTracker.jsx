@@ -5,13 +5,23 @@
 // client's governance and their AI policy is exactly what's shown here. Each row
 // links to its full detail page. Real data only; honest empty states.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
 
-const TABS = [
-  { key: 'lawsuits',    label: 'Lawsuits',    api: '/public/lawsuits?pageSize=40',    name: 'case_name',       base: '/legal/lawsuits' },
-  { key: 'regulations', label: 'Regulations', api: '/public/regulations?pageSize=40', name: 'regulation_name', base: '/legal/regulations' },
-  { key: 'briefings',   label: 'Daily briefings' },   // past "Today in AI governance" summaries
+// Law and Regulation are peer first-class areas — not one tab hanging off the
+// other (item 2). Each carries its own heading + lede so it reads as its own
+// place. `countNoun` keeps the counts/search copy natural when the segment
+// label is a short area name ("Law" → "40 lawsuits", not "40 law").
+const SECTIONS = [
+  { key: 'lawsuits',    label: 'Law',        name: 'case_name',       base: '/legal/lawsuits', countNoun: 'lawsuits',
+    heading: 'Law — AI in the courts',
+    lede: 'Every AI lawsuit we track worldwide — copyright, privacy, liability and more — newest first, each linking to the full case.' },
+  { key: 'regulations', label: 'Regulation', name: 'regulation_name', base: '/legal/regulations', countNoun: 'regulations',
+    heading: 'Regulation — the rules taking shape',
+    lede: 'AI laws and regulations worldwide — enacted, proposed and in force — the frameworks your governance and AI policy are built against.' },
+  { key: 'briefings',   label: 'Daily briefings', countNoun: 'briefings',
+    heading: 'Daily briefings — where AI governance stands',
+    lede: 'The archive of the daily “Today in AI governance” read — breaking developments the case and regulation feeds don’t capture on their own.' },
 ];
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
@@ -31,16 +41,20 @@ const relAge = (d) => {
 };
 
 export default function BeAIReadyTracker() {
-  const [tab, setTab] = useState('lawsuits');
+  // Deep-links from the governance views (e.g. /tracker?q=EU%20AI%20Act) land you
+  // in the Regulation section, pre-searched — regulations are what those views cite.
+  const [searchParams] = useSearchParams();
+  const initialQ = searchParams.get('q') || '';
+  const [tab, setTab] = useState(initialQ ? 'regulations' : 'lawsuits');
   const [items, setItems] = useState(null);
   const [total, setTotal] = useState(null);
   const [facets, setFacets] = useState({ statuses: [], jurisdictions: [] });
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQ);
   const [status, setStatus] = useState('');
   const [jurisdiction, setJurisdiction] = useState('');
   const [today, setToday] = useState(undefined); // undefined=loading, null=none yet
   const [history, setHistory] = useState(undefined); // past daily briefings
-  const active = TABS.find((t) => t.key === tab);
+  const active = SECTIONS.find((t) => t.key === tab);
   const filtered = !!(q.trim() || status || jurisdiction);
   const switchTab = (key) => { setTab(key); setItems(null); setQ(''); setStatus(''); setJurisdiction(''); };
 
@@ -111,17 +125,29 @@ export default function BeAIReadyTracker() {
         </section>
       )}
 
-      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #e4dcd2', marginBottom: 18 }}>
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => switchTab(t.key)}
+      {/* Section switcher — Law and Regulation as peer first-class areas (item 2),
+          styled as a segmented control rather than a thin secondary-tab underline. */}
+      <div role="tablist" aria-label="Tracker sections"
+        style={{ display: 'inline-flex', gap: 4, padding: 4, background: '#f4efe9', border: '1px solid #e4dcd2', borderRadius: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        {SECTIONS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => switchTab(t.key)}
             style={{
-              padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 15,
-              fontWeight: tab === t.key ? 700 : 500, color: tab === t.key ? '#c75b39' : '#6b6359',
-              borderBottom: tab === t.key ? '2px solid #c75b39' : '2px solid transparent', marginBottom: -1,
+              padding: '9px 18px', border: 'none', borderRadius: 9, cursor: 'pointer', fontSize: 14.5,
+              fontWeight: tab === t.key ? 700 : 500,
+              color: tab === t.key ? '#fff' : '#6b6359',
+              background: tab === t.key ? '#c75b39' : 'transparent',
+              boxShadow: tab === t.key ? '0 1px 2px rgba(0,0,0,0.12)' : 'none',
             }}>
             {t.label}
           </button>
         ))}
+      </div>
+
+      {/* Each section leads with its own heading + lede, so Regulation reads as a
+          first-class area in its own right — not a sub-view of the case tracker. */}
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 4px', color: '#2b2620' }}>{active.heading}</h2>
+        <p style={{ fontSize: 13.5, color: '#6b6359', margin: 0, maxWidth: '68ch', lineHeight: 1.55 }}>{active.lede}</p>
       </div>
 
       {tab === 'briefings' ? (
@@ -154,7 +180,7 @@ export default function BeAIReadyTracker() {
         <>
           {/* Filters — search, status, jurisdiction (server-side via the public API). */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${active.label.toLowerCase()}…`} style={fInp} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${active.countNoun}…`} style={fInp} />
             <select value={status} onChange={(e) => setStatus(e.target.value)} style={fInp}>
               <option value="">All statuses</option>
               {facets.statuses.map((s) => <option key={s} value={s}>{String(s).replace(/_/g, ' ')}</option>)}
@@ -168,7 +194,7 @@ export default function BeAIReadyTracker() {
 
           {items != null && (
             <div style={{ fontSize: 11.5, color: '#a89e92', margin: '-2px 0 12px' }}>
-              {total != null ? `${total} ${active.label.toLowerCase()}${filtered ? ' (filtered)' : ''} · ` : ''}newest first
+              {total != null ? `${total} ${active.countNoun}${filtered ? ' (filtered)' : ''} · ` : ''}newest first
               {items.length > 0 && (() => {
                 const newest = items[0]?.latest_event_date || items[0]?.updated_at;
                 const a = relAge(newest);

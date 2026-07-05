@@ -18,6 +18,7 @@ function AdminRoute() {
   return <Outlet />;
 }
 import Login from './pages/Login.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import ContactsList from './pages/contacts/ContactsList.jsx';
 import ContactDetail from './pages/contacts/ContactDetail.jsx';
@@ -93,6 +94,7 @@ import BusinessVisibility from './pages/beaiready/BusinessVisibility.jsx';
 import BusinessSecurity from './pages/beaiready/BusinessSecurity.jsx';
 import BusinessControls from './pages/beaiready/BusinessControls.jsx';
 import BusinessReview from './pages/beaiready/BusinessReview.jsx';
+import BusinessLegalFramework from './pages/beaiready/BusinessLegalFramework.jsx';
 import BusinessGovAssessment from './pages/beaiready/BusinessGovAssessment.jsx';
 import BusinessGovLearning from './pages/beaiready/BusinessGovLearning.jsx';
 import BusinessProductivity from './pages/beaiready/BusinessProductivity.jsx';
@@ -196,6 +198,7 @@ export default function App() {
         <AiAssistantProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/reset" element={<ResetPassword />} />
           <Route path="/portal" element={<ParticipantPortal />} />
           {/* On the main host, /beaiready reroutes to the dedicated subdomain. */}
           <Route path="/beaiready" element={<BeAIReadyRedirect />} />
@@ -332,6 +335,7 @@ export default function App() {
                 <Route path="/dashboard/security" element={<BusinessSecurity />} />
                 <Route path="/dashboard/governance/controls" element={<BusinessControls />} />
                 <Route path="/dashboard/governance/review" element={<BusinessReview />} />
+                <Route path="/dashboard/governance/legal" element={<BusinessLegalFramework />} />
                 <Route path="/dashboard/governance/assessment" element={<BusinessGovAssessment />} />
                 <Route path="/dashboard/governance/learning" element={<BusinessGovLearning />} />
                 <Route path="/dashboard/productivity" element={<BusinessProductivity />} />
