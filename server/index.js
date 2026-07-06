@@ -74,6 +74,7 @@ import { requirePulse } from './middleware/pulse-flag.js';
 import { startScheduler } from './services/scheduler.js';
 import { getAINewsToday, generateAINewsToday } from './services/ai-news-today.js';
 import { getGovernanceToday, generateGovernanceToday } from './services/governance-today.js';
+import { getRegulationToday, generateRegulationToday } from './services/regulation-today.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
 import { resolveTenant } from './middleware/resolve-tenant.js';
@@ -438,6 +439,11 @@ async function selfHealBriefings() {
       generateGovernanceToday().then((v) => v && console.log('[boot] AI-law briefing regenerated')).catch((e) => console.warn('[boot] AI-law regen skipped:', e.message));
     }
   } catch (e) { console.warn('[boot] AI-law check failed:', e.message); }
+  try {
+    if (!(await getRegulationToday())) {
+      generateRegulationToday().then((v) => v && console.log('[boot] Regulation briefing regenerated')).catch((e) => console.warn('[boot] Regulation regen skipped:', e.message));
+    }
+  } catch (e) { console.warn('[boot] Regulation check failed:', e.message); }
 }
 
 app.listen(config.port, () => {

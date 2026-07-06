@@ -1,22 +1,21 @@
-// governance-today.js — the "Today in AI governance" (AI Law) briefing shown atop
-// the tracker AND on the BE AI READY home. Source of truth = OUR OWN Law &
-// Regulation tracker (ai_lawsuits + ai_regulations), NOT a live web search. Paul's
-// call (2026-06-24): the team curates the tracker, so the briefing must come
-// directly from it — full oversight, and no web-sourced fabrication. It summarises
-// the most-recently-updated tracked items into a short business-facing read, with
-// the tracked items as the cited sources. Cached in app_settings ('governance_today')
-// + governance_today_history; regenerated on a schedule or from the admin.
+// governance-today.js — the "AI Law" briefing shown atop the tracker AND on the BE AI
+// READY home. Source of truth = OUR OWN Law tracker (ai_lawsuits ONLY — regulations now
+// have their own briefing, see regulation-today.js), NOT a live web search. Paul's call
+// (2026-06-24): the team curates the tracker, so the briefing must come directly from it
+// — full oversight, and no web-sourced fabrication. It summarises the most-recently-
+// updated tracked lawsuits into a short business-facing read, with the tracked items as
+// the cited sources. Cached in app_settings ('governance_today') + governance_today_history;
+// regenerated on a schedule or from the admin. Audience is global; money in US dollars.
 import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
 import { getBriefingSettings } from './briefing-settings.js';
 
 const KEY = 'governance_today';
 
-// The most-recently-updated tracked lawsuits + regulations — the curated corpus the
-// briefing is written from. Newest first across both, capped at `limit`. Excludes
-// unvetted auto-added rows (curated by hand, or auto-added then explicitly kept) so
-// the briefing/headlines can never surface a web-sourced fabrication that an admin
-// hasn't reviewed — matching what the public tracker shows.
+// The most-recently-updated tracked LAWSUITS — the curated corpus the briefing is written
+// from. Newest first, capped at `limit`. Excludes unvetted auto-added rows (curated by
+// hand, or auto-added then explicitly kept) so the briefing/headlines can never surface a
+// web-sourced fabrication that an admin hasn't reviewed — matching the public tracker.
 const VETTED = "(auto_added = false OR review_status = 'kept')";
 async function recentTrackerItems(limit) {
   const { rows: law } = await pool.query(
@@ -26,16 +25,7 @@ async function recentTrackerItems(limit) {
       WHERE ${VETTED}
       ORDER BY COALESCE(last_update, updated_at::date) DESC NULLS LAST LIMIT $1`, [limit]
   ).catch(() => ({ rows: [] }));
-  const { rows: reg } = await pool.query(
-    `SELECT regulation_name AS name, jurisdiction, status, summary, source_url, official_url AS case_url,
-            COALESCE(enforcement_date, effective_date, updated_at::date) AS dt, 'regulation' AS kind
-       FROM ai_regulations
-      WHERE ${VETTED}
-      ORDER BY updated_at DESC NULLS LAST LIMIT $1`, [limit]
-  ).catch(() => ({ rows: [] }));
-  return [...law, ...reg]
-    .sort((a, b) => (b.dt ? new Date(b.dt).getTime() : 0) - (a.dt ? new Date(a.dt).getTime() : 0))
-    .slice(0, limit);
+  return law;
 }
 
 function sanitizeSummary(raw) {
@@ -69,15 +59,17 @@ export async function generateGovernanceToday() {
   }).join('\n');
 
   const writeSystem =
-    'You write a daily "Today in AI governance" briefing for South African small and medium businesses on ' +
-    'the Be AI Ready platform. Audience: non-technical owners and managers. Tone: plain, calm, concrete — no ' +
-    'hype, no jargon. You are given items from OUR OWN curated AI Law & Regulation tracker. Output ONLY the ' +
-    'briefing prose and nothing else: 90–110 words, one or two short paragraphs. Pick the few most significant ' +
-    'items and say, in everyday terms, what each practically means for a small business. Use ONLY the items ' +
-    'provided — do not add, rename, merge or invent any law, case, company, product or model, and do not pull ' +
-    'in anything from outside this list. Do NOT restate these instructions, write a preamble or heading, use ' +
-    'markdown or bullets, or produce more than one version.';
-  const writeUser = `From our Law & Regulation tracker (most recently updated, newest first):\n\n${sourceList}\n\nWrite the briefing now.`;
+    'You write a daily "AI Law" briefing for small and medium businesses on the Be AI Ready platform. ' +
+    'Audience: non-technical owners and managers at organisations of any size, anywhere in the world — do ' +
+    'NOT assume a specific country or region, and do not single out any one nationality of business. Give ' +
+    'any monetary amounts in US dollars ($). Tone: plain, calm, concrete — no hype, no jargon. You are given ' +
+    'items from OUR OWN curated AI lawsuit tracker. Output ONLY the briefing prose and nothing else: 90–110 ' +
+    'words, one or two short paragraphs. Pick the few most significant items and say, in everyday terms, what ' +
+    'each practically means for a business using AI. Use ONLY the items provided — do not add, rename, merge ' +
+    'or invent any law, case, company, product or model, and do not pull in anything from outside this list. ' +
+    'Do NOT restate these instructions, write a preamble or heading, use markdown or bullets, or produce more ' +
+    'than one version.';
+  const writeUser = `From our AI lawsuit tracker (most recently updated, newest first):\n\n${sourceList}\n\nWrite the briefing now.`;
   const text = await callClaude({ system: writeSystem, userContent: writeUser, maxTokens: 320, temperature: 0.4 });
 
   const value = {

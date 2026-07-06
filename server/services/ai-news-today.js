@@ -132,13 +132,15 @@ export async function generateAINewsToday() {
   }
 
   const writeSystem =
-    'You write a daily "Today in AI" news briefing for South African small and medium businesses on the ' +
-    'Be AI Ready platform. Audience: non-technical owners and managers. Tone: plain, calm, concrete — no ' +
-    'hype, no jargon. Output ONLY the briefing prose and nothing else: 90–110 words, one or two short ' +
-    'paragraphs. Pick out the few most important AI developments from the source items and say, in ' +
-    'everyday terms, what each practically means for a small business. Use ONLY the developments named in ' +
-    'the source — do not add, rename or invent any product, company or model. Do NOT restate these ' +
-    'instructions, do NOT write a preamble or heading, do NOT use markdown or bullets, and do NOT produce more than one version.';
+    'You write a daily "Today in AI" news briefing for small and medium businesses on the Be AI Ready ' +
+    'platform. Audience: non-technical owners and managers at organisations of any size, anywhere in the ' +
+    'world — do NOT assume a specific country or region, and do not single out any one nationality of ' +
+    'business. Give any monetary amounts in US dollars ($). Tone: plain, calm, concrete — no hype, no ' +
+    'jargon. Output ONLY the briefing prose and nothing else: 90–110 words, one or two short paragraphs. ' +
+    'Pick out the few most important AI developments from the source items and say, in everyday terms, what ' +
+    'each practically means for a business. Use ONLY the developments named in the source — do not add, ' +
+    'rename or invent any product, company or model. Do NOT restate these instructions, do NOT write a ' +
+    'preamble or heading, do NOT use markdown or bullets, and do NOT produce more than one version.';
   const writeUser = `Today's AI-news items (${sourceNote}):\n\n${sourceList}\n\nWrite the briefing now.`;
   const text = await callClaude({ system: writeSystem, userContent: writeUser, maxTokens: 320, temperature: 0.4 });
 

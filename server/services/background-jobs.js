@@ -7,16 +7,27 @@ import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scr
 import { startScan, finishScan, updateScan } from './scan-state.js';
 import { runFormsSheetSync } from './forms-sync.js';
 import { generateGovernanceToday } from './governance-today.js';
+import { generateRegulationToday } from './regulation-today.js';
 import { generateAINewsToday } from './ai-news-today.js';
 import { gmailAiFilter, isAboutAI } from './newsletter-filter.js';
 import { harvestTechieray } from './legal-ingest/techieray.js';
 
-// Regenerate the "Today" AI-governance digest (web-search-backed) for the tracker.
+// Regenerate the "AI Law" digest (lawsuits only) from the curated tracker.
 export async function runGovernanceTodayDigest() {
   const v = await generateGovernanceToday();
   return {
-    result: v ? `Today digest regenerated from the tracker (${v.headlines?.length || 0} items)`
-              : 'No tracked lawsuits/regulations yet — AI-Law briefing left empty',
+    result: v ? `AI-Law briefing regenerated from the tracker (${v.headlines?.length || 0} items)`
+              : 'No tracked lawsuits yet — AI-Law briefing left empty',
+    itemsProcessed: v ? 1 : 0,
+  };
+}
+
+// Regenerate the "Regulation" digest (regulations only) from the curated tracker.
+export async function runRegulationTodayDigest() {
+  const v = await generateRegulationToday();
+  return {
+    result: v ? `Regulation briefing regenerated from the tracker (${v.headlines?.length || 0} items)`
+              : 'No tracked regulations yet — Regulation briefing left empty',
     itemsProcessed: v ? 1 : 0,
   };
 }
@@ -993,6 +1004,7 @@ export const JOB_REGISTRY = {
   data_security_triage:       runDataSecurityTriage,
   ethics_triage:              runEthicsTriage,
   governance_today_digest:    runGovernanceTodayDigest,
+  regulation_today_digest:    runRegulationTodayDigest,
   ai_news_today_digest:       runAINewsTodayDigest,
   techieray_harvest:          runTechierayHarvest,
 };

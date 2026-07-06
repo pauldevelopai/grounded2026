@@ -10,8 +10,8 @@ const STATUS_DOT = { live: '#16a34a', partial: '#d97706', building: '#94a3b8' };
 
 export default function BeAIReadyHome() {
   const [stats, setStats] = useState({ lawsuits: null, regulations: null, tools: null });
-  // The two daily briefings that lead the page (undefined = loading, null = none yet).
-  const [briefings, setBriefings] = useState({ news: undefined, law: undefined });
+  // The three daily briefings that lead the page (undefined = loading, null = none yet).
+  const [briefings, setBriefings] = useState({ news: undefined, law: undefined, regulation: undefined });
 
   useEffect(() => {
     Promise.allSettled([
@@ -27,6 +27,7 @@ export default function BeAIReadyHome() {
     );
     publicFetch('/public/ai-news-today').then((v) => setBriefings((b) => ({ ...b, news: v || null }))).catch(() => setBriefings((b) => ({ ...b, news: null })));
     publicFetch('/public/governance-today').then((v) => setBriefings((b) => ({ ...b, law: v || null }))).catch(() => setBriefings((b) => ({ ...b, law: null })));
+    publicFetch('/public/regulation-today').then((v) => setBriefings((b) => ({ ...b, regulation: v || null }))).catch(() => setBriefings((b) => ({ ...b, regulation: null })));
   }, []);
 
   return (
@@ -47,9 +48,9 @@ export default function BeAIReadyHome() {
         </div>
       </section>
 
-      {/* ── Today in AI — the two daily briefings (News on top, Law below). Only
-          shows once at least one has been generated; no empty cards. ── */}
-      {(briefings.news?.summary || briefings.law?.summary) && (
+      {/* ── Today in AI — the three daily briefings (News, then Law, then Regulation).
+          Only shows once at least one has been generated; no empty cards. ── */}
+      {(briefings.news?.summary || briefings.law?.summary || briefings.regulation?.summary) && (
         <>
           <div className="hub-section-label">Today in AI</div>
           <section style={{ display: 'grid', gap: 14, marginBottom: 28 }}>
@@ -58,6 +59,9 @@ export default function BeAIReadyHome() {
             )}
             {briefings.law?.summary && (
               <BriefingCard kicker="AI Law" data={briefings.law} to="/tracker" toLabel="Open the tracker →" />
+            )}
+            {briefings.regulation?.summary && (
+              <BriefingCard kicker="Regulation" data={briefings.regulation} to="/tracker" toLabel="Open the tracker →" />
             )}
           </section>
         </>
