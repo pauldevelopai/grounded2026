@@ -32,16 +32,15 @@ export async function runRegulationTodayDigest() {
   };
 }
 
-// Regenerate the "Today in AI" news briefing for the BE AI READY home. First pulls
-// today's newsletters from Gmail (best-effort — same ingestion the Morning Briefing
-// uses) so the briefing is fresh, then synthesises it from the ingested items.
+// Regenerate the "Today in AI" news briefing for the BE AI READY home. Sourced from a
+// live, domain-restricted web search (see ai-news-today.js) — NO Gmail dependency. The
+// source is admin-tunable via briefing_settings (default 'websearch'); only the legacy
+// 'auto'/'newsletters' modes touch Gmail, so we no longer pre-ingest newsletters here.
 export async function runAINewsTodayDigest() {
-  try { await runNewsletterDigest(); }
-  catch (e) { console.error('[ai-news-today:ingest]', e.message); }
   const v = await generateAINewsToday();
   return {
     result: v ? `AI-news briefing regenerated (${v.headlines?.length || 0} sources)`
-              : 'No recent newsletter items — AI-news briefing left empty',
+              : 'No AI-news items found — briefing left empty',
     itemsProcessed: v ? 1 : 0,
   };
 }

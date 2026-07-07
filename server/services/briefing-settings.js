@@ -9,8 +9,10 @@ const KEY = 'briefing_settings';
 
 export const DEFAULTS = {
   ai_news: {
-    source: 'auto',   // 'auto' = your newsletters, web search only if none ingested | 'newsletters' | 'websearch'
-    days: 4,          // how many days of ingested newsletters to draw on
+    // 'websearch' (default 2026-07-07): a live, domain-restricted web search — no Gmail
+    // dependency. 'auto' = your newsletters, web search only if none ingested. 'newsletters'.
+    source: 'websearch',
+    days: 4,          // how many days of ingested newsletters to draw on (only for newsletter modes)
     web_focus: 'major AI model and product releases, big company moves, funding, notable launches, and real-world adoption',
   },
   ai_law: {
