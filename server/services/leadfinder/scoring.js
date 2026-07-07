@@ -63,10 +63,13 @@ const EVALUATORS = {
     return { score: 0, note: `required grade ${required} exceeds capability ${cap}` };
   },
 
-  // any of the keywords appears in the field -> fit.
+  // any of the keywords appears in the field(s) -> fit. Accepts `fields: [...]`
+  // (scan several) or a single `field`; matching across title+description matters
+  // for feed sources whose title is a terse reference, not the subject.
   keyword_any(rule, extracted) {
-    const hay = String(extracted[rule.field] || '').toLowerCase();
-    if (!hay) return { score: rule.missing_score ?? 0.3, note: `${rule.field} empty` };
+    const fields = rule.fields || (rule.field ? [rule.field] : []);
+    const hay = fields.map((f) => String(extracted[f] || '')).join(' ').toLowerCase().trim();
+    if (!hay) return { score: rule.missing_score ?? 0.3, note: `${fields.join('/') || 'field'} empty` };
     const hit = (rule.keywords || []).find((k) => hay.includes(String(k).toLowerCase()));
     return hit
       ? { score: 1, note: `matched "${hit}"` }
@@ -146,14 +149,14 @@ export function scoreTender(extracted, criteria, now = new Date()) {
 // converts if the business can qualify (eligibility), the job fits (sector),
 // the value is worth bidding, and there's time to prepare.
 export const STARTER_CRITERIA = {
-  thresholds: { green_min: 70, red_max: 40, hard_rules: ['eligibility_fit', 'deadline_runway'] },
+  thresholds: { green_min: 70, red_max: 40, hard_rules: ['eligibility_fit', 'deadline_runway', 'sector_fit'] },
   weights: [
     { component: 'eligibility_fit', weight: 3.0, source: 'prior',
       rule: { type: 'grade_within', field: 'cidb_grade', business_max_grade: 6, missing_score: 0.5 } },
     { component: 'value_fit', weight: 2.0, source: 'prior',
       rule: { type: 'range', field: 'estimated_value', ideal_min: 100000, ideal_max: 5000000, hard_min: 0, hard_max: 20000000, missing_score: 0.3 } },
     { component: 'sector_fit', weight: 2.5, source: 'prior',
-      rule: { type: 'keyword_any', field: 'title', keywords: ['construction', 'electrical', 'air-condition', 'hvac', 'maintenance', 'supply', 'installation', 'civil', 'plumbing'], miss_score: 0.2 } },
+      rule: { type: 'keyword_any', fields: ['title', 'scope'], keywords: ['construction', 'civil', 'road', 'building', 'bridge', 'infrastructure', 'plumbing', 'electrical', 'hvac', 'air-condition', 'roofing', 'sanitation', 'refurbish', 'renovation', 'fencing', 'painting', 'earthworks', 'concrete', 'paving', 'water', 'sewer', 'pipeline', 'structural', 'demolition', 'engineering'], miss_score: 0.0 } },
     { component: 'deadline_runway', weight: 1.5, source: 'prior',
       rule: { type: 'runway', field: 'closing_date', ideal_min_days: 14, hard_min_days: 3 } },
     { component: 'completeness', weight: 1.0, source: 'prior',
