@@ -35,7 +35,7 @@ export default function BusinessLeadFinder() {
           }}>{label}</button>
         ))}
       </div>
-      {tab === 'today' && <TodayTab />}
+      {tab === 'today' && <TodayTab onGoToSources={() => setTab('sources')} />}
       {tab === 'review' && <ReviewTab />}
       {tab === 'sources' && <SourcesTab />}
       {tab === 'criteria' && <CriteriaTab />}
@@ -44,13 +44,17 @@ export default function BusinessLeadFinder() {
 }
 
 // ── Today: the morning digest + ranked leads ────────────────────────────────
-function TodayTab() {
+function TodayTab({ onGoToSources }) {
   const [data, setData] = useState(undefined);
+  const [sources, setSources] = useState(undefined);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(null); // tender id being viewed
   const [msg, setMsg] = useState('');
 
-  const load = () => apiFetch('/beaiready/leadfinder/digest').then(setData).catch(() => setData(null));
+  const load = () => {
+    apiFetch('/beaiready/leadfinder/digest').then(setData).catch(() => setData(null));
+    apiFetch('/beaiready/leadfinder/sources').then(setSources).catch(() => setSources([]));
+  };
   useEffect(() => { load(); }, []);
 
   const upload = async (e) => {
@@ -68,31 +72,59 @@ function TodayTab() {
 
   if (data === undefined) return <p style={{ color: '#8a8076' }}>Loading…</p>;
   const run = data?.run; const leads = data?.leads || [];
+  const watching = (sources || []).filter((s) => s.active).length;
 
   return (
     <div>
       <section className="hub-band" style={{ background: '#fff', border: '1px solid #e4dcd2', marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0 }}>This morning</h2>
-          <label style={{ ...btn, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-            {busy ? 'Reading…' : 'Upload a tender'}
-            <input type="file" accept=".pdf,.txt,.doc,.docx" onChange={upload} disabled={busy} style={{ display: 'none' }} />
-          </label>
+          {watching > 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f0f7f2', color: '#166534', fontSize: 12.5, fontWeight: 700, padding: '4px 11px', borderRadius: 999 }}>
+              <span aria-hidden>👁</span> Watching {watching} source{watching === 1 ? '' : 's'} · next sweep overnight
+            </span>
+          )}
         </div>
+
         {run ? (
           <p style={{ color: '#4b463f', marginTop: 10 }}>
-            Last run {fmtDate(run.finished_at || run.started_at)}: <strong>{run.items_new}</strong> processed —
+            Last run {fmtDate(run.finished_at || run.started_at)}: <strong>{run.items_new}</strong> pulled from your sources —
             <span style={{ color: BAND.green.fg }}> {run.tenders_green} to follow</span>,
             <span style={{ color: BAND.amber.fg }}> {run.tenders_amber} to review</span>,
             <span style={{ color: BAND.red.fg }}> {run.tenders_red} rejected</span>.
           </p>
-        ) : <p style={{ color: '#8a8076', marginTop: 10 }}>No run yet — upload a tender to see it scored, or add a source and run overnight.</p>}
-        {msg && <p style={{ fontSize: 13, color: '#166534', marginTop: 4 }}>{msg}</p>}
+        ) : watching > 0 ? (
+          <p style={{ color: '#4b463f', marginTop: 10 }}>
+            LeadFinder is watching your source{watching === 1 ? '' : 's'}. The first overnight sweep lands your ranked
+            shortlist right here — nothing to do but check back in the morning.
+          </p>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            <p style={{ color: '#4b463f', marginTop: 0 }}>
+              LeadFinder isn’t watching anything yet. Point it at where your tenders live — a portal, an RSS feed, or
+              an inbox — and it pulls and ranks them for you overnight.
+            </p>
+            <button onClick={onGoToSources} style={btn}>Add your first source →</button>
+          </div>
+        )}
+
+        {msg && <p style={{ fontSize: 13, color: '#166534', marginTop: 8 }}>{msg}</p>}
+
+        <div style={{ borderTop: '1px solid #f0e9e0', marginTop: 14, paddingTop: 12 }}>
+          <label style={{ fontSize: 12.5, color: '#8a8076', cursor: busy ? 'default' : 'pointer' }}>
+            Got one in hand? {busy ? <span>Reading…</span> : <span style={{ color: '#c75b39', fontWeight: 600, textDecoration: 'underline' }}>Upload a tender</span>} to score it now — no need to wait for tonight.
+            <input type="file" accept=".pdf,.txt,.doc,.docx" onChange={upload} disabled={busy} style={{ display: 'none' }} />
+          </label>
+        </div>
       </section>
 
       <h3 style={{ fontSize: 16, margin: '0 0 8px' }}>Leads to follow — ranked by likelihood to convert</h3>
       {leads.length === 0 ? (
-        <p style={{ color: '#8a8076' }}>Nothing to follow right now.</p>
+        <p style={{ color: '#8a8076' }}>
+          {watching > 0 || run
+            ? 'Nothing to follow yet — your shortlist appears here after the next overnight sweep.'
+            : 'Add a source and LeadFinder will fill this with ranked leads each morning.'}
+        </p>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {leads.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpen(l.id)} />)}
