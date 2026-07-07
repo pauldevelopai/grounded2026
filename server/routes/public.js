@@ -1271,7 +1271,6 @@ router.get('/bair-nodes', async (req, res) => {
   try {
     if (!_bairNodesCache.data || Date.now() - _bairNodesCache.at > 5 * 60 * 1000) {
       const reg = await loadNodesRegistry();
-      const GROUNDED = 'https://grounded.developai.co.za';
       const nodes = ((reg && reg.nodes) || [])
         // Show ALL Nodes in the storefront — the bair-tagged ones AND the GROUNDED ones
         // (Paul's call, 2026-07-07). Any registry entry with at least one product tag.
@@ -1281,16 +1280,14 @@ router.get('/bair-nodes', async (req, res) => {
           // opens at its in-app href, not a hosted /nodes/<slug>/app/ process, and
           // has no download link.
           const builtin = n.kind === 'builtin';
-          const isBair = n.products.includes('bair');
-          // Run path for hosted Nodes: bair Nodes are served by Caddy on the beaiready
-          // host, so a SAME-ORIGIN URL keeps the (host-scoped) tracker_token cookie.
-          // GROUNDED-only Nodes have no beaiready Caddy block — link to the grounded
-          // host absolutely, where they're actually served.
-          const hostedUrl = isBair ? `/nodes/${n.slug}/app/` : `${GROUNDED}/nodes/${n.slug}/app/`;
           return {
             slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
             hosted: !!n.hosted, builtin,
-            runUrl: builtin ? (n.href || null) : (n.hosted ? hostedUrl : null),
+            // Every hosted Node's /nodes/<slug>/app/* route is served on the beaiready
+            // host too (one shared Caddy block for all hosts), so a SAME-ORIGIN URL runs
+            // it IN-PLACE and sends the host-scoped tracker_token cookie — no second
+            // login, and no Caddy change needed.
+            runUrl: builtin ? (n.href || null) : (n.hosted ? `/nodes/${n.slug}/app/` : null),
           };
         })
         // Built-in Nodes (the flagship in-app tools) lead the storefront, then live, then soon.
