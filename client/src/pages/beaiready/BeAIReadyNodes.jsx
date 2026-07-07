@@ -1,13 +1,14 @@
 // BE AI READY — public Nodes listing (the BAIR storefront).
 //
-// One registry, two storefronts: this reads /api/public/bair-nodes (the tracker
-// filters nodes.json to the Nodes tagged for the 'bair' product) and shows them in
-// the BAIR brochure look. A Node shared with GROUNDED would appear here AND on the
-// newsroom front door from one registry entry — never copied.
+// One registry, shown in full: this reads /api/public/bair-nodes, which returns ALL
+// Nodes from nodes.json — the bair-tagged ones AND the GROUNDED ones (Paul's call,
+// 2026-07-07) — in the BAIR brochure look. Each entry lives once in the registry,
+// never copied.
 //
-// Run path (Paul's call): the tracker_token JWT is host-agnostic, so a signed-in
-// BAIR client is accepted by the hosted Node on the grounded host — we link straight
-// there (zero Caddy change on the beaiready host). A visitor gets a friendly sign-in.
+// Run path: bair Nodes are served on the beaiready host (same-origin, so the
+// host-scoped tracker_token cookie is sent). GROUNDED-only Nodes are served on the
+// grounded host, so their "Open" links there absolutely. Download-only Nodes show
+// just the "run on your machine" link. A visitor gets a friendly sign-in.
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -88,17 +89,19 @@ export default function BeAIReadyNodes() {
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
                 {soon ? (
                   <span style={{ fontSize: 13, color: '#8a857e' }}>In development — ask us for early access.</span>
-                ) : user ? (
-                  <a href={n.runUrl} {...runProps}
-                     style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>
-                    Open ›
-                  </a>
-                ) : (
-                  <a href={`/login?next=${n.builtin && n.runUrl ? encodeURIComponent(n.runUrl) : nextParam}`}
-                     style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>
-                    Sign in to use ›
-                  </a>
-                )}
+                ) : n.runUrl ? (
+                  user ? (
+                    <a href={n.runUrl} {...runProps}
+                       style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>
+                      Open ›
+                    </a>
+                  ) : (
+                    <a href={`/login?next=${n.builtin && n.runUrl ? encodeURIComponent(n.runUrl) : nextParam}`}
+                       style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>
+                      Sign in to use ›
+                    </a>
+                  )
+                ) : null}
                 {!soon && !n.builtin && (
                   <a href={`https://grounded.developai.co.za/nodes/${n.slug}/mac`} target="_blank" rel="noreferrer"
                      style={{ fontSize: 12.5, color: '#8a857e', textDecoration: 'none' }}>

@@ -1271,22 +1271,26 @@ router.get('/bair-nodes', async (req, res) => {
   try {
     if (!_bairNodesCache.data || Date.now() - _bairNodesCache.at > 5 * 60 * 1000) {
       const reg = await loadNodesRegistry();
+      const GROUNDED = 'https://grounded.developai.co.za';
       const nodes = ((reg && reg.nodes) || [])
-        .filter((n) => Array.isArray(n.products) && n.products.includes('bair'))
+        // Show ALL Nodes in the storefront — the bair-tagged ones AND the GROUNDED ones
+        // (Paul's call, 2026-07-07). Any registry entry with at least one product tag.
+        .filter((n) => Array.isArray(n.products) && n.products.length > 0)
         .map((n) => {
           // A 'builtin' Node lives inside the tracker app (e.g. LeadFinder) — it
           // opens at its in-app href, not a hosted /nodes/<slug>/app/ process, and
           // has no download link.
           const builtin = n.kind === 'builtin';
+          const isBair = n.products.includes('bair');
+          // Run path for hosted Nodes: bair Nodes are served by Caddy on the beaiready
+          // host, so a SAME-ORIGIN URL keeps the (host-scoped) tracker_token cookie.
+          // GROUNDED-only Nodes have no beaiready Caddy block — link to the grounded
+          // host absolutely, where they're actually served.
+          const hostedUrl = isBair ? `/nodes/${n.slug}/app/` : `${GROUNDED}/nodes/${n.slug}/app/`;
           return {
             slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
             hosted: !!n.hosted, builtin,
-            // Run path: SAME-ORIGIN relative URL so the Node opens on whatever host
-            // served the storefront (the beaiready host). The tracker_token cookie is
-            // host-scoped, so the Node must be reached on beaiready (where the client
-            // signed in) — otherwise the browser won't send the cookie and the Node
-            // bounces to login. Caddy serves /nodes/bair-extract/app/* on beaiready too.
-            runUrl: builtin ? (n.href || null) : (n.hosted ? `/nodes/${n.slug}/app/` : null),
+            runUrl: builtin ? (n.href || null) : (n.hosted ? hostedUrl : null),
           };
         })
         // Built-in Nodes (the flagship in-app tools) lead the storefront, then live, then soon.
