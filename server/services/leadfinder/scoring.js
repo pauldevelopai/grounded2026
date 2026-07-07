@@ -70,7 +70,12 @@ const EVALUATORS = {
     const fields = rule.fields || (rule.field ? [rule.field] : []);
     const hay = fields.map((f) => String(extracted[f] || '')).join(' ').toLowerCase().trim();
     if (!hay) return { score: rule.missing_score ?? 0.3, note: `${fields.join('/') || 'field'} empty` };
-    const hit = (rule.keywords || []).find((k) => hay.includes(String(k).toLowerCase()));
+    // Word-START boundary match: "road" hits road/roads/roadworks but NOT "broadband";
+    // avoids the substring false positives plain includes() produced.
+    const hit = (rule.keywords || []).find((k) => {
+      const kw = String(k).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp('\\b' + kw).test(hay);
+    });
     return hit
       ? { score: 1, note: `matched "${hit}"` }
       : { score: rule.miss_score ?? 0.2, note: 'no keyword match' };
