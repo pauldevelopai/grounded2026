@@ -1273,16 +1273,25 @@ router.get('/bair-nodes', async (req, res) => {
       const reg = await loadNodesRegistry();
       const nodes = ((reg && reg.nodes) || [])
         .filter((n) => Array.isArray(n.products) && n.products.includes('bair'))
-        .map((n) => ({
-          slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
-          hosted: !!n.hosted,
-          // Run path: SAME-ORIGIN relative URL so the Node opens on whatever host
-          // served the storefront (the beaiready host). The tracker_token cookie is
-          // host-scoped, so the Node must be reached on beaiready (where the client
-          // signed in) — otherwise the browser won't send the cookie and the Node
-          // bounces to login. Caddy serves /nodes/bair-extract/app/* on beaiready too.
-          runUrl: n.hosted ? `/nodes/${n.slug}/app/` : null,
-        }));
+        .map((n) => {
+          // A 'builtin' Node lives inside the tracker app (e.g. LeadFinder) — it
+          // opens at its in-app href, not a hosted /nodes/<slug>/app/ process, and
+          // has no download link.
+          const builtin = n.kind === 'builtin';
+          return {
+            slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
+            hosted: !!n.hosted, builtin,
+            // Run path: SAME-ORIGIN relative URL so the Node opens on whatever host
+            // served the storefront (the beaiready host). The tracker_token cookie is
+            // host-scoped, so the Node must be reached on beaiready (where the client
+            // signed in) — otherwise the browser won't send the cookie and the Node
+            // bounces to login. Caddy serves /nodes/bair-extract/app/* on beaiready too.
+            runUrl: builtin ? (n.href || null) : (n.hosted ? `/nodes/${n.slug}/app/` : null),
+          };
+        })
+        // Built-in Nodes (the flagship in-app tools) lead the storefront, then live, then soon.
+        .sort((a, b) => (Number(b.builtin) - Number(a.builtin))
+          || (Number(b.status === 'live') - Number(a.status === 'live')));
       _bairNodesCache = { at: Date.now(), data: { nodes } };
     }
     res.set('Cache-Control', 'public, max-age=120');

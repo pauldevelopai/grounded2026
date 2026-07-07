@@ -63,29 +63,15 @@ export default function BeAIReadyNodes() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 18 }}>
-        {/* LeadFinder — a built-in Node (runs in-app, not from the hosted registry). */}
-        <article style={{ background: '#fff', border: `1px solid ${TERRACOTTA}`, borderRadius: 12, padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: CHARCOAL }}>LeadFinder</h2>
-          </div>
-          <p style={{ fontSize: 14.5, color: '#5a534c', lineHeight: 1.55, margin: 0, flex: 1 }}>
-            Overnight tender watching. Pulls tenders from your sources, reads each one, and ranks them by how
-            likely they are to convert — so your morning is a short list to act on, not a pile to sift.
-          </p>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
-            {user ? (
-              <a href="/leadfinder" style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>Open ›</a>
-            ) : (
-              <a href={`/login?next=${encodeURIComponent('/leadfinder')}`} style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>Sign in to use ›</a>
-            )}
-          </div>
-        </article>
         {(nodes || []).map((n) => {
           const soon = n.status !== 'live';
+          // Built-in Nodes (e.g. LeadFinder) run in-app: open same-origin (not a new
+          // tab) and have no "run on your machine" download.
+          const runProps = n.builtin ? {} : { target: '_blank', rel: 'noreferrer' };
           return (
             <article key={n.slug} style={{
-              background: '#fff', border: '1px solid #e7e0d8', borderRadius: 12, padding: '20px 22px',
-              display: 'flex', flexDirection: 'column', gap: 12,
+              background: '#fff', border: `1px solid ${n.builtin ? TERRACOTTA : '#e7e0d8'}`, borderRadius: 12,
+              padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 12,
             }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
                 <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: CHARCOAL }}>{n.name}</h2>
@@ -103,17 +89,17 @@ export default function BeAIReadyNodes() {
                 {soon ? (
                   <span style={{ fontSize: 13, color: '#8a857e' }}>In development — ask us for early access.</span>
                 ) : user ? (
-                  <a href={n.runUrl} target="_blank" rel="noreferrer"
+                  <a href={n.runUrl} {...runProps}
                      style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>
                     Open ›
                   </a>
                 ) : (
-                  <a href={`/login?next=${nextParam}`}
+                  <a href={`/login?next=${n.builtin && n.runUrl ? encodeURIComponent(n.runUrl) : nextParam}`}
                      style={{ background: TERRACOTTA, color: '#fff', textDecoration: 'none', fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 7 }}>
                     Sign in to use ›
                   </a>
                 )}
-                {!soon && (
+                {!soon && !n.builtin && (
                   <a href={`https://grounded.developai.co.za/nodes/${n.slug}/mac`} target="_blank" rel="noreferrer"
                      style={{ fontSize: 12.5, color: '#8a857e', textDecoration: 'none' }}>
                     or run on your machine
