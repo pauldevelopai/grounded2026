@@ -35,8 +35,8 @@ export default function BeAIReadyPillar() {
                 </span>
               </div>
               <p style={{ fontSize: 13.5, color: '#4a443d', margin: 0 }}>{f.what}</p>
-              {(f.to || f.dash) && <p style={{ margin: '8px 0 0', color: '#c75b39', fontWeight: 600, fontSize: 13 }}>Open →</p>}
-              {!f.to && !f.dash && f.slug && <p style={{ margin: '8px 0 0', color: '#8a8076', fontWeight: 600, fontSize: 13 }}>Learn more →</p>}
+              {(f.to || f.dash || f.node) && <p style={{ margin: '8px 0 0', color: '#c75b39', fontWeight: 600, fontSize: 13 }}>Open →</p>}
+              {!f.to && !f.dash && !f.node && f.slug && <p style={{ margin: '8px 0 0', color: '#8a8076', fontWeight: 600, fontSize: 13 }}>Learn more →</p>}
             </>
           );
           // Direct public page (tracker, toolbox, training) → link straight there.

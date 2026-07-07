@@ -13,6 +13,9 @@
 //         feature GATEWAY (/feature/:slug) — a public explainer that sends a
 //         signed-in user straight in, and a visitor to a friendly sign-in (never
 //         a bare login screen). Requires `slug`.
+//   node: a hosted Node (served by Caddy at `runUrl`, e.g. /nodes/aiready/app/).
+//         The gateway sends a signed-in user straight into the Node and a visitor
+//         to a friendly sign-in. Requires `slug` + `runUrl`.
 //   neither (status 'building'): links to the gateway, which shows an honest
 //         "in development" page. Requires `slug`.
 
@@ -40,8 +43,9 @@ export const PILLARS = [
     features: [
       { name: 'How AI sees your business', status: 'partial', dash: '/dashboard/visibility', slug: 'visibility-scan',
         what: 'Run a scan of how AI describes your business — whether you’re named, how, and what’s wrong or missing. v1 queries Claude; ChatGPT & Gemini added once keys are configured.' },
-      { name: 'Your data, structured for AI', status: 'building', slug: 'visibility-data',
-        what: 'Your content and data shaped so AI systems read, trust and cite you correctly — accurately and currently.' },
+      { name: 'Your data, structured for AI', status: 'live', slug: 'visibility-data',
+        node: 'aiready', runUrl: '/nodes/aiready/app/',
+        what: 'Point us at your documents — a folder from your computer, a Google Drive, or your website — and we clean and structure them so AI systems and agents read, trust and cite your business correctly. Runs in your browser here, or on your own machine.' },
     ],
   },
   {
