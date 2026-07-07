@@ -164,7 +164,10 @@ export async function runPipeline({ newsroomId, sourceId, items, createdBy = nul
   for (const item of items) {
     tally.seen++;
     try {
-      const r = await ingestTender({ newsroomId, sourceId, criteria, text: item.text, externalId: item.externalId, url: item.url });
+      // A batched run (nightly / manual /run) passes sourceId:null and stamps each
+      // item with its own sourceId — raw_items.source_id is NOT NULL, so honour the
+      // per-item source and only fall back to the call-level one (the upload path).
+      const r = await ingestTender({ newsroomId, sourceId: item.sourceId || sourceId, criteria, text: item.text, externalId: item.externalId, url: item.url });
       if (r.duplicate) { tally.duplicate++; continue; }
       tally.new++;
       tally[r.band]++;

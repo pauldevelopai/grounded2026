@@ -36,7 +36,7 @@ async function main() {
       for (const s of sources) {
         const { items: got, note } = await fetchSource(s);
         if (note) log(`  ${t.name} / ${s.name}: ${note}`);
-        items.push(...got);
+        items.push(...got.map((g) => ({ ...g, sourceId: s.id })));  // attach each item to its source
         await pool.query('UPDATE leadfinder.sources SET last_run_at = NOW() WHERE id = $1', [s.id]);
       }
       if (!items.length) { log(`  ${t.name}: no new items.`); continue; }

@@ -12,6 +12,10 @@ const BAND = {
   amber: { bg: '#fef9c3', fg: '#854d0e', label: 'Amber · review' },
   red:   { bg: '#fee2e2', fg: '#991b1b', label: 'Red · rejected' },
 };
+const KIND_LABELS = {
+  etenders_ocds: 'National eTenders feed',
+  html: 'Web page', rss: 'RSS feed', puppeteer: 'Portal (browser)', email: 'Email inbox', upload: 'Manual upload',
+};
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const fmtRand = (v) => (v == null ? '—' : 'R ' + Number(v).toLocaleString('en-ZA'));
 
@@ -260,13 +264,13 @@ function SourcesTab() {
   if (rows === undefined) return <p style={{ color: '#8a8076' }}>Loading…</p>;
   return (
     <div>
-      <p style={{ color: '#6b6359', marginTop: 0 }}>Where LeadFinder looks for tenders. Add or change a source any time — no developer needed. Uploads always work; portals are wired as you add them.</p>
+      <p style={{ color: '#6b6359', marginTop: 0 }}>Where LeadFinder looks for tenders. Add or change a source any time — no developer needed. The National eTenders feed and manual uploads work today; other portals are wired as you add them.</p>
       <section className="hub-band" style={{ background: '#fff', border: '1px solid #e4dcd2', marginBottom: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 1fr auto', gap: 8, alignItems: 'end' }}>
           <label style={lbl}>Name<input style={inp} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. National eTender portal" /></label>
           <label style={lbl}>Kind
             <select style={inp} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
-              {['html', 'rss', 'puppeteer', 'email', 'upload'].map((k) => <option key={k}>{k}</option>)}
+              {['etenders_ocds', 'html', 'rss', 'puppeteer', 'email', 'upload'].map((k) => <option key={k} value={k}>{KIND_LABELS[k] || k}</option>)}
             </select>
           </label>
           <label style={lbl}>Location (URL / inbox)<input style={inp} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="https://…" /></label>
@@ -279,7 +283,7 @@ function SourcesTab() {
           {rows.map((s) => (
             <div key={s.id} className="hub-card" style={{ border: '1px solid #e4dcd2', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div>
-                <strong>{s.name}</strong> <span style={{ fontSize: 12, color: '#8a8076' }}>· {s.kind}{s.location ? ` · ${s.location}` : ''}{s.origin === 'suggested' ? ' · suggested' : ''}</span>
+                <strong>{s.name}</strong> <span style={{ fontSize: 12, color: '#8a8076' }}>· {KIND_LABELS[s.kind] || s.kind}{s.location ? ` · ${s.location}` : ''}{s.origin === 'suggested' ? ' · suggested' : ''}</span>
                 {s.last_error && <div style={{ fontSize: 12, color: '#B91C1C' }}>last error: {s.last_error}</div>}
               </div>
               <div style={{ display: 'flex', gap: 6 }}>

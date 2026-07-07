@@ -252,7 +252,7 @@ router.post('/run', async (req, res) => {
     const items = []; const notes = [];
     for (const s of sources) {
       const { items: got, note } = await fetchSource(s);
-      items.push(...got);
+      items.push(...got.map((g) => ({ ...g, sourceId: s.id })));  // attach each item to its source
       if (note) notes.push(`${s.name}: ${note}`);
     }
     if (!items.length) return res.json({ ran: false, notes, message: 'No new items from active sources. Upload a tender to see it scored.' });
