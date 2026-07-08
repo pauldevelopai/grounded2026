@@ -52,7 +52,6 @@ export default function BeAIReadyTracker() {
   const [q, setQ] = useState(initialQ);
   const [status, setStatus] = useState('');
   const [jurisdiction, setJurisdiction] = useState('');
-  const [today, setToday] = useState(undefined); // undefined=loading, null=none yet
   const [history, setHistory] = useState(undefined); // past daily briefings
   const active = SECTIONS.find((t) => t.key === tab);
   const filtered = !!(q.trim() || status || jurisdiction);
@@ -87,7 +86,6 @@ export default function BeAIReadyTracker() {
   }, [tab, q, status, jurisdiction]);
 
   useEffect(() => {
-    publicFetch('/public/governance-today').then((v) => setToday(v || null)).catch(() => setToday(null));
     publicFetch('/public/governance-today/history').then((v) => setHistory(Array.isArray(v) ? v : [])).catch(() => setHistory([]));
   }, []);
 
@@ -102,28 +100,8 @@ export default function BeAIReadyTracker() {
         </p>
       </section>
 
-      {/* ── Today: a conversational, web-search-backed read on where AI governance
-            stands right now — catches breaking news the lawsuit/regulation tracker
-            doesn't (a model suspension, an enforcement action). Refreshed daily. ── */}
-      {today && today.summary && (
-        <section style={{ background: 'linear-gradient(180deg,#fff,#fbf7f4)', border: '1px solid #eaddd3', borderLeft: '4px solid #c75b39', borderRadius: 12, padding: '18px 20px', marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#c75b39' }}>Today in AI governance</div>
-            {today.generated_at && <div style={{ fontSize: 11.5, color: '#a89e92' }}>updated {fmtDate(today.generated_at)}</div>}
-          </div>
-          <div style={{ fontSize: 14.5, lineHeight: 1.65, color: '#3a342e', margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>{today.summary}</div>
-          {today.headlines?.length > 0 && (
-            <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {today.headlines.map((h, i) => (
-                <a key={i} href={h.url} target="_blank" rel="noreferrer"
-                  style={{ fontSize: 12, color: '#7a4636', background: '#f7ece7', padding: '3px 9px', borderRadius: 999, textDecoration: 'none', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {h.title} ↗
-                </a>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+      {/* The daily "Today in AI" read lives on the home page now — not repeated here.
+          The archive is still available under the "Daily briefings" tab below. */}
 
       {/* Section switcher — Law and Regulation as peer first-class areas (item 2),
           styled as a segmented control rather than a thin secondary-tab underline. */}

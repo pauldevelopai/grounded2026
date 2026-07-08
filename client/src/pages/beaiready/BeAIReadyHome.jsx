@@ -53,7 +53,7 @@ export default function BeAIReadyHome() {
       {(briefings.news?.summary || briefings.law?.summary || briefings.regulation?.summary) && (
         <>
           <div className="hub-section-label">Today in AI</div>
-          <section style={{ display: 'grid', gap: 14, marginBottom: 28 }}>
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 32 }}>
             {briefings.news?.summary && (
               <BriefingCard kicker="AI News" data={briefings.news} />
             )}
@@ -124,35 +124,69 @@ export default function BeAIReadyHome() {
 
 function n(v) { return v == null ? '—' : v.toLocaleString(); }
 
-// One daily briefing card: kicker, ~100-word summary, its source links, and the
-// time it was generated. Used for both AI News and AI Law on the home page.
+// Per-category visual identity — an accent colour + a soft tint + a line icon, so the
+// three daily reads read as distinct cards rather than one wall of text.
+const ICON = {
+  news: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="13" height="14" rx="1.5" /><path d="M16 8h3a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2h-2" />
+      <path d="M6 9h7M6 12h7M6 15h4" />
+    </svg>
+  ),
+  law: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4v16M7 20h10M5 8h14" /><circle cx="12" cy="4" r="1.1" />
+      <path d="M5 8l-2.5 5a2.5 2.5 0 0 0 5 0L5 8zM19 8l-2.5 5a2.5 2.5 0 0 0 5 0L19 8z" />
+    </svg>
+  ),
+  regulation: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l7 3v5.2c0 4.3-3 7.4-7 8.8-4-1.4-7-4.5-7-8.8V6l7-3z" /><path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+};
+const CATEGORY = {
+  'AI News':    { key: 'news',       accent: '#2563eb', tint: '#eef3ff' },
+  'AI Law':     { key: 'law',        accent: '#c75b39', tint: '#fbeee7' },
+  'Regulation': { key: 'regulation', accent: '#0f8a5f', tint: '#e6f5ee' },
+};
+
+// One daily briefing card: an icon badge + category, the ~100-word read, cited-source
+// chips, and (for Law/Regulation) a link into the tracker.
 function BriefingCard({ kicker, data, to, toLabel }) {
+  const cat = CATEGORY[kicker] || CATEGORY['AI News'];
   const when = data.generated_at
     ? new Date(data.generated_at).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
     : null;
   return (
-    <div style={{ background: '#fff', border: '1px solid #eee5da', borderLeft: '3px solid #c75b39', borderRadius: 12, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#c75b39' }}>{kicker}</span>
-        {when && <span style={{ fontSize: 11.5, color: '#a89e92' }}>{when}</span>}
+    <div style={{ display: 'flex', flexDirection: 'column', background: '#fff', border: '1px solid #eee5da', borderTop: `3px solid ${cat.accent}`, borderRadius: 14, padding: '18px 18px 16px', boxShadow: '0 3px 12px rgba(60,40,20,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 12, background: cat.tint, color: cat.accent, flexShrink: 0 }}>
+          {ICON[cat.key]}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15.5, fontWeight: 800, color: '#241f1a', letterSpacing: '-0.01em' }}>{kicker}</div>
+          {when && <div style={{ fontSize: 11.5, color: '#a89e92' }}>{when}</div>}
+        </div>
       </div>
-      <p style={{ margin: '8px 0 0', fontSize: 14.5, lineHeight: 1.6, color: '#2a2724', whiteSpace: 'pre-wrap' }}>{data.summary}</p>
+      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.62, color: '#413b34', whiteSpace: 'pre-wrap', flex: 1 }}>{data.summary}</p>
       {data.headlines?.length > 0 && (
-        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
-          {data.headlines.slice(0, 4).map((h, i) => (
+        <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {data.headlines.slice(0, 3).map((h, i) => (
             h.url
-              ? <a key={i} href={h.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#c75b39', textDecoration: 'none' }}>{trim(h.title)} ↗</a>
-              : <span key={i} style={{ fontSize: 12, color: '#8a8076' }}>{trim(h.title)}</span>
+              ? <a key={i} href={h.url} target="_blank" rel="noreferrer" title={h.title}
+                   style={{ fontSize: 11.5, fontWeight: 600, color: cat.accent, background: cat.tint, padding: '4px 10px', borderRadius: 999, textDecoration: 'none', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trim(h.title)} ↗</a>
+              : <span key={i} style={{ fontSize: 11.5, color: '#8a8076', background: '#f4efe9', padding: '4px 10px', borderRadius: 999 }}>{trim(h.title)}</span>
           ))}
         </div>
       )}
       {to && (
-        <p style={{ margin: '10px 0 0' }}>
-          <Link to={to} style={{ fontSize: 13, fontWeight: 600, color: '#c75b39' }}>{toLabel}</Link>
+        <p style={{ margin: '14px 0 0' }}>
+          <Link to={to} style={{ fontSize: 13, fontWeight: 700, color: cat.accent, textDecoration: 'none' }}>{toLabel}</Link>
         </p>
       )}
     </div>
   );
 }
 
-function trim(s) { s = s || ''; return s.length > 52 ? s.slice(0, 50).trimEnd() + '…' : s; }
+function trim(s) { s = s || ''; return s.length > 46 ? s.slice(0, 44).trimEnd() + '…' : s; }
