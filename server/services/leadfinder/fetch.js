@@ -21,7 +21,8 @@ async function fetchPortalStub(source) {
   // Placeholder for html/puppeteer/rss adapters. Real implementation reads
   // source.config (list URL, item selectors, pagination) and returns items.
   // Returns [] + a note so a run logs "adapter not wired" instead of inventing data.
-  return { items: [], note: `Adapter for kind '${source.kind}' not wired yet — configure the portal + selectors.` };
+  // `unwired` tells callers NOT to mark this as a successful pull (it never pulled).
+  return { items: [], note: `Adapter for kind '${source.kind}' not wired yet — configure the portal + selectors.`, unwired: true };
 }
 
 // ── National Treasury eTender OCDS API (a REAL adapter) ─────────────────────
@@ -114,7 +115,7 @@ async function fetchEtendersOcds(source) {
       } finally { clearTimeout(timer); }
 
       if (!res.ok) {
-        return { items, note: `etenders OCDS: HTTP ${res.status} on page ${page} — kept ${items.length} before stopping.` };
+        return { items, note: `etenders OCDS: HTTP ${res.status} on page ${page} — kept ${items.length} before stopping.`, error: `HTTP ${res.status}` };
       }
       const body = await res.json();
       const releases = Array.isArray(body?.releases) ? body.releases : [];
@@ -138,7 +139,7 @@ async function fetchEtendersOcds(source) {
     }
   } catch (err) {
     const why = err.name === 'AbortError' ? 'request timed out' : err.message;
-    return { items, note: `etenders OCDS: ${why} — kept ${items.length} before stopping.` };
+    return { items, note: `etenders OCDS: ${why} — kept ${items.length} before stopping.`, error: why };
   }
 
   const filterDesc = `${categories.join('/') || 'all categories'}${keywords.length ? ' + keywords' : ''}`;

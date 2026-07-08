@@ -14,7 +14,7 @@ import { resolveNewsroomId } from '../lib/tenancy.js';
 import { upload } from '../middleware/upload.js';
 import { extractText } from '../services/document-processor.js';
 import {
-  runPipeline, ensureSource, ensureStarterCriteria, getActiveCriteria, ingestTender,
+  runPipeline, ensureSource, ensureStarterCriteria, getActiveCriteria, ingestTender, markSourceFetch,
 } from '../services/leadfinder/pipeline.js';
 import { fetchSource } from '../services/leadfinder/fetch.js';
 import { proposeReweight } from '../services/leadfinder/reweight.js';
@@ -251,9 +251,10 @@ router.post('/run', async (req, res) => {
       `SELECT * FROM leadfinder.sources WHERE newsroom_id = $1 AND active = true AND approved = true`, [newsroomId]);
     const items = []; const notes = [];
     for (const s of sources) {
-      const { items: got, note } = await fetchSource(s);
-      items.push(...got.map((g) => ({ ...g, sourceId: s.id })));  // attach each item to its source
-      if (note) notes.push(`${s.name}: ${note}`);
+      const r = await fetchSource(s);
+      items.push(...r.items.map((g) => ({ ...g, sourceId: s.id })));  // attach each item to its source
+      if (r.note) notes.push(`${s.name}: ${r.note}`);
+      await markSourceFetch(s.id, { error: r.error, unwired: r.unwired });
     }
     if (!items.length) return res.json({ ran: false, notes, message: 'No new items from active sources. Upload a tender to see it scored.' });
     const out = await runPipeline({ newsroomId, sourceId: null, items, createdBy: req.user?.id || null });

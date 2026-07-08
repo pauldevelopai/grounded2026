@@ -13,7 +13,7 @@
 // upload time via the surface, not here.
 
 import pool from '../pool.js';
-import { runPipeline } from '../../services/leadfinder/pipeline.js';
+import { runPipeline, markSourceFetch } from '../../services/leadfinder/pipeline.js';
 import { fetchSource } from '../../services/leadfinder/fetch.js';
 
 function log(msg = '') { console.log(`${new Date().toISOString()}  ${msg}`); }
@@ -34,10 +34,10 @@ async function main() {
         `SELECT * FROM leadfinder.sources WHERE newsroom_id = $1 AND active = true AND approved = true`, [t.id]);
       const items = [];
       for (const s of sources) {
-        const { items: got, note } = await fetchSource(s);
-        if (note) log(`  ${t.name} / ${s.name}: ${note}`);
-        items.push(...got.map((g) => ({ ...g, sourceId: s.id })));  // attach each item to its source
-        await pool.query('UPDATE leadfinder.sources SET last_run_at = NOW() WHERE id = $1', [s.id]);
+        const r = await fetchSource(s);
+        if (r.note) log(`  ${t.name} / ${s.name}: ${r.note}`);
+        items.push(...r.items.map((g) => ({ ...g, sourceId: s.id })));  // attach each item to its source
+        await markSourceFetch(s.id, { error: r.error, unwired: r.unwired }); // last_run/last_success/last_error
       }
       if (!items.length) { log(`  ${t.name}: no new items.`); continue; }
       const out = await runPipeline({ newsroomId: t.id, sourceId: null, items });

@@ -82,6 +82,25 @@ export async function ensureSource(newsroomId, { name, kind = 'upload', location
   return created.id;
 }
 
+// Record a source's fetch-attempt telemetry — called by the nightly job and the
+// manual /run right after fetchSource. A successful pull stamps last_success_at
+// and clears last_error; an error records it; an unwired stub does neither (it
+// never pulled). last_run_at always advances. The items_new/items_seen counters
+// are bumped separately by runPipeline, which is the only place that knows
+// new-vs-duplicate per source.
+export async function markSourceFetch(sourceId, { error = null, unwired = false } = {}) {
+  if (!sourceId) return;
+  await pool.query(
+    `UPDATE leadfinder.sources
+        SET last_run_at = NOW(),
+            last_success_at = CASE WHEN $2 THEN NOW() ELSE last_success_at END,
+            last_error = $3,
+            updated_at = NOW()
+      WHERE id = $1`,
+    [sourceId, !error && !unwired, error]
+  );
+}
+
 // ── ingest one tender: extract -> score -> evidence -> route -> persist ──────
 export async function ingestTender({ newsroomId, sourceId, text, criteria, externalId, url = null }) {
   const extId = externalId || sha(text).slice(0, 32);
@@ -161,16 +180,20 @@ export async function runPipeline({ newsroomId, sourceId, items, createdBy = nul
 
   const results = [];
   const tally = { seen: 0, new: 0, green: 0, amber: 0, red: 0, duplicate: 0, error: 0 };
+  const perSource = {}; // sourceId -> { seen, new } for source-level telemetry
   for (const item of items) {
     tally.seen++;
+    // A batched run (nightly / manual /run) passes sourceId:null and stamps each
+    // item with its own sourceId — raw_items.source_id is NOT NULL, so honour the
+    // per-item source and only fall back to the call-level one (the upload path).
+    const sid = item.sourceId || sourceId;
+    if (sid) (perSource[sid] ||= { seen: 0, new: 0 }).seen++;
     try {
-      // A batched run (nightly / manual /run) passes sourceId:null and stamps each
-      // item with its own sourceId — raw_items.source_id is NOT NULL, so honour the
-      // per-item source and only fall back to the call-level one (the upload path).
-      const r = await ingestTender({ newsroomId, sourceId: item.sourceId || sourceId, criteria, text: item.text, externalId: item.externalId, url: item.url });
+      const r = await ingestTender({ newsroomId, sourceId: sid, criteria, text: item.text, externalId: item.externalId, url: item.url });
       if (r.duplicate) { tally.duplicate++; continue; }
       tally.new++;
       tally[r.band]++;
+      if (sid) perSource[sid].new++;
       results.push(r);
     } catch (err) {
       tally.error++;
@@ -187,5 +210,14 @@ export async function runPipeline({ newsroomId, sourceId, items, createdBy = nul
      tally.green, tally.amber, tally.red, tally.error ? `${tally.error} item error(s)` : null]
   );
 
-  return { run_id: run.id, criteria_version: criteria.version, digest: tally, tenders: results };
+  // Source-level counters (cumulative), so the Sources UI shows real "items seen /
+  // new" per source rather than a stuck 0.
+  for (const [sid, c] of Object.entries(perSource)) {
+    await pool.query(
+      `UPDATE leadfinder.sources SET items_seen = items_seen + $2, items_new = items_new + $3, updated_at = NOW() WHERE id = $1`,
+      [sid, c.seen, c.new]
+    );
+  }
+
+  return { run_id: run.id, criteria_version: criteria.version, digest: tally, tenders: results, perSource };
 }
