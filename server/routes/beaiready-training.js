@@ -295,6 +295,107 @@ router.get('/form-insights', async (req, res) => {
   } catch (err) { console.error('[bair-train/form-insights]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Team AI-readiness analysis (aggregate, AI-themed, cached) ─────────────────────
+// A deeper read of the intake survey for the client's dashboard: a familiarity
+// distribution + top tools (deterministic), plus AI-grouped role/learning/automation
+// themes and a short readiness narrative (Claude). AGGREGATE only — no names ever
+// reach the model or the response. Cached per tenant; regenerated only when the
+// survey changes (fingerprint). Bump TEAM_ANALYSIS_VERSION to invalidate all caches.
+const TEAM_ANALYSIS_VERSION = 'v1';
+
+function familiarityDistribution(objs, cols) {
+  const col = cols.find((k) => /familiar/i.test(k) && objs.some((o) => /^\d{1,2}$/.test(String(o[k] ?? '').trim())));
+  if (!col) return null;
+  const nums = objs.map((o) => +String(o[col] ?? '').trim()).filter((x) => !isNaN(x) && x >= 0 && x <= 10);
+  if (!nums.length) return null;
+  const b = { beginner: 0, intermediate: 0, advanced: 0 };
+  for (const x of nums) { if (x <= 3) b.beginner++; else if (x <= 6) b.intermediate++; else b.advanced++; }
+  return { avg: Math.round((nums.reduce((s, x) => s + x, 0) / nums.length) * 10) / 10, counted: nums.length, ...b };
+}
+
+function topTools(objs, cols) {
+  const col = cols.find((k) => /tool/i.test(k));
+  if (!col) return [];
+  const tally = new Map();
+  for (const o of objs) {
+    const v = String(o[col] ?? '').trim(); if (!v) continue;
+    for (const t of v.split(',').map((s) => s.trim()).filter(Boolean)) { const k = t.slice(0, 40); tally.set(k, (tally.get(k) || 0) + 1); }
+  }
+  return [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, count]) => ({ label, count }));
+}
+
+function parseJsonObject(raw) {
+  if (!raw) return {};
+  let s = String(raw).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a >= 0 && b > a) s = s.slice(a, b + 1);
+  try { return JSON.parse(s); } catch { return {}; }
+}
+
+async function generateTeamAnalysis(objs) {
+  const n = objs.length;
+  const skip = /name|email|timestamp/i;   // never send identifying columns to the model
+  const rows = objs.map((o, i) =>
+    `#${i + 1}: ${Object.entries(o).filter(([k]) => !skip.test(k)).map(([k, v]) => `${k}: ${v}`).join(' | ')}`
+  ).join('\n').slice(0, 12000);
+  const system =
+    'You are an AI-readiness analyst for the Be AI Ready platform. You are given ANONYMISED staff survey ' +
+    'responses from ONE business (names removed). Produce an AGGREGATE team analysis — NEVER refer to or invent ' +
+    'individuals. Group similar free-text answers into a few clear themes, each with a count of how many of the ' +
+    `${n} respondents fit it. Output ONLY JSON (no prose, no markdown), shape: {"narrative": string (2-4 plain, ` +
+    'specific sentences on where this team stands and what they most need — no filler, no clichés), ' +
+    '"role_groups": [{"label": string, "count": number}], "learning_priorities": [{"label": string, "count": number}], ' +
+    '"automation_opportunities": [{"label": string, "count": number}]}. 3-6 items per list, ordered by count desc.';
+  const userContent = `The ${n} anonymised responses:\n\n${rows}\n\nReturn the JSON analysis now.`;
+  const raw = await callClaude({ system, userContent, maxTokens: 1500, temperature: 0.3 });
+  const j = parseJsonObject(raw);
+  const list = (x) => (Array.isArray(x) ? x.filter((i) => i && i.label).map((i) => ({ label: String(i.label).slice(0, 80), count: Number(i.count) || 0 })).slice(0, 6) : []);
+  return {
+    narrative: typeof j.narrative === 'string' ? j.narrative.slice(0, 900) : null,
+    role_groups: list(j.role_groups),
+    learning_priorities: list(j.learning_priorities),
+    automation_opportunities: list(j.automation_opportunities),
+  };
+}
+
+router.get('/team-analysis', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: responses } = await pool.query(
+      `SELECT response, imported_at FROM intake_responses
+        WHERE newsroom_id = $1 AND form_type = 'intake' ORDER BY imported_at DESC`, [newsroomId]);
+    if (!responses.length) return res.json(null);
+    const objs = responses.map((r) => r.response || {});
+    const cols = []; for (const o of objs) for (const k of Object.keys(o)) if (!cols.includes(k)) cols.push(k);
+
+    const maxImported = responses[0].imported_at ? new Date(responses[0].imported_at).getTime() : 0;
+    const fingerprint = `${TEAM_ANALYSIS_VERSION}:${responses.length}:${maxImported}`;
+
+    // AI parts are cached by fingerprint; deterministic parts are cheap and always fresh.
+    const { rows: [cached] } = await pool.query(
+      `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'intake' AND fingerprint = $2`,
+      [newsroomId, fingerprint]);
+    let ai = cached?.analysis;
+    if (!ai) {
+      ai = await generateTeamAnalysis(objs).catch((e) => { console.error('[team-analysis gen]', e.message); return {}; });
+      await pool.query(
+        `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+         VALUES ($1,'intake',$2,$3::jsonb,NOW())
+         ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+        [newsroomId, fingerprint, JSON.stringify(ai)]);
+    }
+    res.json({
+      team_size: responses.length,
+      familiarity: familiarityDistribution(objs, cols),
+      tools: topTools(objs, cols),
+      narrative: ai.narrative || null,
+      role_groups: Array.isArray(ai.role_groups) ? ai.role_groups : [],
+      learning_priorities: Array.isArray(ai.learning_priorities) ? ai.learning_priorities : [],
+      automation_opportunities: Array.isArray(ai.automation_opportunities) ? ai.automation_opportunities : [],
+    });
+  } catch (err) { console.error('[bair-train/team-analysis]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Agendas (+ items) ───────────────────────────────────────────────────────────
 router.get('/agendas', async (req, res) => {
   try {

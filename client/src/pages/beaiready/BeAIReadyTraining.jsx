@@ -36,12 +36,15 @@ function TrainingRecord() {
   const [agendas, setAgendas] = useState(null);
   const [myMaterials, setMyMaterials] = useState(null);
   const [insights, setInsights] = useState(null);
+  const [teamAnalysis, setTeamAnalysis] = useState(undefined); // undefined = loading, null = no survey yet
 
   useEffect(() => {
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
     apiFetch('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
     apiFetch('/beaiready/training/form-insights').then(setInsights).catch(() => setInsights([]));
+    // The team analysis is AI-generated on first view (then cached) — can take a few seconds.
+    apiFetch('/beaiready/training/team-analysis').then(setTeamAnalysis).catch(() => setTeamAnalysis(null));
   }, []);
 
   // Every published material shows somewhere: under its agenda when that agenda is
@@ -166,41 +169,121 @@ function TrainingRecord() {
         </>
       )}
 
-      <div className="hub-section-label">Insights from your forms</div>
+      <div className="hub-section-label">Your team&apos;s AI readiness</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>
-        {insights == null ? (
-          <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
-        ) : insights.length === 0 ? (
-          <p style={{ margin: 0 }}>Insights from your team&apos;s surveys and post-training feedback will appear here once responses come in.</p>
+        {teamAnalysis === undefined ? (
+          <p style={{ margin: 0, color: '#8a8076' }}>Analysing your team&apos;s survey…</p>
+        ) : teamAnalysis === null ? (
+          <p style={{ margin: 0 }}>Once your team completes the AI-readiness survey, a full analysis of where they stand — and what they most need — appears here.</p>
         ) : (
-          <div style={{ display: 'grid', gap: 18 }}>
-            {insights.map((f) => (
-              <div key={`${f.form_type}:${f.form_name}`}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>
-                  {f.form_type === 'feedback' ? 'Post-training feedback' : f.form_name}
-                  <span style={{ color: '#8a8076', fontWeight: 400 }}> — {f.responses} response{f.responses === 1 ? '' : 's'}</span>
-                </div>
-                {f.rating && (
-                  <div style={{ fontSize: 13.5, marginTop: 4 }}>
-                    Average {ratingLabel(f.rating.label)}: <strong>{f.rating.avg}</strong>/10
-                  </div>
-                )}
-                {f.breakdowns.map((b) => (
-                  <div key={b.question} style={{ marginTop: 8 }}>
-                    <div style={docLabel}>{bdLabel(b.question)}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 8px', marginTop: 4 }}>
-                      {b.top.map((t) => (
-                        <span key={t.value} style={chip}>{t.value}<span style={{ color: '#8a8076', marginLeft: 4 }}>×{t.count}</span></span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+          <TeamReadiness a={teamAnalysis} />
         )}
       </section>
+
+      {/* Post-training feedback (its own Google form) — shown only once one is connected. */}
+      {(insights || []).some((f) => f.form_type === 'feedback') && (
+        <>
+          <div className="hub-section-label">Post-training feedback</div>
+          <section className="hub-band" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'grid', gap: 18 }}>
+              {(insights || []).filter((f) => f.form_type === 'feedback').map((f) => (
+                <div key={`${f.form_type}:${f.form_name}`}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Post-training feedback
+                    <span style={{ color: '#8a8076', fontWeight: 400 }}> — {f.responses} response{f.responses === 1 ? '' : 's'}</span>
+                  </div>
+                  {f.rating && (
+                    <div style={{ fontSize: 13.5, marginTop: 4 }}>Average {ratingLabel(f.rating.label)}: <strong>{f.rating.avg}</strong>/10</div>
+                  )}
+                  {f.breakdowns.map((b) => (
+                    <div key={b.question} style={{ marginTop: 8 }}>
+                      <div style={docLabel}>{bdLabel(b.question)}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 8px', marginTop: 4 }}>
+                        {b.top.map((t) => <span key={t.value} style={chip}>{t.value}<span style={{ color: '#8a8076', marginLeft: 4 }}>×{t.count}</span></span>)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
     </>
+  );
+}
+
+// The rich team AI-readiness view: an AI narrative, a familiarity distribution, and
+// AI-grouped role / learning / automation themes with counts. All aggregate — no names.
+function TeamReadiness({ a }) {
+  const f = a.familiarity;
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      {a.narrative && (
+        <div style={{ background: '#fff', borderLeft: '3px solid #c75b39', borderRadius: 8, padding: '12px 16px', fontSize: 14.5, lineHeight: 1.6, color: '#3a342e' }}>
+          {a.narrative}
+        </div>
+      )}
+      {f && (
+        <div>
+          <div style={docLabel}>AI familiarity · {f.counted} people · avg {f.avg}/10</div>
+          <DistBar buckets={[['Beginner', f.beginner, '#e6b09c'], ['Intermediate', f.intermediate, '#d3805f'], ['Advanced', f.advanced, '#b8492a']]} total={f.counted} />
+        </div>
+      )}
+      {a.role_groups?.length > 0 && <Group label="Who's on the team" items={a.role_groups} />}
+      {a.learning_priorities?.length > 0 && <Group label="What your team most wants to learn" items={a.learning_priorities} />}
+      {a.automation_opportunities?.length > 0 && <Group label="Where AI could save the most time" items={a.automation_opportunities} />}
+      {a.tools?.length > 0 && (
+        <div>
+          <div style={docLabel}>Tools your team already uses</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 8px', marginTop: 4 }}>
+            {a.tools.map((t) => <span key={t.label} style={chip}>{t.label}<span style={{ color: '#8a8076', marginLeft: 4 }}>×{t.count}</span></span>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A labelled list of {label,count} rendered as proportional bars.
+function Group({ label, items }) {
+  const max = Math.max(...items.map((i) => i.count), 1);
+  return (
+    <div>
+      <div style={docLabel}>{label}</div>
+      <div style={{ display: 'grid', gap: 5, marginTop: 5 }}>
+        {items.map((i) => (
+          <div key={i.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' }}>
+            <div style={{ position: 'relative', background: '#f4ece7', borderRadius: 6, overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', inset: 0, width: `${Math.round((i.count / max) * 100)}%`, background: '#f1d8cb' }} />
+              <span style={{ position: 'relative', fontSize: 13, padding: '4px 10px', display: 'block', color: '#3a342e' }}>{i.label}</span>
+            </div>
+            <span style={{ fontSize: 12.5, color: '#8a8076', minWidth: 60, textAlign: 'right' }}>{i.count} {i.count === 1 ? 'person' : 'people'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// The three-bucket familiarity distribution as one proportional bar + a legend.
+function DistBar({ buckets, total }) {
+  return (
+    <div style={{ marginTop: 5 }}>
+      <div style={{ display: 'flex', height: 26, borderRadius: 6, overflow: 'hidden', border: '1px solid #eee5da' }}>
+        {buckets.filter(([, count]) => count > 0).map(([name, count, color]) => (
+          <div key={name} title={`${name}: ${count}`} style={{ width: `${(count / total) * 100}%`, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>
+            {count}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 6, fontSize: 11.5, color: '#6b6359' }}>
+        {buckets.map(([name, count, color]) => (
+          <span key={name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 2, background: color, display: 'inline-block' }} /> {name} ({count})
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
