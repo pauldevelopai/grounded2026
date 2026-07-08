@@ -150,8 +150,22 @@ router.patch('/sources/:id', async (req, res) => {
   } catch (err) { console.error('[beaiready-knowhow/sources:patch]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// Wrap multer so a rejected file (unsupported type / too large) returns a clean
+// message instead of crashing into a generic 500.
+function uploadFiles(req, res, next) {
+  upload.array('files')(req, res, (err) => {
+    if (!err) return next();
+    const msg = err.code === 'LIMIT_FILE_SIZE'
+      ? 'That file is over the size limit (100 MB).'
+      : /not supported/i.test(err.message || '')
+        ? 'That file type isn’t supported yet. Use PDF, Word (.docx), a spreadsheet, CSV or text.'
+        : (err.message || 'That file could not be uploaded.');
+    res.status(400).json({ message: msg });
+  });
+}
+
 // Upload one or more files → extract text → store as company knowledge.
-router.post('/sources/upload', upload.array('files'), async (req, res) => {
+router.post('/sources/upload', uploadFiles, async (req, res) => {
   try {
     const { newsroomId } = await ctx(req);
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });

@@ -9,10 +9,17 @@ import { createKnowledgeEntry } from './knowledge.js';
  */
 export async function extractText(filePath, mimeType) {
   if (mimeType === 'application/pdf') {
-    const pdfParse = (await import('pdf-parse')).default;
+    // pdf-parse v2 is a breaking rewrite: no default pdfParse(buffer) function (that
+    // threw "pdfParse is not a function"); it exports a PDFParse class instead.
+    const { PDFParse } = await import('pdf-parse');
     const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer);
-    return data.text;
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      const data = await parser.getText();
+      return data.text || '';
+    } finally {
+      try { await parser.destroy(); } catch { /* ignore */ }
+    }
   }
 
   if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
