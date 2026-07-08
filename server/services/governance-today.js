@@ -17,7 +17,10 @@ const KEY = 'governance_today';
 // from. Newest first, capped at `limit`. Excludes unvetted auto-added rows (curated by
 // hand, or auto-added then explicitly kept) so the briefing/headlines can never surface a
 // web-sourced fabrication that an admin hasn't reviewed — matching the public tracker.
-const VETTED = "(auto_added = false OR review_status = 'kept')";
+// Auto-publish everything (Paul, 2026-07-08): the briefing draws from ALL tracked
+// lawsuits, same as the now-auto-publishing public tracker, so the front page reflects
+// the freshest cases.
+const VETTED = 'TRUE';
 async function recentTrackerItems(limit) {
   const { rows: law } = await pool.query(
     `SELECT case_name AS name, jurisdiction, status, summary, source_url, case_url,

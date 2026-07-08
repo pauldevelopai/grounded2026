@@ -14,7 +14,9 @@ const ITEM_COUNT = 10;
 
 // Most-recently-updated tracked REGULATIONS, newest first. Excludes unvetted auto-added
 // rows (matching the public tracker + the law briefing).
-const VETTED = "(auto_added = false OR review_status = 'kept')";
+// Auto-publish everything (Paul, 2026-07-08): draw from ALL tracked regulations, matching
+// the now-auto-publishing public tracker, so the front page reflects the freshest items.
+const VETTED = 'TRUE';
 async function recentRegulations(limit) {
   const { rows } = await pool.query(
     `SELECT regulation_name AS name, jurisdiction, status, summary, source_url,
