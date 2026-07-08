@@ -227,6 +227,65 @@ router.get('/feedback-responses', async (req, res) => {
   } catch (err) { console.error('[bair-train/feedback-responses]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Form insights (member-safe AGGREGATES only) ──────────────────────────────────
+// Summary a client sees on their own /training page WITHOUT exposing any individual
+// response: per form — the response count, the average of the detected 0–10 rating
+// column, and the top values of the "list-like" (multi-select) columns. Individual
+// rows never leave the server, so this is safe for the tenant's own members to read.
+const INSIGHT_SKIP = /name|email|timestamp|^when$|^age$|address|phone|location|elaborate|describe|feelings|change/i;
+function aggregateResponses(rows) {
+  const responses = rows.map((r) => r.response || {});
+  const n = responses.length;
+  const cols = [];
+  for (const r of responses) for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k);
+  const vals = (k) => responses.map((r) => (r[k] ?? '').toString().trim()).filter(Boolean);
+  // Rating column: (almost) every non-empty value is an int 0–10.
+  let rating = null;
+  for (const k of cols) {
+    if (INSIGHT_SKIP.test(k)) continue;
+    const vs = vals(k);
+    if (vs.length >= Math.max(3, n * 0.5) && vs.every((v) => /^\d{1,2}$/.test(v) && +v <= 10)) {
+      const avg = vs.reduce((s, v) => s + +v, 0) / vs.length;
+      rating = { label: k, avg: Math.round(avg * 10) / 10 };
+      break;
+    }
+  }
+  // List-like columns: a fair share of values contain a comma → multi-select. Tally tokens.
+  const breakdowns = [];
+  for (const k of cols) {
+    if (INSIGHT_SKIP.test(k) || (rating && k === rating.label)) continue;
+    const vs = vals(k);
+    if (vs.length < 3) continue;
+    if (vs.filter((v) => v.includes(',')).length / vs.length < 0.3) continue;
+    const tally = new Map();
+    for (const v of vs) for (const tok of v.split(',').map((t) => t.trim()).filter(Boolean)) {
+      const key = tok.slice(0, 40);
+      tally.set(key, (tally.get(key) || 0) + 1);
+    }
+    const top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([value, count]) => ({ value, count }));
+    if (top.length) breakdowns.push({ question: k, top });
+  }
+  return { responses: n, rating, breakdowns: breakdowns.slice(0, 3) };
+}
+
+router.get('/form-insights', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: forms } = await pool.query(
+      `SELECT form_name, form_type, last_synced_at FROM intake_forms
+        WHERE newsroom_id = $1 AND is_enabled = true ORDER BY form_type, form_name`, [newsroomId]);
+    const out = [];
+    for (const f of forms) {
+      const { rows } = await pool.query(
+        `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_name = $2 AND form_type = $3`,
+        [newsroomId, f.form_name, f.form_type]);
+      if (!rows.length) continue;
+      out.push({ form_name: f.form_name, form_type: f.form_type, last_synced_at: f.last_synced_at, ...aggregateResponses(rows) });
+    }
+    res.json(out);
+  } catch (err) { console.error('[bair-train/form-insights]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Agendas (+ items) ───────────────────────────────────────────────────────────
 router.get('/agendas', async (req, res) => {
   try {

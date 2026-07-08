@@ -3,7 +3,6 @@
 // (agenda, materials, past/upcoming trainings) shown at the top. This replaced the
 // separate /dashboard/training page. Real data only; honest empty states.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 
@@ -25,13 +24,6 @@ export default function BeAIReadyTraining() {
       {user ? <TrainingRecord /> : (
         <section className="hub-band"><p style={{ margin: 0 }}>Sign in to see your training agenda and materials.</p></section>
       )}
-
-      <section className="hub-band" style={{ background: '#f4f1ec' }}>
-        <p style={{ margin: 0 }}>
-          Want another hands-on training day for your team?{' '}
-          <Link to="/training/book">See the one-day training offer →</Link>
-        </p>
-      </section>
     </div>
   );
 }
@@ -41,15 +33,15 @@ export default function BeAIReadyTraining() {
 // server-side to the caller's own tenant (published items only for members).
 function TrainingRecord() {
   const [trainings, setTrainings] = useState(null);
-  const [materials, setMaterials] = useState(null);
   const [agendas, setAgendas] = useState(null);
   const [myMaterials, setMyMaterials] = useState(null);
+  const [insights, setInsights] = useState(null);
 
   useEffect(() => {
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
-    apiFetch('/beaiready/materials').then(setMaterials).catch(() => setMaterials([]));
     apiFetch('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
+    apiFetch('/beaiready/training/form-insights').then(setInsights).catch(() => setInsights([]));
   }, []);
 
   // Every published material shows somewhere: under its agenda when that agenda is
@@ -156,45 +148,53 @@ function TrainingRecord() {
         )}
       </section>
 
-      <div className="hub-section-label">Course library · your sector</div>
+      <div className="hub-section-label">Insights from your forms</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>
-        {materials == null ? (
+        {insights == null ? (
           <p style={{ margin: 0, color: '#8a8076' }}>Loading…</p>
-        ) : materials.length === 0 ? (
-          <p style={{ margin: 0 }}>Your training and mentoring materials will appear here after your sessions.</p>
+        ) : insights.length === 0 ? (
+          <p style={{ margin: 0 }}>Insights from your team&apos;s surveys and post-training feedback will appear here once responses come in.</p>
         ) : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {materials.map((c) => (
-              <li key={c.id} style={{ marginBottom: 8 }}>
-                <strong>{c.title}</strong>
-                {c.modules?.length > 0 && (
-                  <ul style={{ marginTop: 4 }}>
-                    {c.modules.map((m) => (
-                      <li key={m.id} style={{ fontSize: 13 }}>
-                        {m.video_url ? <a href={m.video_url} target="_blank" rel="noreferrer">{m.title}</a>
-                          : m.content_url ? <a href={m.content_url} target="_blank" rel="noreferrer">{m.title}</a>
-                          : m.title}
-                      </li>
-                    ))}
-                  </ul>
+          <div style={{ display: 'grid', gap: 18 }}>
+            {insights.map((f) => (
+              <div key={`${f.form_type}:${f.form_name}`}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>
+                  {f.form_type === 'feedback' ? 'Post-training feedback' : f.form_name}
+                  <span style={{ color: '#8a8076', fontWeight: 400 }}> — {f.responses} response{f.responses === 1 ? '' : 's'}</span>
+                </div>
+                {f.rating && (
+                  <div style={{ fontSize: 13.5, marginTop: 4 }}>
+                    Average {f.rating.label.toLowerCase()}: <strong>{f.rating.avg}</strong>/10
+                  </div>
                 )}
-              </li>
+                {f.breakdowns.map((b) => (
+                  <div key={b.question} style={{ marginTop: 8 }}>
+                    <div style={docLabel}>{bdLabel(b.question)}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 8px', marginTop: 4 }}>
+                      {b.top.map((t) => (
+                        <span key={t.value} style={chip}>{t.value}<span style={{ color: '#8a8076', marginLeft: 4 }}>×{t.count}</span></span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ))}
-          </ul>
+          </div>
         )}
-      </section>
-
-      <div className="hub-section-label">On the roadmap</div>
-      <section className="hub-band" style={{ background: '#f4f1ec', marginBottom: 24 }}>
-        <p style={{ margin: 0 }}>
-          <strong>KnowHow</strong> — capture a manager's hard-won expertise and turn it into an AI guide
-          that coaches junior staff through their real work.
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#8a8076' }}>In development</span>
-        </p>
       </section>
     </>
   );
 }
+
+// Short, friendly heading for an aggregated survey column (the raw headers are long questions).
+function bdLabel(q) {
+  const l = (q || '').toLowerCase();
+  if (l.includes('tool')) return 'Most-used tools';
+  if (l.includes('learn')) return 'What your team wants to learn';
+  if (l.includes('automat')) return 'Tasks your team would automate';
+  return q.length > 48 ? `${q.slice(0, 46)}…` : q;
+}
+const chip = { fontSize: 12.5, background: '#f7ece7', color: '#7a4636', padding: '2px 9px', borderRadius: 999 };
 
 const docLabel = { fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076' };
 

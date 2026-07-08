@@ -536,6 +536,11 @@ function AgendaCard({ agenda, api, clientId, onChanged, setErr }) {
           <button onClick={del} style={{ ...tag, color: '#b91c1c' }}>Delete</button>
         </div>
       </div>
+      {agenda.status !== 'published' && (
+        <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '5px 9px', marginTop: 8 }}>
+          Draft — not visible to the client yet. Click <strong>Publish</strong> to show it on their training page.
+        </div>
+      )}
       {!edit && agenda.items?.length > 0 && (
         <ul style={{ ...list, marginTop: 8 }}>{agenda.items.map((i) => <li key={i.id} style={{ fontSize: 13 }}><strong>{i.time_label ? `${i.time_label} · ` : ''}{i.topic}</strong>{i.detail ? ` — ${i.detail}` : ''}</li>)}</ul>
       )}
