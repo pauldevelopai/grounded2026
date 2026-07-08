@@ -651,7 +651,26 @@ export async function runEmbeddingBackfill() {
     }
   }
 
-  return { result: `Embedded ${processed} entries (${knowledgeRows.length} knowledge + ${intelRows.length} intelligence)`, itemsProcessed: processed };
+  // Company knowledge (KnowHow): index any sources with no chunks yet, then fill any
+  // NULL-vector chunks (e.g. an upload that ran while the model was cold).
+  let chunkProcessed = 0;
+  try {
+    const { backfillSourceChunks } = await import('./company-knowledge-index.js');
+    await backfillSourceChunks();
+    const { decryptFor } = await import('./crypto.js');
+    const { rows: chunkRows } = await pool.query(
+      'SELECT id, newsroom_id, text_chunk FROM beaiready_source_chunks WHERE embedding IS NULL LIMIT 500'
+    );
+    for (const c of chunkRows) {
+      const text = decryptFor(c.newsroom_id, c.text_chunk);
+      if (!text) continue;
+      const embedding = await generateEmbedding(text);
+      if (embedding) { await pool.query('UPDATE beaiready_source_chunks SET embedding = $1 WHERE id = $2', [toPgVector(embedding), c.id]); chunkProcessed++; }
+    }
+  } catch (e) { console.error('[embedding-backfill chunks]', e.message); }
+  processed += chunkProcessed;
+
+  return { result: `Embedded ${processed} entries (${knowledgeRows.length} knowledge + ${intelRows.length} intelligence + ${chunkProcessed} doc chunks)`, itemsProcessed: processed };
 }
 
 // ── 9. Knowledge Sync — Ingest data from across the app into knowledge base ──

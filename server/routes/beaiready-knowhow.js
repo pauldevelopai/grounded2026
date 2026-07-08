@@ -13,6 +13,7 @@ import { upload } from '../middleware/upload.js';
 import { scrapeArticle } from '../services/web-scraper.js';
 import { extractText } from '../services/document-processor.js';
 import { encryptFor, decryptFor } from '../services/crypto.js';
+import { indexSource, searchCompanyChunks, sourceChunkStats } from '../services/company-knowledge-index.js';
 
 const router = Router();
 
@@ -105,14 +106,48 @@ router.get('/sources', async (req, res) => {
   try {
     const { newsroomId } = await ctx(req);
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.json([]);
-    const { rows } = await pool.query(
-      `SELECT id, kind, title, url, file_id, extracted_text, created_at
-         FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]);
+    const [{ rows }, stats] = await Promise.all([
+      pool.query(
+        `SELECT id, kind, title, url, file_id, extracted_text, included, sensitive, created_at
+           FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]),
+      sourceChunkStats(newsroomId),
+    ]);
     res.json(rows.map((r) => {
       const text = decryptFor(newsroomId, r.extracted_text) || '';
-      return { id: r.id, kind: r.kind, title: r.title, url: r.url, file_id: r.file_id, created_at: r.created_at, snippet: text.slice(0, 220), has_text: text.length > 0 };
+      const st = stats[r.id] || { chunks: 0, embedded: 0 };
+      return { id: r.id, kind: r.kind, title: r.title, url: r.url, file_id: r.file_id, created_at: r.created_at,
+        snippet: text.slice(0, 220), has_text: text.length > 0,
+        included: r.included, sensitive: r.sensitive, chunks: st.chunks, embedded: st.embedded };
     }));
   } catch (err) { console.error('[beaiready-knowhow/sources:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Search your knowledge — the best-matching passages across your documents.
+router.get('/sources/search', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.json({ results: [] });
+    const results = await searchCompanyChunks(newsroomId, req.query.q, { limit: 8 });
+    res.json({ results });
+  } catch (err) { console.error('[beaiready-knowhow/sources:search]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Per-document controls: include/exclude from the AI, flag sensitive.
+router.patch('/sources/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    const fields = [], vals = [];
+    if (typeof req.body?.included === 'boolean') { fields.push(`included = $${fields.length + 1}`); vals.push(req.body.included); }
+    if (typeof req.body?.sensitive === 'boolean') { fields.push(`sensitive = $${fields.length + 1}`); vals.push(req.body.sensitive); }
+    if (!fields.length) return res.status(400).json({ message: 'Nothing to update.' });
+    vals.push(req.params.id, newsroomId);
+    const { rows } = await pool.query(
+      `UPDATE beaiready_company_sources SET ${fields.join(', ')}
+        WHERE id = $${vals.length - 1} AND newsroom_id = $${vals.length}
+        RETURNING id, included, sensitive`, vals);
+    if (!rows.length) return res.status(404).json({ message: 'Not found' });
+    res.json(rows[0]);
+  } catch (err) { console.error('[beaiready-knowhow/sources:patch]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // Upload one or more files → extract text → store as company knowledge.
@@ -134,7 +169,9 @@ router.post('/sources/upload', upload.array('files'), async (req, res) => {
         `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by)
          VALUES ($1,'doc',$2,$3,$4,$5) RETURNING id, kind, title, file_id, created_at`,
         [newsroomId, f.originalname, doc.id, encryptFor(newsroomId, (text || '').slice(0, 20000)), req.user.id]);
-      added.push({ ...src, has_text: (text || '').length > 0 });
+      let ix = { chunks: 0, embedded: 0 };
+      try { ix = await indexSource(src.id, newsroomId, text); } catch (e) { console.error('[knowhow index upload]', e.message); }
+      added.push({ ...src, has_text: (text || '').length > 0, ...ix });
     }
     res.status(201).json({ added });
   } catch (err) { console.error('[beaiready-knowhow/sources:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
@@ -153,6 +190,7 @@ router.post('/sources/website', async (req, res) => {
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
        VALUES ($1,'website',$2,$3,$4,$5) RETURNING id, kind, title, url, created_at`,
       [newsroomId, scraped.title || url.trim(), url.trim(), encryptFor(newsroomId, scraped.text), req.user.id]);
+    try { await indexSource(src.id, newsroomId, scraped.text); } catch (e) { console.error('[knowhow index website]', e.message); }
     res.status(201).json(src);
   } catch (err) { console.error('[beaiready-knowhow/sources:website]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -168,6 +206,7 @@ router.post('/sources/note', async (req, res) => {
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
        VALUES ($1,'note',$2,$3,$4) RETURNING id, kind, title, created_at`,
       [newsroomId, (title || 'Note').trim(), encryptFor(newsroomId, text.trim()), req.user.id]);
+    try { await indexSource(src.id, newsroomId, text.trim()); } catch (e) { console.error('[knowhow index note]', e.message); }
     res.status(201).json(src);
   } catch (err) { console.error('[beaiready-knowhow/sources:note]', err); res.status(500).json({ message: 'Internal server error' }); }
 });

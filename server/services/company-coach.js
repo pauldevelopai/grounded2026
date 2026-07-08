@@ -8,7 +8,7 @@
 // is silent, it says so honestly rather than inventing onboarding facts.
 import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
-import { decryptFor } from './crypto.js';
+import { retrieveCompanyChunks } from './company-knowledge-index.js';
 import { knowhowTenantIdForNewsroom } from '../knowhow/identity.js';
 
 // Everything the coach may ground in — company tier ONLY — plus the sources it drew on.
@@ -16,16 +16,14 @@ async function gatherCompanyKnowledge({ newsroomId, question }) {
   const parts = [];
   const sources = [];
 
-  // 1. Durable company knowledge sources (incl. anything promoted via Gate 1). Decrypted in memory only.
-  const { rows: srcs } = await pool.query(
-    `SELECT kind, title, extracted_text FROM beaiready_company_sources
-      WHERE newsroom_id = $1 AND extracted_text IS NOT NULL AND length(extracted_text) > 0
-      ORDER BY created_at DESC LIMIT 12`, [newsroomId]).catch(() => ({ rows: [] }));
-  for (const s of srcs) {
-    const text = (decryptFor(newsroomId, s.extracted_text) || '').slice(0, 2400);
-    if (!text) continue;
-    parts.push(`[Company ${s.kind}] ${s.title || ''}:\n${text}`);
-    sources.push({ type: 'company_knowledge', title: s.title || s.kind });
+  // 1. Durable company knowledge sources — best-matching PASSAGES across all of them
+  //    (chunk + embedding retrieval), incl. anything promoted via Gate 1. In memory only.
+  const chunks = await retrieveCompanyChunks(newsroomId, question, { limit: 12 });
+  const seenSrc = new Set();
+  for (const c of chunks) {
+    parts.push(`[Company ${c.kind}] ${c.title || ''}:\n${c.text}`);
+    const key = c.title || c.kind;
+    if (!seenSrc.has(key)) { seenSrc.add(key); sources.push({ type: 'company_knowledge', title: c.title || c.kind }); }
   }
 
   const tenantId = await knowhowTenantIdForNewsroom(pool, newsroomId);

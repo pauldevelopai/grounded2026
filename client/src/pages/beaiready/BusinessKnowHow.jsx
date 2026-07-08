@@ -131,6 +131,8 @@ function KnowledgePanel({ setErr }) {
   const [url, setUrl] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [noteText, setNoteText] = useState('');
+  const [sq, setSq] = useState('');
+  const [results, setResults] = useState(null);
 
   const load = useCallback(() => {
     apiFetch('/beaiready/knowhow/sources').then(setSources).catch((e) => setErr(e.message));
@@ -169,13 +171,45 @@ function KnowledgePanel({ setErr }) {
     setBusy(false);
   };
   const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+  const patch = async (id, changes) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'PATCH', body: JSON.stringify(changes) }); load(); } catch (e) { setErr(e.message); } };
+  const doSearch = async (e) => {
+    e.preventDefault();
+    if (!sq.trim()) { setResults(null); return; }
+    setErr('');
+    try { const r = await apiFetch(`/beaiready/knowhow/sources/search?q=${encodeURIComponent(sq.trim())}`); setResults(r.results || []); }
+    catch (e) { setErr(e.message); }
+  };
 
   return (
     <>
       <p style={{ ...muted, maxWidth: '68ch', marginTop: 0 }}>
-        Add the documents, pages and notes that describe how your business works. The AI in <b>Ask</b> answers
-        only from what you add here — read in code, never guessed. Files are processed for text; the originals stay yours.
+        Add the documents, pages and notes that describe how your business works. Each is split into passages and
+        indexed so the AI in <b>Ask</b> can find the right part of a long document — read in code, never guessed.
+        The originals stay yours.
       </p>
+
+      <form onSubmit={doSearch} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input value={sq} onChange={(e) => setSq(e.target.value)} placeholder="Search your knowledge…" style={input} />
+        <button type="submit" style={btn}>Search</button>
+        {results != null && <button type="button" onClick={() => { setSq(''); setResults(null); }} style={tag}>Clear</button>}
+      </form>
+      {results != null && (
+        <div style={{ marginBottom: 20 }}>
+          {results.length === 0 ? <p style={muted}>No matching passages found.</p> : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {results.map((r, i) => (
+                <div key={i} style={{ ...card, background: '#fbf7f4', borderColor: '#eaddd3' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+                    <strong style={{ fontSize: 13.5 }}>{r.title}</strong>
+                    <span style={{ ...muted, fontSize: 11 }}>{Math.round((r.score || 0) * 100)}% match</span>
+                  </div>
+                  <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0', lineHeight: 1.5 }}>{r.snippet}…</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ ...card, marginBottom: 12 }}>
         <div style={kicker}>Add files</div>
@@ -207,20 +241,32 @@ function KnowledgePanel({ setErr }) {
         <p style={muted}>Nothing added yet. Add a file, a web page or a note above and your AI starts using it.</p>
       ) : (
         <div style={{ display: 'grid', gap: 8 }}>
-          {sources.map((s) => (
-            <div key={s.id} style={card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
-                <div>
-                  <span style={{ ...pill, ...originPill }}>{KIND_LABEL[s.kind] || s.kind}</span>{' '}
-                  <strong style={{ fontSize: 14 }}>{s.title}</strong>
-                  {!s.has_text && <span style={{ ...muted, marginLeft: 8, color: '#b45309' }}>· no readable text</span>}
+          {sources.map((s) => {
+            const off = !s.included || s.sensitive;
+            const status = s.chunks
+              ? `${s.chunks} passage${s.chunks === 1 ? '' : 's'}${s.embedded < s.chunks ? ` · indexing ${s.embedded}/${s.chunks}` : ' · searchable'}`
+              : (s.has_text ? 'processing…' : 'no readable text');
+            return (
+              <div key={s.id} style={{ ...card, opacity: off ? 0.55 : 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+                  <div>
+                    <span style={{ ...pill, ...originPill }}>{KIND_LABEL[s.kind] || s.kind}</span>{' '}
+                    <strong style={{ fontSize: 14 }}>{s.title}</strong>
+                    {s.sensitive && <span style={{ ...pill, background: '#fee2e2', color: '#b91c1c', marginLeft: 6 }}>sensitive</span>}
+                    {!s.included && !s.sensitive && <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359', marginLeft: 6 }}>excluded</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => patch(s.id, { included: !s.included })} style={tag} title={s.included ? 'Exclude from the AI' : 'Include in the AI'}>{s.included ? 'Exclude' : 'Include'}</button>
+                    <button onClick={() => patch(s.id, { sensitive: !s.sensitive })} style={{ ...tag, ...(s.sensitive ? { color: '#b91c1c' } : {}) }} title="Mark sensitive — kept on file but never used by the AI">{s.sensitive ? 'Unmark' : 'Sensitive'}</button>
+                    <button onClick={() => del(s.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+                  </div>
                 </div>
-                <button onClick={() => del(s.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+                <div style={{ ...muted, fontSize: 11.5, marginTop: 4 }}>{status}</div>
+                {s.snippet && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0', lineHeight: 1.5 }}>{s.snippet}{s.snippet.length >= 220 ? '…' : ''}</p>}
+                {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#c75b39' }}>{s.url}</a>}
               </div>
-              {s.snippet && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0', lineHeight: 1.5 }}>{s.snippet}{s.snippet.length >= 220 ? '…' : ''}</p>}
-              {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#c75b39' }}>{s.url}</a>}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>

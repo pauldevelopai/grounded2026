@@ -10,7 +10,7 @@ import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
 import { getRelevantKnowledge } from './knowledge.js';
-import { decryptFor } from './crypto.js';
+import { retrieveCompanyChunks } from './company-knowledge-index.js';
 
 // Prior team interactions most relevant to this question — hybrid (vector when an
 // embedding service is configured, else full-text). Scoped to the company; shared only.
@@ -49,17 +49,15 @@ async function gatherCorpus({ newsroomId, organisationId, sectorId, question }) 
   const parts = [];
   const sources = [];
 
-  // 1. The company's captured knowledge sources (docs, website, notes).
-  const { rows: srcs } = await pool.query(
-    `SELECT kind, title, extracted_text
-       FROM beaiready_company_sources
-      WHERE newsroom_id = $1 AND extracted_text IS NOT NULL AND length(extracted_text) > 0
-      ORDER BY created_at DESC LIMIT 8`, [newsroomId]).catch(() => ({ rows: [] }));
-  for (const s of srcs) {
-    const text = (decryptFor(newsroomId, s.extracted_text) || '').slice(0, 2400);   // decrypted in memory only
-    if (!text) continue;
-    parts.push(`[Company ${s.kind}] ${s.title || ''}:\n${text}`);
-    sources.push({ type: 'document', title: s.title || s.kind });
+  // 1. The company's captured knowledge — the best-matching PASSAGES across ALL of the
+  //    company's documents/website/notes (chunk + embedding retrieval), so a long PDF is
+  //    searched end to end, not truncated to the first page of the newest few sources.
+  const chunks = await retrieveCompanyChunks(newsroomId, question, { limit: 12 });
+  const seenSrc = new Set();
+  for (const c of chunks) {
+    parts.push(`[Company ${c.kind}] ${c.title || ''}:\n${c.text}`);
+    const key = c.title || c.kind;
+    if (!seenSrc.has(key)) { seenSrc.add(key); sources.push({ type: 'document', title: c.title || c.kind }); }
   }
 
   // 2. The company's private knowledge entries + platform-global + anonymised patterns.

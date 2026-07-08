@@ -19,6 +19,7 @@ import { scrapeArticle } from '../services/web-scraper.js';
 import { extractText } from '../services/document-processor.js';
 import { encryptFor, decryptFor } from '../services/crypto.js';
 import { callClaude } from '../services/claude.js';
+import { indexSource } from '../services/company-knowledge-index.js';
 
 const router = Router();
 
@@ -756,6 +757,7 @@ router.post('/company-knowledge/website', requireRole('admin'), async (req, res)
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
        VALUES ($1,'website',$2,$3,$4,$5) RETURNING id, kind, title, url, created_at`,
       [newsroom_id, scraped.title || url, url, encryptFor(newsroom_id, scraped.text), req.user.id]);
+    try { await indexSource(rows[0].id, newsroom_id, scraped.text); } catch (e) { console.error('[company-knowledge index website]', e.message); }
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[bair-train/company-knowledge:website]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -775,6 +777,7 @@ router.post('/company-knowledge/upload', requireRole('admin'), upload.single('fi
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by)
        VALUES ($1,'doc',$2,$3,$4,$5) RETURNING id, kind, title, file_id, created_at`,
       [newsroom_id, req.file.originalname, doc.id, encryptFor(newsroom_id, (text || '').slice(0, 20000)), req.user.id]);
+    try { await indexSource(rows[0].id, newsroom_id, text); } catch (e) { console.error('[company-knowledge index upload]', e.message); }
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[bair-train/company-knowledge:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
 });
@@ -787,6 +790,7 @@ router.post('/company-knowledge/note', requireRole('admin'), async (req, res) =>
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
        VALUES ($1,'note',$2,$3,$4) RETURNING id, kind, title, created_at`,
       [newsroom_id, title || 'Note', encryptFor(newsroom_id, text.trim()), req.user.id]);
+    try { await indexSource(rows[0].id, newsroom_id, text.trim()); } catch (e) { console.error('[company-knowledge index note]', e.message); }
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[bair-train/company-knowledge:note]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
