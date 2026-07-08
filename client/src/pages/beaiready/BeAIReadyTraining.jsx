@@ -50,14 +50,29 @@ function TrainingRecord() {
   const visibleAgendaIds = new Set((agendas || []).map((a) => a.id));
   const looseMaterials = (myMaterials || []).filter((m) => !m.agenda_id || !visibleAgendaIds.has(m.agenda_id));
 
+  // Dashboard summary — a quick at-a-glance count of the training experience.
+  const sessionCount = (agendas || []).length;
+  const docCount = (agendas || []).reduce((s, a) => s + (a.files?.length || 0) + (a.reports?.length || 0) + (a.doc_kind ? 1 : 0), 0)
+    + (myMaterials || []).reduce((s, m) => s + (m.files?.length || 0), 0);
+  const surveyTotal = (insights || []).reduce((s, f) => s + (f.responses || 0), 0);
+  const summaryReady = agendas != null && myMaterials != null && insights != null;
+
   return (
     <>
-      <div className="hub-section-label" style={{ marginTop: 8 }}>Your training agenda</div>
+      {summaryReady && (sessionCount > 0 || docCount > 0 || surveyTotal > 0) && (
+        <section style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 22 }}>
+          <Stat n={sessionCount} label={sessionCount === 1 ? 'training session' : 'training sessions'} />
+          <Stat n={docCount} label={docCount === 1 ? 'document' : 'documents'} />
+          {surveyTotal > 0 && <Stat n={surveyTotal} label="survey responses" />}
+        </section>
+      )}
+
+      <div className="hub-section-label" style={{ marginTop: 8 }}>Your training sessions</div>
       <section style={{ marginBottom: 24 }}>
         {agendas == null ? (
           <p style={{ color: '#8a8076' }}>Loading…</p>
         ) : agendas.length === 0 ? (
-          <p className="hub-band" style={{ margin: 0 }}>Your agenda will appear here once your training is scheduled.</p>
+          <p className="hub-band" style={{ margin: 0 }}>Your training sessions will appear here once your training is scheduled.</p>
         ) : (
           <div style={{ display: 'grid', gap: 14 }}>
             {agendas.map((a) => (
@@ -72,7 +87,7 @@ function TrainingRecord() {
                       </li>
                     ))}
                   </ul>
-                ) : !a.doc_kind && <p style={{ color: '#8a8076', fontSize: 13, margin: 0 }}>Agenda details coming soon.</p>}
+                ) : (!a.doc_kind && !a.files?.length && !a.reports?.length) && <p style={{ color: '#8a8076', fontSize: 13, margin: 0 }}>Agenda details coming soon.</p>}
                 {a.doc_kind && (
                   <p style={{ margin: a.items?.length > 0 ? '8px 0 0' : 0 }}>
                     <a href={`/api/beaiready/training/agendas/${a.id}/doc/download`} target="_blank" rel="noreferrer">
@@ -136,17 +151,20 @@ function TrainingRecord() {
         )}
       </section>
 
-      <div className="hub-section-label">Trainings</div>
-      <section style={{ marginBottom: 24 }}>
-        {trainings == null ? (
-          <p style={{ color: '#8a8076' }}>Loading…</p>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 16 }}>
-            <TrainingList title="Upcoming" items={trainings.upcoming || []} empty="No upcoming training scheduled." />
-            <TrainingList title="Past" items={trainings.past || []} empty="No past trainings yet." />
-          </div>
-        )}
-      </section>
+      {/* Extra scheduled engagements from the CRM (separate from the sessions above).
+          Only shown when there are any — otherwise the sessions above ARE the record,
+          and an empty "No past trainings yet" would wrongly read as nothing happened. */}
+      {trainings && ((trainings.upcoming || []).length > 0 || (trainings.past || []).length > 0) && (
+        <>
+          <div className="hub-section-label">Scheduled trainings</div>
+          <section style={{ marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px,1fr))', gap: 16 }}>
+              <TrainingList title="Upcoming" items={trainings.upcoming || []} empty="No upcoming training scheduled." />
+              <TrainingList title="Past" items={trainings.past || []} empty="No past trainings yet." />
+            </div>
+          </section>
+        </>
+      )}
 
       <div className="hub-section-label">Insights from your forms</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>
@@ -164,7 +182,7 @@ function TrainingRecord() {
                 </div>
                 {f.rating && (
                   <div style={{ fontSize: 13.5, marginTop: 4 }}>
-                    Average {f.rating.label.toLowerCase()}: <strong>{f.rating.avg}</strong>/10
+                    Average {ratingLabel(f.rating.label)}: <strong>{f.rating.avg}</strong>/10
                   </div>
                 )}
                 {f.breakdowns.map((b) => (
@@ -194,7 +212,26 @@ function bdLabel(q) {
   if (l.includes('automat')) return 'Tasks your team would automate';
   return q.length > 48 ? `${q.slice(0, 46)}…` : q;
 }
+// Friendly short name for the 0–10 rating question (the raw header is a full sentence).
+function ratingLabel(q) {
+  const l = (q || '').toLowerCase();
+  if (l.includes('familiar')) return 'AI familiarity';
+  if (l.includes('confiden')) return 'AI confidence';
+  if (l.includes('comfort')) return 'comfort with AI';
+  if (l.includes('negative or positive') || l.includes('sentiment')) return 'sentiment about AI';
+  return q.length > 36 ? `${q.slice(0, 34).toLowerCase()}…` : q.toLowerCase();
+}
 const chip = { fontSize: 12.5, background: '#f7ece7', color: '#7a4636', padding: '2px 9px', borderRadius: 999 };
+
+// A single dashboard stat tile (big number + label).
+function Stat({ n, label }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 12, padding: '12px 18px', minWidth: 108 }}>
+      <div style={{ fontSize: 24, fontWeight: 800, color: '#c75b39', lineHeight: 1 }}>{n}</div>
+      <div style={{ fontSize: 12, color: '#6b6359', marginTop: 3 }}>{label}</div>
+    </div>
+  );
+}
 
 const docLabel = { fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076' };
 
