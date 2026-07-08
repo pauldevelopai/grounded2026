@@ -45,6 +45,7 @@ export default function BeAIReadyAdminTraining() {
           <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
           <AgendaSection clientId={clientId} setErr={setErr} />
           <MaterialsSection clientId={clientId} setErr={setErr} />
+          <FeedbackSection clientId={clientId} setErr={setErr} />
           <RecommendationsSection clientId={clientId} setErr={setErr} pillars={['training']} />
         </div>
       )}
@@ -264,6 +265,86 @@ function IntakeResponses({ responses }) {
   );
 }
 
+// ── Training feedback (Google form) — the post-training survey ───────────────────
+// Same machinery as Intake (connect a response Sheet → sync now + hourly), but for
+// the feedback attendees fill in AFTER a training. Kept separate so the pre-training
+// intake survey and the post-training feedback never mix.
+function FeedbackSection({ clientId, setErr }) {
+  const api = useApi(clientId);
+  const [forms, setForms] = useState(null);
+  const [responses, setResponses] = useState(null);
+  const [draft, setDraft] = useState({ form_name: '', csv_url: '' });
+  const [busy, setBusy] = useState('');
+  const [note, setNote] = useState(null);   // { kind: 'ok'|'warn', text }
+
+  const load = useCallback(() => {
+    api('/beaiready/training/feedback-forms').then(setForms).catch((e) => setErr(e.message));
+    api('/beaiready/training/feedback-responses').then(setResponses).catch(() => setResponses([]));
+  }, [api, setErr]);
+  useEffect(() => { setForms(null); setResponses(null); setNote(null); load(); }, [load]);
+
+  const describe = (r) => r.error
+    ? `${r.form}: ${r.error}`
+    : `${r.form}: ${r.inserted} new · ${r.total} total response${r.total === 1 ? '' : 's'}`;
+
+  const register = async (e) => {
+    e.preventDefault();
+    if (!draft.form_name.trim() || !draft.csv_url.trim()) return;
+    setBusy('register'); setErr(''); setNote(null);
+    try {
+      const r = await api('/beaiready/training/feedback-forms', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) });
+      setDraft({ form_name: '', csv_url: '' });
+      if (r?.sync) setNote({ kind: r.sync.error ? 'warn' : 'ok', text: describe(r.sync) });
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy('');
+  };
+  const sync = async () => {
+    setBusy('sync'); setErr(''); setNote(null);
+    try {
+      const r = await api('/beaiready/training/feedback-forms/sync', { method: 'POST' });
+      const results = r?.results || [];
+      if (results.length === 0) setNote({ kind: 'warn', text: 'No feedback form connected to sync yet.' });
+      else setNote({ kind: results.some((x) => x.error) ? 'warn' : 'ok', text: results.map(describe).join(' · ') });
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy('');
+  };
+
+  return (
+    <Section title="Training feedback" hint="Import the Google form attendees filled in after a training">
+      <form onSubmit={register} style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 6 }}>
+        <Field label="Form name"><input value={draft.form_name} onChange={(e) => setDraft({ ...draft, form_name: e.target.value })} placeholder="Post-training feedback" style={inp} /></Field>
+        <Field label="Response sheet link"><input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Paste the responses Google Sheet link" style={{ ...inp, minWidth: 280 }} /></Field>
+        <button type="submit" disabled={busy === 'register'} style={btn}>{busy === 'register' ? 'Connecting…' : 'Connect form'}</button>
+        <button type="button" onClick={sync} disabled={busy === 'sync'} style={btnGhost}>{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>
+      </form>
+      <p style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
+        Paste the feedback response Sheet's normal link (set it to “anyone with the link can view”), or use File → Share → Publish to web → CSV. Responses pull in on connect, and hourly after that.
+      </p>
+      {note && (
+        <div style={{ ...card, padding: '8px 12px', marginBottom: 10, fontSize: 13,
+          background: note.kind === 'ok' ? '#f0fdf4' : '#fffbeb',
+          borderColor: note.kind === 'ok' ? '#bbf7d0' : '#fde68a',
+          color: note.kind === 'ok' ? '#166534' : '#92400e' }}>
+          {note.text}
+        </div>
+      )}
+      {forms == null ? <p style={muted}>Loading…</p> : forms.length === 0 ? <p style={muted}>No feedback form connected yet.</p> : (
+        <ul style={list}>
+          {forms.map((f) => (
+            <li key={f.form_name} style={{ fontSize: 13.5 }}>
+              <strong>{f.form_name}</strong> — {f.response_count} response{f.response_count === 1 ? '' : 's'}
+              {f.last_synced_at && <span style={muted}> · synced {new Date(f.last_synced_at).toLocaleString()}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {responses && responses.length > 0 && <IntakeResponses responses={responses} />}
+    </Section>
+  );
+}
+
 // ── Company knowledge (internal context the AI reasons over) ─────────────────────
 const SRC_LABEL = { doc: 'Doc', website: 'Website', note: 'Note' };
 function CompanyKnowledgeSection({ clientId, setErr }) {
@@ -406,7 +487,8 @@ function AgendaSection({ clientId, setErr }) {
             </label>
             {pendingFiles.length > 0 && (
               <span style={{ fontSize: 12, color: '#6b6359' }}>{pendingFiles.map((f) => f.name).join(', ')}
-                {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button></span>
+                {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button>
+                <span style={{ display: 'block', color: '#8a8076', marginTop: 2 }}>These upload when you click “Add agenda” below.</span></span>
             )}
           </div>
         </div>
@@ -570,7 +652,8 @@ function MaterialsSection({ clientId, setErr }) {
           </label>
           {pendingFiles.length > 0 && (
             <span style={{ fontSize: 12, color: '#6b6359' }}>{pendingFiles.map((f) => f.name).join(', ')}
-              {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button></span>
+              {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button>
+              <span style={{ display: 'block', color: '#8a8076', marginTop: 2 }}>These upload when you click “Add material” below.</span></span>
           )}
         </div>
         <AgendaSelect agendas={agendas} value={draft.agenda_id} onChange={(v) => setDraft({ ...draft, agenda_id: v })} />

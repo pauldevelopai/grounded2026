@@ -159,7 +159,7 @@ router.put('/intake-forms/:id', requireRole('admin'), async (req, res) => {
 router.post('/intake-forms/sync', requireRole('admin'), async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const results = await syncFormsForTenant(newsroomId);
+    const results = await syncFormsForTenant(newsroomId, 'intake');
     res.json({ ok: true, results });
   }
   catch (err) { console.error('[bair-train/intake-sync]', err); res.status(500).json({ message: 'Sync failed' }); }
@@ -171,9 +171,60 @@ router.get('/intake-responses', async (req, res) => {
     const { newsroomId } = await tenantContext(req);
     const { rows } = await pool.query(
       `SELECT id, form_name, response, submitted_at, imported_at FROM intake_responses
-        WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST, imported_at DESC LIMIT 500`, [newsroomId]);
+        WHERE newsroom_id = $1 AND form_type = 'intake' ORDER BY submitted_at DESC NULLS LAST, imported_at DESC LIMIT 500`, [newsroomId]);
     res.json(rows);
   } catch (err) { console.error('[bair-train/intake-responses]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Training feedback (Google form) — the SAME pipeline as Intake, form_type='feedback'.
+// Attendees fill in a post-training feedback form; the admin connects its response
+// Sheet, we sync it hourly and show the responses. Kept separate from Intake so the
+// pre-training survey and the post-training feedback never mix.
+router.get('/feedback-forms', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT f.form_name, f.last_synced_at,
+              (SELECT COUNT(*)::int FROM intake_responses r
+                WHERE r.newsroom_id = f.newsroom_id AND r.form_name = f.form_name AND r.form_type = 'feedback') AS response_count
+         FROM intake_forms f WHERE f.newsroom_id = $1 AND f.form_type = 'feedback' AND f.is_enabled = true
+        ORDER BY f.form_name`, [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[bair-train/feedback-forms:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/feedback-forms', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroom_id, form_name, csv_url } = req.body || {};
+    if (!newsroom_id || !form_name || !csv_url) return res.status(400).json({ message: 'newsroom_id, form_name, csv_url required' });
+    const { rows } = await pool.query(
+      `INSERT INTO intake_forms (newsroom_id, form_name, csv_url, form_type) VALUES ($1,$2,$3,'feedback') RETURNING *`,
+      [newsroom_id, form_name, csv_url]);
+    // Pull responses immediately so "0 responses" never lingers when the sheet is fine.
+    let sync = null;
+    try { sync = await syncOneForm(rows[0].id); }
+    catch (e) { sync = { form: form_name, total: 0, inserted: 0, error: e.message }; }
+    res.status(201).json({ ...rows[0], sync });
+  } catch (err) { console.error('[bair-train/feedback-forms:post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/feedback-forms/sync', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const results = await syncFormsForTenant(newsroomId, 'feedback');
+    res.json({ ok: true, results });
+  }
+  catch (err) { console.error('[bair-train/feedback-sync]', err); res.status(500).json({ message: 'Sync failed' }); }
+});
+
+router.get('/feedback-responses', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT id, form_name, response, submitted_at, imported_at FROM intake_responses
+        WHERE newsroom_id = $1 AND form_type = 'feedback' ORDER BY submitted_at DESC NULLS LAST, imported_at DESC LIMIT 500`, [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[bair-train/feedback-responses]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── Agendas (+ items) ───────────────────────────────────────────────────────────
@@ -692,10 +743,18 @@ async function gatherBusinessContext(newsroomId) {
        LEFT JOIN sectors s ON s.id = o.sector_id WHERE n.id = $1`, [newsroomId]).catch(() => ({ rows: [{}] }));
   if (t?.org) parts.push(`Business: ${t.org}${t.sector ? ` (sector: ${t.sector})` : ''}`);
   const { rows: intake } = await pool.query(
-    `SELECT response FROM intake_responses WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
+    `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake' ORDER BY submitted_at DESC NULLS LAST LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
   if (intake.length) {
     const lines = intake.map((r) => Object.entries(r.response || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')).filter(Boolean);
     parts.push(`Intake / staff survey responses (${intake.length}):\n${lines.join('\n').slice(0, 6000)}`);
+  }
+  // Post-training feedback (a separate Google form) — how attendees rated the
+  // sessions, labelled distinctly from the pre-training intake survey.
+  const { rows: feedback } = await pool.query(
+    `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'feedback' ORDER BY submitted_at DESC NULLS LAST LIMIT 30`, [newsroomId]).catch(() => ({ rows: [] }));
+  if (feedback.length) {
+    const lines = feedback.map((r) => Object.entries(r.response || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')).filter(Boolean);
+    parts.push(`Post-training feedback responses (${feedback.length}):\n${lines.join('\n').slice(0, 6000)}`);
   }
   const { rows: srcs } = await pool.query(
     `SELECT kind, title, extracted_text FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC LIMIT 20`, [newsroomId]).catch(() => ({ rows: [] }));

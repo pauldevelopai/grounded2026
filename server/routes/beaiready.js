@@ -284,8 +284,8 @@ router.get('/intake', async (req, res) => {
     const { rows: forms } = await pool.query(
       `SELECT f.form_name, f.last_synced_at,
               (SELECT COUNT(*)::int FROM intake_responses r
-                WHERE r.newsroom_id = f.newsroom_id AND r.form_name = f.form_name) AS response_count
-         FROM intake_forms f WHERE f.newsroom_id = $1 AND f.is_enabled = true
+                WHERE r.newsroom_id = f.newsroom_id AND r.form_name = f.form_name AND r.form_type = 'intake') AS response_count
+         FROM intake_forms f WHERE f.newsroom_id = $1 AND f.form_type = 'intake' AND f.is_enabled = true
         ORDER BY f.form_name`,
       [newsroomId]
     );
@@ -760,7 +760,7 @@ router.get('/security/discover', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
     const { rows } = await pool.query(
-      'SELECT response FROM intake_responses WHERE newsroom_id = $1 ORDER BY submitted_at DESC NULLS LAST LIMIT 50',
+      "SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake' ORDER BY submitted_at DESC NULLS LAST LIMIT 50",
       [newsroomId]
     );
     if (!rows.length) return res.json({ responses: 0, suggestions: [] });

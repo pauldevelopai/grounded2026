@@ -102,10 +102,10 @@ async function syncForm(form) {
     const ts = tsRaw ? new Date(tsRaw) : null;
     const submittedAt = ts && !isNaN(ts.getTime()) ? ts.toISOString() : null;
     const r = await pool.query(
-      `INSERT INTO intake_responses (newsroom_id, form_name, response, row_hash, submitted_at)
-       VALUES ($1,$2,$3::jsonb,$4,$5)
+      `INSERT INTO intake_responses (newsroom_id, form_name, form_type, response, row_hash, submitted_at)
+       VALUES ($1,$2,$3,$4::jsonb,$5,$6)
        ON CONFLICT (newsroom_id, form_name, row_hash) DO NOTHING`,
-      [form.newsroom_id, form.form_name, JSON.stringify(obj), rowHash, submittedAt]
+      [form.newsroom_id, form.form_name, form.form_type || 'intake', JSON.stringify(obj), rowHash, submittedAt]
     );
     inserted += r.rowCount;
   }
@@ -143,9 +143,12 @@ export async function syncOneForm(formId) {
 
 // Sync every enabled form for ONE tenant and return per-form results (no throw —
 // each form's failure is captured) so the admin sees exactly what happened.
-export async function syncFormsForTenant(newsroomId) {
+// Pass formType ('intake' | 'feedback') to sync only that section's forms.
+export async function syncFormsForTenant(newsroomId, formType = null) {
   const { rows: forms } = await pool.query(
-    'SELECT * FROM intake_forms WHERE newsroom_id = $1 AND is_enabled = true ORDER BY form_name', [newsroomId]);
+    `SELECT * FROM intake_forms WHERE newsroom_id = $1 AND is_enabled = true
+       ${formType ? 'AND form_type = $2' : ''} ORDER BY form_name`,
+    formType ? [newsroomId, formType] : [newsroomId]);
   const results = [];
   for (const form of forms) {
     try {
