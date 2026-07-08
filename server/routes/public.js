@@ -78,11 +78,11 @@ const PUBLIC_REG_STATUSES = ['enacted', 'in_force', 'partial_force', 'amended'];
 // publicly the moment they were created and "pruned if wrong" — but unvetted ones
 // included web-sourced fabrications (e.g. a bogus "export-control suspension"
 // regulation) that surfaced on the public tracker, the home counts, and the AI-Law
-// briefing. Public surfaces now only show a tracker row if it was curated by hand
-// (auto_added = false) or an admin explicitly kept the auto-added one
-// (review_status = 'kept'). Nothing is deleted — unvetted rows stay visible in the
-// admin tracker for review. Columns from migration 103.
-const TRACKER_PUBLIC_SQL = "(auto_added = false OR review_status = 'kept')";
+// briefing. Auto-publish everything (Paul, 2026-07-08): ingested lawsuits/regulations go
+// PUBLIC immediately so the tracker stays fresh — no manual "keep" step. Admins can still
+// remove a wrong one from the /admin/tracker review queue (that DELETEs the row). Columns
+// from migration 103.
+const TRACKER_PUBLIC_SQL = '1=1';
 
 // Columns exposed to the public for lawsuits
 const PUBLIC_LAWSUIT_COLS = `
