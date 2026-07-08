@@ -1252,6 +1252,10 @@ router.get('/toolkit', async (req, res) => {
 // truth (one Node, two storefronts; never duplicated).
 let _bairNodesCache = { at: 0, data: null };
 
+// Nodes kept out of the storefront panels (registry stays the single source of
+// truth; these are just not surfaced here). Paul's call, 2026-07-08.
+const HIDDEN_STOREFRONT_SLUGS = new Set(['podcasting', 'progress', 'salesrep']);
+
 async function loadNodesRegistry() {
   const candidates = [
     process.env.NODES_REGISTRY_FILE,
@@ -1275,6 +1279,7 @@ router.get('/bair-nodes', async (req, res) => {
         // Show ALL Nodes in the storefront — the bair-tagged ones AND the GROUNDED ones
         // (Paul's call, 2026-07-07). Any registry entry with at least one product tag.
         .filter((n) => Array.isArray(n.products) && n.products.length > 0)
+        .filter((n) => !HIDDEN_STOREFRONT_SLUGS.has(n.slug))
         .map((n) => {
           // A 'builtin' Node lives inside the tracker app (e.g. LeadFinder) — it
           // opens at its in-app href, not a hosted /nodes/<slug>/app/ process, and
