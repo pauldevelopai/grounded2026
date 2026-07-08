@@ -48,24 +48,9 @@ export default function BeAIReadyHome() {
         </div>
       </section>
 
-      {/* ── Today in AI — the three daily briefings (News, then Law, then Regulation).
-          Only shows once at least one has been generated; no empty cards. ── */}
-      {(briefings.news?.summary || briefings.law?.summary || briefings.regulation?.summary) && (
-        <>
-          <div className="hub-section-label">Today in AI</div>
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 32 }}>
-            {briefings.news?.summary && (
-              <BriefingCard kicker="AI News" data={briefings.news} />
-            )}
-            {briefings.law?.summary && (
-              <BriefingCard kicker="AI Law" data={briefings.law} to="/tracker" toLabel="Open the tracker →" />
-            )}
-            {briefings.regulation?.summary && (
-              <BriefingCard kicker="Regulation" data={briefings.regulation} to="/tracker" toLabel="Open the tracker →" />
-            )}
-          </section>
-        </>
-      )}
+      {/* ── Today in AI — a small daily newsroom: one lead story with a photo (rotates
+          each day) + two shorter reads. Only shows once a briefing exists. ── */}
+      <TodayInAI briefings={briefings} />
 
       {/* ── The pillars — the whole offering, one card each ── */}
       <div className="hub-section-label">The pillars of being AI ready</div>
@@ -124,69 +109,157 @@ export default function BeAIReadyHome() {
 
 function n(v) { return v == null ? '—' : v.toLocaleString(); }
 
-// Per-category visual identity — an accent colour + a soft tint + a line icon, so the
-// three daily reads read as distinct cards rather than one wall of text.
+// Per-category visual identity — accent + gradient shades + a soft tint + a line icon.
 const ICON = {
   news: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="13" height="14" rx="1.5" /><path d="M16 8h3a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2h-2" />
-      <path d="M6 9h7M6 12h7M6 15h4" />
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ maxWidth: 22, maxHeight: 22 }}>
+      <rect x="3" y="5" width="13" height="14" rx="1.5" /><path d="M16 8h3a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2h-2" /><path d="M6 9h7M6 12h7M6 15h4" />
     </svg>
   ),
   law: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 4v16M7 20h10M5 8h14" /><circle cx="12" cy="4" r="1.1" />
-      <path d="M5 8l-2.5 5a2.5 2.5 0 0 0 5 0L5 8zM19 8l-2.5 5a2.5 2.5 0 0 0 5 0L19 8z" />
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ maxWidth: 22, maxHeight: 22 }}>
+      <path d="M12 4v16M7 20h10M5 8h14" /><circle cx="12" cy="4" r="1.1" /><path d="M5 8l-2.5 5a2.5 2.5 0 0 0 5 0L5 8zM19 8l-2.5 5a2.5 2.5 0 0 0 5 0L19 8z" />
     </svg>
   ),
   regulation: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ maxWidth: 22, maxHeight: 22 }}>
       <path d="M12 3l7 3v5.2c0 4.3-3 7.4-7 8.8-4-1.4-7-4.5-7-8.8V6l7-3z" /><path d="M9 12l2 2 4-4" />
     </svg>
   ),
 };
 const CATEGORY = {
-  'AI News':    { key: 'news',       accent: '#2563eb', tint: '#eef3ff' },
-  'AI Law':     { key: 'law',        accent: '#c75b39', tint: '#fbeee7' },
-  'Regulation': { key: 'regulation', accent: '#0f8a5f', tint: '#e6f5ee' },
+  'AI News':    { key: 'news',       accent: '#2f6bed', mid: '#3a52d6', deep: '#1e2f8a', tint: '#eef3ff' },
+  'AI Law':     { key: 'law',        accent: '#d0623d', mid: '#b64a2a', deep: '#7f3218', tint: '#fbeee7' },
+  'Regulation': { key: 'regulation', accent: '#12936a', mid: '#0f8258', deep: '#0a5a3e', tint: '#e6f5ee' },
 };
 
-// One daily briefing card: an icon badge + category, the ~100-word read, cited-source
-// chips, and (for Law/Regulation) a link into the tracker.
-function BriefingCard({ kicker, data, to, toLabel }) {
-  const cat = CATEGORY[kicker] || CATEGORY['AI News'];
-  const when = data.generated_at
-    ? new Date(data.generated_at).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
-    : null;
+// ── Today in AI: a tiny daily newsroom — one lead story with a photo (the lead
+// rotates each day so a different category is featured), plus two shorter reads. ──
+function TodayInAI({ briefings }) {
+  const stories = [
+    { kicker: 'AI News', data: briefings.news, to: null },
+    { kicker: 'AI Law', data: briefings.law, to: '/tracker' },
+    { kicker: 'Regulation', data: briefings.regulation, to: '/tracker' },
+  ].filter((s) => s.data?.summary);
+  if (!stories.length) return null;
+
+  const day = Math.floor(Date.now() / 86400000);   // stable per calendar day
+  const leadIdx = day % stories.length;            // rotate which story leads (gets the photo)
+  const lead = stories[leadIdx];
+  const rest = stories.filter((_, i) => i !== leadIdx);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', background: '#fff', border: '1px solid #eee5da', borderTop: `3px solid ${cat.accent}`, borderRadius: 14, padding: '18px 18px 16px', boxShadow: '0 3px 12px rgba(60,40,20,0.05)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 12, background: cat.tint, color: cat.accent, flexShrink: 0 }}>
-          {ICON[cat.key]}
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 800, color: '#241f1a', letterSpacing: '-0.01em' }}>{kicker}</div>
-          {when && <div style={{ fontSize: 11.5, color: '#a89e92' }}>{when}</div>}
-        </div>
+    <>
+      <style>{`@media (max-width: 760px){ .today-grid{ grid-template-columns:1fr !important; } }`}</style>
+      <div className="hub-section-label">Today in AI</div>
+      <section className="today-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.7fr) minmax(0,1fr)', gap: 20, marginBottom: 34, alignItems: 'start' }}>
+        <LeadStory {...lead} seed={day} />
+        {rest.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 14, overflow: 'hidden', boxShadow: '0 3px 12px rgba(60,40,20,0.04)' }}>
+            {rest.map((s, i) => <SecondaryStory key={s.kicker} {...s} divider={i > 0} />)}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+// The featured story: a daily generated cover image, a headline, a 2-sentence dek that
+// expands to the full read, and cited-source chips.
+function LeadStory({ kicker, data, to, seed }) {
+  const [open, setOpen] = useState(false);
+  const cat = CATEGORY[kicker] || CATEGORY['AI News'];
+  const headline = cleanHeadline(data.headlines?.[0]?.title) || kicker;
+  return (
+    <article style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 14, overflow: 'hidden', boxShadow: '0 5px 20px rgba(60,40,20,0.07)' }}>
+      <div style={{ position: 'relative', aspectRatio: '16 / 6.5' }}>
+        <HeroCover cat={cat} seed={seed} />
+        <span style={{ position: 'absolute', top: 12, left: 14, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase', color: '#fff', background: 'rgba(20,12,8,0.34)', padding: '5px 11px', borderRadius: 999 }}>{kicker}</span>
       </div>
-      <p style={{ margin: 0, fontSize: 14, lineHeight: 1.62, color: '#413b34', whiteSpace: 'pre-wrap', flex: 1 }}>{data.summary}</p>
-      {data.headlines?.length > 0 && (
-        <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {data.headlines.slice(0, 3).map((h, i) => (
-            h.url
-              ? <a key={i} href={h.url} target="_blank" rel="noreferrer" title={h.title}
-                   style={{ fontSize: 11.5, fontWeight: 600, color: cat.accent, background: cat.tint, padding: '4px 10px', borderRadius: 999, textDecoration: 'none', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trim(h.title)} ↗</a>
-              : <span key={i} style={{ fontSize: 11.5, color: '#8a8076', background: '#f4efe9', padding: '4px 10px', borderRadius: 999 }}>{trim(h.title)}</span>
-          ))}
-        </div>
-      )}
-      {to && (
-        <p style={{ margin: '14px 0 0' }}>
-          <Link to={to} style={{ fontSize: 13, fontWeight: 700, color: cat.accent, textDecoration: 'none' }}>{toLabel}</Link>
+      <div style={{ padding: '18px 22px 22px' }}>
+        <div style={{ fontSize: 12, color: '#a89e92', marginBottom: 7 }}>{fmtWhen(data.generated_at)}</div>
+        <h3 style={{ margin: 0, fontSize: 23, lineHeight: 1.2, fontWeight: 800, color: '#211d18', letterSpacing: '-0.02em' }}>{headline}</h3>
+        <p style={{ margin: '11px 0 0', fontSize: 15, lineHeight: 1.62, color: '#443d35', whiteSpace: 'pre-wrap' }}>
+          {open ? data.summary : dek(data.summary, 2)}
         </p>
-      )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+          {!open && <button onClick={() => setOpen(true)} style={linkBtn(cat.accent, 14)}>Read the full brief →</button>}
+          {open && to && <Link to={to} style={linkBtn(cat.accent, 14)}>Open the tracker →</Link>}
+        </div>
+        {open && <Chips cat={cat} headlines={data.headlines} />}
+      </div>
+    </article>
+  );
+}
+
+// A shorter read in the sidebar column — icon + category, headline, one-line dek that
+// expands to the full brief.
+function SecondaryStory({ kicker, data, to, divider }) {
+  const [open, setOpen] = useState(false);
+  const cat = CATEGORY[kicker] || CATEGORY['AI News'];
+  const headline = cleanHeadline(data.headlines?.[0]?.title) || kicker;
+  return (
+    <article style={{ padding: '16px 18px', borderTop: divider ? '1px solid #f1eae1' : 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 8, background: cat.tint, color: cat.accent, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 4 }}>{ICON[cat.key]}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: cat.accent }}>{kicker}</span>
+        <span style={{ fontSize: 11, color: '#b7ada1', marginLeft: 'auto' }}>{fmtWhen(data.generated_at)}</span>
+      </div>
+      <h4 style={{ margin: 0, fontSize: 16, lineHeight: 1.3, fontWeight: 700, color: '#2a241f' }}>{headline}</h4>
+      <p style={{ margin: '6px 0 0', fontSize: 13.5, lineHeight: 1.55, color: '#5c554d', whiteSpace: 'pre-wrap' }}>
+        {open ? data.summary : dek(data.summary, 1)}
+      </p>
+      <div style={{ marginTop: 9, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {!open && <button onClick={() => setOpen(true)} style={linkBtn(cat.accent, 12.5)}>Read →</button>}
+        {open && to && <Link to={to} style={linkBtn(cat.accent, 12.5)}>Open the tracker →</Link>}
+      </div>
+      {open && <Chips cat={cat} headlines={data.headlines} small />}
+    </article>
+  );
+}
+
+// The daily "photo": a generated editorial cover — a category-tinted gradient with a
+// faint node-network motif, its composition seeded by the day so it refreshes daily.
+function HeroCover({ cat, seed }) {
+  const r = (m, a, b) => a + Math.abs(Math.sin((seed + 1) * m)) * (b - a);
+  const id = `hc-${cat.key}-${seed % 997}`;
+  const pts = Array.from({ length: 6 }, (_, i) => ({ x: r(i * 1.7 + 1.1, 6, 94) * 8, y: r(i * 2.3 + 0.6, 10, 90) * 3.2 }));
+  return (
+    <svg viewBox="0 0 800 320" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" style={{ display: 'block' }} aria-hidden="true">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={cat.accent} /><stop offset="0.6" stopColor={cat.mid} /><stop offset="1" stopColor={cat.deep} />
+        </linearGradient>
+      </defs>
+      <rect width="800" height="320" fill={`url(#${id})`} />
+      <circle cx={r(1.3, 12, 55) * 8} cy={r(2.1, 8, 42) * 3.2} r={r(3.1, 150, 230)} fill="#fff" opacity="0.10" />
+      <circle cx={r(1.9, 55, 92) * 8} cy={r(2.7, 45, 82) * 3.2} r={r(3.7, 90, 150)} fill="#000" opacity="0.06" />
+      <g stroke="#fff" strokeWidth="1" opacity="0.30">
+        {pts.map((a, i) => (i < pts.length - 1 ? <line key={i} x1={a.x} y1={a.y} x2={pts[i + 1].x} y2={pts[i + 1].y} /> : null))}
+      </g>
+      <g fill="#fff" opacity="0.65">{pts.map((a, i) => <circle key={i} cx={a.x} cy={a.y} r="3.5" />)}</g>
+    </svg>
+  );
+}
+
+function Chips({ cat, headlines, small }) {
+  if (!headlines?.length) return null;
+  return (
+    <div style={{ marginTop: 13, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {headlines.slice(0, small ? 2 : 3).map((h, i) => (
+        h.url
+          ? <a key={i} href={h.url} target="_blank" rel="noreferrer" title={h.title}
+               style={{ fontSize: 11, fontWeight: 600, color: cat.accent, background: cat.tint, padding: '3px 10px', borderRadius: 999, textDecoration: 'none', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trim(cleanHeadline(h.title))} ↗</a>
+          : <span key={i} style={{ fontSize: 11, color: '#8a8076', background: '#f4efe9', padding: '3px 10px', borderRadius: 999 }}>{trim(h.title)}</span>
+      ))}
     </div>
   );
 }
 
-function trim(s) { s = s || ''; return s.length > 46 ? s.slice(0, 44).trimEnd() + '…' : s; }
+function linkBtn(color, size = 13.5) {
+  return { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: size, fontWeight: 700, color, textDecoration: 'none' };
+}
+function cleanHeadline(t) { return (t || '').split(' | ')[0].split(' – ')[0].trim(); }
+function dek(s, n) { const parts = (s || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).filter(Boolean); return parts.slice(0, n).join(' '); }
+function fmtWhen(iso) { return iso ? new Date(iso).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : ''; }
+function trim(s) { s = s || ''; return s.length > 44 ? s.slice(0, 42).trimEnd() + '…' : s; }
