@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
 import EvidencePanel from './EvidencePanel.jsx';
+import { findPillar, STATUS_LABEL } from './pillars.js';
 
 export default function BusinessGovernance() {
   const [saved, setSaved] = useState(undefined); // undefined=loading, null=none, obj=saved
@@ -68,13 +69,12 @@ export default function BusinessGovernance() {
         the AI systems you've logged, their risk tiers, the controls you've adopted and your accountable
         owner. Grounded in current law &amp; frameworks, and cited.
       </p>
-      <p style={{ marginBottom: 20 }}>
-        <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
-        <Link to="/dashboard/security">AI System Register</Link> &nbsp;·&nbsp;
-        <Link to="/dashboard/governance/controls">Controls library</Link> &nbsp;·&nbsp;
-        <Link to="/dashboard/governance/review">Roles &amp; review</Link> &nbsp;·&nbsp;
-        <Link to="/dashboard/governance/legal">The rules that apply to you</Link>
-      </p>
+      <p style={{ marginBottom: 18 }}><Link to="/dashboard">← Back to dashboard</Link></p>
+
+      {/* The governance toolkit — the tools that used to sit on the pillar page,
+          now reached as panels from here. They build the data the policy is
+          generated from. */}
+      <GovernanceToolkit />
 
       {err && <div style={{ background: '#FEF2F2', color: '#B91C1C', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{err}</div>}
 
@@ -200,6 +200,41 @@ export default function BusinessGovernance() {
         </section>
       )}
     </div>
+  );
+}
+
+// The governance toolkit panels — sourced from the governance pillar's dashPanels
+// (single source of truth in pillars.js), each opening its dashboard tool.
+const STATUS_STYLE = {
+  live: { bg: '#dcfce7', fg: '#166534' },
+  partial: { bg: '#fef3c7', fg: '#92400e' },
+  building: { bg: '#e2e8f0', fg: '#475569' },
+};
+
+function GovernanceToolkit() {
+  const panels = findPillar('governance')?.dashPanels || [];
+  if (!panels.length) return null;
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <div className="hub-card-kicker" style={{ marginBottom: 10 }}>Your governance toolkit</div>
+      <div className="hub-grid">
+        {panels.map((f) => {
+          const s = STATUS_STYLE[f.status] || STATUS_STYLE.building;
+          return (
+            <Link key={f.name} to={f.dash} className="hub-card" style={{ textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                <h3 style={{ fontSize: 15.5, margin: 0 }}>{f.name}</h3>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, padding: '2px 8px', borderRadius: 999, background: s.bg, color: s.fg, whiteSpace: 'nowrap' }}>
+                  {STATUS_LABEL[f.status]}
+                </span>
+              </div>
+              <p style={{ fontSize: 13, color: '#4a443d', margin: 0 }}>{f.what}</p>
+              <p style={{ margin: '8px 0 0', color: '#c75b39', fontWeight: 600, fontSize: 13 }}>Open →</p>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
