@@ -9,6 +9,10 @@ import pool from '../db/pool.js';
 import { resolveNewsroomId, OFFICE_NEWSROOM_ID } from '../lib/tenancy.js';
 import { ensureKnowhowTenantForNewsroom, ensureKnowhowPerson, knowhowTenantIdForNewsroom, knowhowPersonId } from '../knowhow/identity.js';
 import { askCompanyCoach } from '../services/company-coach.js';
+import { upload } from '../middleware/upload.js';
+import { scrapeArticle } from '../services/web-scraper.js';
+import { extractText } from '../services/document-processor.js';
+import { encryptFor, decryptFor } from '../services/crypto.js';
 
 const router = Router();
 
@@ -89,6 +93,94 @@ router.post('/coach', async (req, res) => {
     const result = await askCompanyCoach({ newsroomId, question: question.trim() });
     res.json(result);
   } catch (err) { console.error('[beaiready-knowhow/coach]', err); res.status(500).json({ message: err.message || 'Coach failed' }); }
+});
+
+// ── Your knowledge sources — the business's OWN documents / website / notes that
+// ground its company AI. Business-self-serve (member-facing), scoped to the caller's
+// own newsroom. These land in beaiready_company_sources — the same substrate the Team
+// AI assistant and the coach already read — so uploads feed the AI immediately.
+// Mirrors the admin /training/company-knowledge/* routes, minus the admin gate, and
+// takes the newsroom from the token (never a body param).
+router.get('/sources', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.json([]);
+    const { rows } = await pool.query(
+      `SELECT id, kind, title, url, file_id, extracted_text, created_at
+         FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]);
+    res.json(rows.map((r) => {
+      const text = decryptFor(newsroomId, r.extracted_text) || '';
+      return { id: r.id, kind: r.kind, title: r.title, url: r.url, file_id: r.file_id, created_at: r.created_at, snippet: text.slice(0, 220), has_text: text.length > 0 };
+    }));
+  } catch (err) { console.error('[beaiready-knowhow/sources:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Upload one or more files → extract text → store as company knowledge.
+router.post('/sources/upload', upload.array('files'), async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ message: 'Choose a file to add first.' });
+    const added = [];
+    for (const f of files) {
+      const { rows: [doc] } = await pool.query(
+        `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, uploaded_by)
+         VALUES ($1,$2,$3,$4,$5,'company_knowledge',$6,$7) RETURNING id`,
+        [f.filename, f.originalname, f.mimetype, f.size, f.path, newsroomId, req.user.id]);
+      let text = '';
+      try { text = await extractText(f.path, f.mimetype); } catch (e) { console.error('[knowhow sources extract]', e.message); }
+      const { rows: [src] } = await pool.query(
+        `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by)
+         VALUES ($1,'doc',$2,$3,$4,$5) RETURNING id, kind, title, file_id, created_at`,
+        [newsroomId, f.originalname, doc.id, encryptFor(newsroomId, (text || '').slice(0, 20000)), req.user.id]);
+      added.push({ ...src, has_text: (text || '').length > 0 });
+    }
+    res.status(201).json({ added });
+  } catch (err) { console.error('[beaiready-knowhow/sources:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
+});
+
+// Add a public web page → scrape → store as company knowledge.
+router.post('/sources/website', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const { url } = req.body || {};
+    if (!url || !url.trim()) return res.status(400).json({ message: 'A URL is required.' });
+    const scraped = await scrapeArticle(url.trim());
+    if (!scraped.success || !scraped.text) return res.status(400).json({ message: `Couldn't read that page${scraped.error ? `: ${scraped.error}` : ''}` });
+    const { rows: [src] } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
+       VALUES ($1,'website',$2,$3,$4,$5) RETURNING id, kind, title, url, created_at`,
+      [newsroomId, scraped.title || url.trim(), url.trim(), encryptFor(newsroomId, scraped.text), req.user.id]);
+    res.status(201).json(src);
+  } catch (err) { console.error('[beaiready-knowhow/sources:website]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Add a typed note → store as company knowledge.
+router.post('/sources/note', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const { title, text } = req.body || {};
+    if (!text || !text.trim()) return res.status(400).json({ message: 'Some text is required.' });
+    const { rows: [src] } = await pool.query(
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
+       VALUES ($1,'note',$2,$3,$4) RETURNING id, kind, title, created_at`,
+      [newsroomId, (title || 'Note').trim(), encryptFor(newsroomId, text.trim()), req.user.id]);
+    res.status(201).json(src);
+  } catch (err) { console.error('[beaiready-knowhow/sources:note]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Remove a source (newsroom-scoped).
+router.delete('/sources/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    const { rowCount } = await pool.query(
+      'DELETE FROM beaiready_company_sources WHERE id = $1 AND newsroom_id = $2', [req.params.id, newsroomId]);
+    if (!rowCount) return res.status(404).json({ message: 'Not found' });
+    res.json({ deleted: true });
+  } catch (err) { console.error('[beaiready-knowhow/sources:del]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

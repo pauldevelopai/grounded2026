@@ -1,21 +1,241 @@
-// BusinessKnowHow — /dashboard/knowhow. A team member's OWN Tier-1 KnowHow: the
-// knowledge that has accrued from their use (answers they found useful) plus workflows
-// they author as ordered steps. Private to them — nothing here reaches the company's AI
-// unless their Be AI Ready consultant promotes it (Gate 1). Scoped server-side to the
-// caller's own person within their tenant.
-import { useEffect, useState } from 'react';
+// BusinessKnowHow — /dashboard/knowhow. KnowHow is one tool: your team asks its AI
+// (grounded in your own knowledge), you add your documents/website/notes, and you
+// capture the procedures in people's heads as workflows. Everything a member does
+// here is scoped server-side to their own business. Three tabs:
+//   • Ask          — the pooled company AI assistant (/beaiready/workspace/*)
+//   • Your knowledge — documents / website / notes that ground the AI (/beaiready/knowhow/sources*)
+//   • My know-how   — my workflows + the knowledge accrued from my use (/beaiready/knowhow/*)
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { apiFetch } from '../../hooks/useApi.js';
+import { apiFetch, getActiveNewsroomId } from '../../hooks/useApi.js';
+
+const TABS = [
+  { key: 'ask', label: 'Ask' },
+  { key: 'knowledge', label: 'Your knowledge' },
+  { key: 'workflows', label: 'My know-how' },
+];
+
+const SOURCE_LABEL = { document: 'your documents', knowledge: 'company knowledge', pattern: 'sector pattern', team_history: 'earlier team Q&A' };
+const KIND_LABEL = { doc: 'Document', website: 'Website', note: 'Note' };
 
 export default function BusinessKnowHow() {
-  const [data, setData] = useState(null);
+  const [tab, setTab] = useState('ask');
   const [err, setErr] = useState('');
+
+  return (
+    <div className="hub hub-beaiready">
+      <div className="hub-eyebrow">Be AI Ready · Knowledge</div>
+      <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>KnowHow</h1>
+      <p style={{ color: '#6b6359', maxWidth: '70ch', marginBottom: 16 }}>
+        Your team's AI, grounded in your <b>own</b> knowledge. Ask anything and every answer is kept so the
+        business builds on it; add your documents, website and notes so the AI knows how you really work; and
+        capture the know-how in people's heads as workflows. Nothing leaves your company.
+      </p>
+
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #eee5da', marginBottom: 18 }}>
+        {TABS.map((t) => (
+          <button key={t.key} onClick={() => { setErr(''); setTab(t.key); }}
+            style={{ ...tabBtn, ...(tab === t.key ? tabActive : {}) }}>{t.label}</button>
+        ))}
+      </div>
+
+      {err && <div style={banner}>{err}</div>}
+
+      {tab === 'ask' && <AskPanel setErr={setErr} />}
+      {tab === 'knowledge' && <KnowledgePanel setErr={setErr} />}
+      {tab === 'workflows' && <WorkflowsPanel setErr={setErr} />}
+    </div>
+  );
+}
+
+// ── Ask — the pooled company AI assistant ────────────────────────────────────────
+function AskPanel({ setErr }) {
+  const [question, setQuestion] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [answer, setAnswer] = useState(null);
+  const [list, setList] = useState(null);
+  const [q, setQ] = useState('');
+
+  const load = useCallback(() => {
+    apiFetch(`/beaiready/workspace/interactions${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`)
+      .then(setList).catch((e) => setErr(e.message));
+  }, [q, setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const ask = async (e) => {
+    e.preventDefault();
+    if (!question.trim()) return;
+    setAsking(true); setErr(''); setAnswer(null);
+    try {
+      const r = await apiFetch('/beaiready/workspace/ask', { method: 'POST', body: JSON.stringify({ question: question.trim() }) });
+      setAnswer(r); setQuestion(''); load();
+    } catch (e) { setErr(e.message); }
+    setAsking(false);
+  };
+  const act = async (fn) => { setErr(''); try { await fn(); load(); } catch (e) { setErr(e.message); } };
+  const pin = (id) => act(() => apiFetch(`/beaiready/workspace/interactions/${id}/pin`, { method: 'POST' }));
+  const del = (id) => act(() => apiFetch(`/beaiready/workspace/interactions/${id}`, { method: 'DELETE' }));
+
+  return (
+    <>
+      <form onSubmit={ask} style={{ ...card, display: 'grid', gap: 10 }}>
+        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask anything about how your business works, your tools, your policies…"
+          style={{ ...input, minHeight: 70, fontSize: 15 }} />
+        <div><button type="submit" disabled={asking || !question.trim()} style={btn}>{asking ? 'Thinking…' : 'Ask the company AI'}</button></div>
+      </form>
+
+      {answer && (
+        <div style={{ ...card, borderColor: '#eaddd3', background: '#fbf7f4', marginTop: 12 }}>
+          <div style={kicker}>Answer</div>
+          <div style={{ whiteSpace: 'pre-wrap', fontSize: 14.5, lineHeight: 1.55, color: '#2a2520' }}>{answer.answer}</div>
+          <SourceChips sources={answer.sources} />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '28px 0 10px', gap: 10, flexWrap: 'wrap' }}>
+        <div className="hub-section-label" style={{ margin: 0 }}>The team's shared AI history</div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the history…" style={{ ...input, maxWidth: 260 }} />
+      </div>
+
+      {list == null ? <p style={muted}>Loading…</p> : list.length === 0 ? (
+        <p style={muted}>No questions yet — the first answers from your team will collect here.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {list.map((it) => (
+            <div key={it.id} style={{ ...card, ...(it.is_pinned ? { borderColor: '#e6b8a6' } : {}) }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ fontWeight: 700, fontSize: 14.5 }}>{it.is_pinned && <span title="Pinned" style={{ color: '#c75b39' }}>★ </span>}{it.question}</div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => pin(it.id)} style={tag} title="Pin as useful — your consultant reviews pinned answers">{it.is_pinned ? 'Unpin' : 'Pin'}</button>
+                  {it.promoted && <span style={{ ...tag, background: '#dcfce7', color: '#166534', borderColor: '#bbf7d0' }}>✓ in knowledge</span>}
+                  <button onClick={() => del(it.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+                </div>
+              </div>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.5, color: '#5b5249', margin: '6px 0 0' }}>{it.answer}</div>
+              <SourceChips sources={it.sources} />
+              <div style={{ fontSize: 11.5, color: '#a89e92', marginTop: 6 }}>
+                {it.asked_by ? `Asked by ${it.asked_by}` : 'Asked'} · {new Date(it.created_at).toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Your knowledge — documents / website / notes that ground the AI ──────────────
+function KnowledgePanel({ setErr }) {
+  const [sources, setSources] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [url, setUrl] = useState('');
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteText, setNoteText] = useState('');
+
+  const load = useCallback(() => {
+    apiFetch('/beaiready/knowhow/sources').then(setSources).catch((e) => setErr(e.message));
+  }, [setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const onFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData();
+      files.forEach((f) => fd.append('files', f, f.name));
+      const headers = {};
+      const nid = getActiveNewsroomId();
+      if (nid) headers['X-Newsroom-Id'] = nid;
+      const res = await fetch('/api/beaiready/knowhow/sources/upload', { method: 'POST', body: fd, credentials: 'include', headers });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || 'Upload failed'); }
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const addWebsite = async () => {
+    if (!url.trim()) return;
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/sources/website', { method: 'POST', body: JSON.stringify({ url: url.trim() }) }); setUrl(''); load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const addNote = async () => {
+    if (!noteText.trim()) return;
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/sources/note', { method: 'POST', body: JSON.stringify({ title: noteTitle.trim(), text: noteText.trim() }) }); setNoteTitle(''); setNoteText(''); load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+
+  return (
+    <>
+      <p style={{ ...muted, maxWidth: '68ch', marginTop: 0 }}>
+        Add the documents, pages and notes that describe how your business works. The AI in <b>Ask</b> answers
+        only from what you add here — read in code, never guessed. Files are processed for text; the originals stay yours.
+      </p>
+
+      <div style={{ ...card, marginBottom: 12 }}>
+        <div style={kicker}>Add files</div>
+        <label style={{ ...btn, display: 'inline-block', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          {busy ? 'Working…' : 'Choose files…'}
+          <input type="file" multiple hidden disabled={busy}
+            onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
+        </label>
+        <span style={{ ...muted, marginLeft: 10 }}>PDF, Word, spreadsheets, CSV or text.</span>
+      </div>
+
+      <div style={{ ...card, marginBottom: 12, display: 'grid', gap: 8 }}>
+        <div style={kicker}>Add a web page</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://your-business.co.za/about" style={input} />
+          <button onClick={addWebsite} disabled={busy || !url.trim()} style={btn}>Add</button>
+        </div>
+      </div>
+
+      <div style={{ ...card, marginBottom: 22, display: 'grid', gap: 8 }}>
+        <div style={kicker}>Add a note</div>
+        <input value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} placeholder="Title (optional)" style={input} />
+        <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Type anything the AI should know about your business…" style={{ ...input, minHeight: 70 }} />
+        <div><button onClick={addNote} disabled={busy || !noteText.trim()} style={btn}>Save note</button></div>
+      </div>
+
+      <div className="hub-section-label">Your knowledge sources</div>
+      {sources == null ? <p style={muted}>Loading…</p> : sources.length === 0 ? (
+        <p style={muted}>Nothing added yet. Add a file, a web page or a note above and your AI starts using it.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {sources.map((s) => (
+            <div key={s.id} style={card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
+                <div>
+                  <span style={{ ...pill, ...originPill }}>{KIND_LABEL[s.kind] || s.kind}</span>{' '}
+                  <strong style={{ fontSize: 14 }}>{s.title}</strong>
+                  {!s.has_text && <span style={{ ...muted, marginLeft: 8, color: '#b45309' }}>· no readable text</span>}
+                </div>
+                <button onClick={() => del(s.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+              </div>
+              {s.snippet && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0', lineHeight: 1.5 }}>{s.snippet}{s.snippet.length >= 220 ? '…' : ''}</p>}
+              {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#c75b39' }}>{s.url}</a>}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── My know-how — my workflows + the knowledge accrued from my use ───────────────
+function WorkflowsPanel({ setErr }) {
+  const [data, setData] = useState(null);
   const [title, setTitle] = useState('');
   const [steps, setSteps] = useState([{ step: '', detail: '' }]);
   const [busy, setBusy] = useState(false);
 
-  const load = () => apiFetch('/beaiready/knowhow/mine').then(setData).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, []);
+  const load = useCallback(() => { apiFetch('/beaiready/knowhow/mine').then(setData).catch((e) => setErr(e.message)); }, [setErr]);
+  useEffect(() => { load(); }, [load]);
 
   const setStep = (i, k, v) => setSteps((s) => s.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
   const addStep = () => setSteps((s) => [...s, { step: '', detail: '' }]);
@@ -35,23 +255,16 @@ export default function BusinessKnowHow() {
   const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/workflows/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
 
   return (
-    <div className="hub hub-beaiready">
-      <div className="hub-eyebrow">Be AI Ready · Knowledge</div>
-      <h1 style={{ fontSize: 26, fontWeight: 800, margin: '4px 0 6px' }}>My AI knowledge &amp; workflows</h1>
-      <p style={{ color: '#6b6359', maxWidth: '66ch', marginBottom: 14 }}>
-        Your own knowledge base. Answers you mark useful in the team workspace gather here, and you can write up
-        the procedures you know as step‑by‑step workflows. This is <b>private to you</b> — your Be AI Ready
-        consultant decides what (if anything) becomes shared company knowledge.
+    <>
+      <p style={{ ...muted, maxWidth: '68ch', marginTop: 0 }}>
+        Write up the procedures you know as step-by-step workflows, and see the knowledge that has gathered from
+        answers you found useful. This is <b>private to you</b> until your Be AI Ready consultant promotes it to
+        shared company knowledge.
       </p>
-      <p style={{ marginBottom: 16 }}><Link to="/dashboard">← Back to dashboard</Link> · <Link to="/dashboard/coach">New‑staff coach →</Link></p>
 
-      {err && <div style={banner}>{err}</div>}
-
-      {/* ── Author a workflow ── */}
       <div style={{ ...card, marginBottom: 22 }}>
         <div style={kicker}>Add a workflow</div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. How we qualify a new tender"
-          style={input} />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. How we qualify a new tender" style={input} />
         <div style={{ display: 'grid', gap: 8, margin: '10px 0' }}>
           {steps.map((s, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
@@ -70,10 +283,9 @@ export default function BusinessKnowHow() {
         </div>
       </div>
 
-      {/* ── My workflows ── */}
       <div className="hub-section-label">My workflows</div>
       {data == null ? <p style={muted}>Loading…</p> : data.workflows.length === 0 ? (
-        <p style={muted}>No workflows yet — add one above. <span style={{ color: '#c75b39' }}>—</span></p>
+        <p style={muted}>No workflows yet — add one above.</p>
       ) : (
         <div style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
           {data.workflows.map((w) => (
@@ -92,10 +304,9 @@ export default function BusinessKnowHow() {
         </div>
       )}
 
-      {/* ── Knowledge that has accrued from my use ── */}
       <div className="hub-section-label">From my use</div>
       {data == null ? <p style={muted}>Loading…</p> : data.knowledge.length === 0 ? (
-        <p style={muted}>Nothing yet. Pin an answer you find useful in the <Link to="/dashboard/workspace">team workspace</Link> and it gathers here. <span style={{ color: '#c75b39' }}>—</span></p>
+        <p style={muted}>Nothing yet. Pin an answer you find useful in <b>Ask</b> and it gathers here.</p>
       ) : (
         <div style={{ display: 'grid', gap: 8 }}>
           {data.knowledge.map((k) => (
@@ -106,16 +317,32 @@ export default function BusinessKnowHow() {
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+function SourceChips({ sources }) {
+  const list = Array.isArray(sources) ? sources : [];
+  if (!list.length) return null;
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+      <span style={{ fontSize: 11, color: '#8a8076' }}>Grounded in:</span>
+      {list.slice(0, 8).map((s, i) => (
+        <span key={i} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: '#f1f0ec', color: '#6b6359' }}
+          title={s.title}>{SOURCE_LABEL[s.type] || s.type}{s.title ? ` · ${s.title.slice(0, 28)}` : ''}</span>
+      ))}
     </div>
   );
 }
 
 const card = { background: '#fff', border: '1px solid #eee5da', borderRadius: 12, padding: 14 };
 const banner = { background: '#FEF2F2', color: '#B91C1C', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 };
-const input = { width: '100%', padding: '8px 10px', border: '1px solid #e4dcd2', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' };
+const input = { width: '100%', padding: '8px 10px', border: '1px solid #e4dcd2', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' };
 const btn = { padding: '8px 16px', background: '#c75b39', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' };
 const tag = { fontSize: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid #e4dcd2', background: '#faf8f5', color: '#6b6359', cursor: 'pointer' };
-const pill = { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999 };
+const pill = { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999, display: 'inline-block' };
 const originPill = { background: '#eef2ff', color: '#3730a3' };
 const kicker = { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#c75b39', margin: '0 0 8px' };
 const muted = { color: '#8a8076', fontSize: 13.5 };
+const tabBtn = { padding: '9px 16px', background: 'none', border: 'none', borderBottom: '2px solid transparent', fontSize: 14, fontWeight: 600, color: '#8a8076', cursor: 'pointer', marginBottom: -1 };
+const tabActive = { color: '#1c1b1a', borderBottomColor: '#c75b39' };

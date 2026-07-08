@@ -43,9 +43,6 @@ export const PILLARS = [
     features: [
       { name: 'How AI sees your business', status: 'partial', dash: '/dashboard/visibility', slug: 'visibility-scan',
         what: 'Run a scan of how AI describes your business — whether you’re named, how, and what’s wrong or missing. v1 queries Claude; ChatGPT & Gemini added once keys are configured.' },
-      { name: 'Your data, structured for AI', status: 'live', slug: 'visibility-data',
-        node: 'aiready', runUrl: '/nodes/aiready/app/',
-        what: 'Point us at your documents — a folder from your computer, a Google Drive, or your website — and we clean and structure them so AI systems and agents read, trust and cite your business correctly. Runs in your browser here, or on your own machine.' },
     ],
   },
   {
@@ -56,11 +53,19 @@ export const PILLARS = [
     intro:
       'The ethical, legal and regulatory side of running an AI-first business — tracked daily and turned ' +
       'into a policy your business actually owns.',
+    // Only two panels on the pillar page (Paul, 2026-07-08): the live tracker and
+    // the policy builder. Everything else is surfaced as panels INSIDE the policy
+    // dashboard (dashPanels below) rather than on the pillar page.
     features: [
       { name: 'Legal, Ethics & Regulation tracker', status: 'live', to: '/tracker',
         what: 'A daily-updated feed of AI lawsuits and regulations worldwide — in one place, newest first — the live infrastructure that keeps your governance current.' },
       { name: 'Build your AI policy', status: 'live', dash: '/dashboard/governance', slug: 'ai-policy',
         what: 'A bespoke AI-use policy — pick the sections you need (data & POPIA, acceptable use, tool rules, EU AI Act alignment and more), generated from your own governance data, then edited and owned by you. Lives in your dashboard.' },
+    ],
+    // The governance toolkit — reached from panels on /dashboard/governance (the
+    // "Build your AI policy" page), not the pillar page. Data Security's two
+    // features are folded in here by the re-home step below.
+    dashPanels: [
       { name: 'The rules that apply to you', status: 'live', dash: '/dashboard/governance/legal', slug: 'legal-framework',
         what: 'A plain-language read of the legal frameworks you operate under — POPIA and the EU AI Act — mapped onto the AI systems you\'ve logged, so you can see which rules bite hardest.' },
       { name: 'Controls Library', status: 'live', dash: '/dashboard/governance/controls', slug: 'controls-library',
@@ -94,12 +99,10 @@ export const PILLARS = [
     label: 'Tools',
     tagline: 'The AI tools your team actually uses.',
     intro:
-      'The practical AI tools for getting work done — and one shared place where the team\'s AI work is pooled ' +
-      'and kept, so every useful question and answer builds the business up instead of vanishing. Plus a ' +
-      'continuously scored toolbox and the Nodes your business runs and owns.',
+      'The practical AI tools for getting work done — a continuously scored toolbox of the best AI tools for ' +
+      'each job, and the Nodes your business runs and owns. (Your team’s shared, knowledge-grounded AI now ' +
+      'lives in KnowHow, under Knowledge.)',
     features: [
-      { name: 'Team AI assistant', status: 'live', dash: '/dashboard/workspace', slug: 'team-workspace',
-        what: 'Where your whole team asks AI — every answer grounded in your own knowledge, and every question and answer pooled in one shared place so the business builds on it. The more it\'s used, the smarter it gets, and good answers can be saved into your knowledge.' },
       { name: 'AI Toolbox', status: 'live', to: '/toolbox',
         what: 'A continuously updated guide to the best AI tools for each function — what to use, what to avoid, and why — scored for cost, difficulty and data safety.' },
       { name: 'Prompt library', status: 'live', dash: '/dashboard/prompts', slug: 'prompt-library',
@@ -123,8 +126,8 @@ export const PILLARS = [
         what: 'A hands-on one-day on-site training + three mentoring sessions (R35k, up to 30 people) — the strongest place to start. See the full offer and book a date.' },
       { name: 'Course materials — past & upcoming', status: 'partial', to: '/training',
         what: 'Every training and mentoring session you’ve had, and what’s scheduled — with the materials, accessible to your staff at any time.' },
-      { name: 'KnowHow', status: 'building', slug: 'knowhow',
-        what: 'Capture a manager’s hard-won expertise and turn it into an AI guide that coaches junior staff through their real work.' },
+      { name: 'KnowHow', status: 'live', dash: '/dashboard/knowhow', slug: 'knowhow',
+        what: 'Your team’s AI, grounded in your own knowledge — ask anything, add your documents, website and notes, and capture the know-how in people’s heads. Every answer is kept, so the business builds on it.' },
     ],
   },
   {
@@ -204,20 +207,20 @@ export const PILLARS = [
   const governance = byKey('governance');
   const measurement = byKey('measurement');
 
-  // Knowledge = capture (KnowHow) + surface outward (the two Visibility features).
+  // Knowledge = KnowHow (the one tool: ask + your documents + capture) + the AI-visibility scan.
   knowledge.features = [
     pull('training', 'knowhow'),
     pull('visibility', 'visibility-scan'),
-    pull('visibility', 'visibility-data'),
   ].filter(Boolean);
 
   // Staff AI Needs: Strategy → Training.
   const staffNeeds = pull('strategy', 'staff-needs');
   if (staffNeeds) training.features = [...training.features, staffNeeds];
 
-  // Governance absorbs Data Security.
-  governance.features = [
-    ...governance.features,
+  // Governance absorbs Data Security — surfaced as dashboard panels (dashPanels),
+  // not on the pillar page.
+  governance.dashPanels = [
+    ...(governance.dashPanels || []),
     pull('data-security', 'ai-tools-log'),
     pull('data-security', 'acceptable-use'),
   ].filter(Boolean);
@@ -238,10 +241,12 @@ export function findPillar(key) {
   return PILLARS.find((p) => p.key === key) || null;
 }
 
-// Look up a feature (and its parent pillar) by its gateway slug.
+// Look up a feature (and its parent pillar) by its gateway slug. Searches both the
+// pillar-page features and the dashboard-only panels (dashPanels) so a moved
+// feature's /feature/:slug gateway still resolves.
 export function findFeature(slug) {
   for (const pillar of PILLARS) {
-    const feature = pillar.features.find((f) => f.slug === slug);
+    const feature = [...(pillar.features || []), ...(pillar.dashPanels || [])].find((f) => f.slug === slug);
     if (feature) return { pillar, feature };
   }
   return null;
