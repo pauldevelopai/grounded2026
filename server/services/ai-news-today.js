@@ -9,6 +9,7 @@
 // state: if there are no recent items, it returns null rather than inventing news.
 import pool from '../db/pool.js';
 import { callClaude, callClaudeWithWebSearch } from './claude.js';
+import { sourceHeroImage } from './briefing-image.js';
 import { getBriefingSettings } from './briefing-settings.js';
 
 const KEY = 'ai_news_today';
@@ -150,6 +151,7 @@ export async function generateAINewsToday() {
     source,
     generated_at: new Date().toISOString(),
   };
+  try { value.hero_image = await sourceHeroImage('news', headlines); } catch (e) { console.warn('[ai-news-today:image]', e.message); }
   await pool.query(
     `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, NOW())
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,

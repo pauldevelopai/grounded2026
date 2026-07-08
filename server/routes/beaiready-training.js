@@ -232,28 +232,36 @@ router.get('/feedback-responses', async (req, res) => {
 // response: per form — the response count, the average of the detected 0–10 rating
 // column, and the top values of the "list-like" (multi-select) columns. Individual
 // rows never leave the server, so this is safe for the tenant's own members to read.
-const INSIGHT_SKIP = /name|email|timestamp|^when$|^age$|address|phone|location|elaborate|describe|feelings|change/i;
+// Identity/PII columns that are never a stat. Kept minimal for rating detection —
+// which already requires all-integer values, so free-text prose is excluded anyway.
+const SKIP_ID = /name|email|timestamp|^when$|^age$|address|phone|location/i;
+// Free-text prose columns: they can contain commas (so they'd pass the multi-select
+// test) but tallying sentence fragments is noise — exclude from BREAKDOWNS only.
+const SKIP_PROSE = /elaborate|describe|feelings|change|negative or positive|briefly|what type|important/i;
 function aggregateResponses(rows) {
   const responses = rows.map((r) => r.response || {});
   const n = responses.length;
   const cols = [];
   for (const r of responses) for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k);
   const vals = (k) => responses.map((r) => (r[k] ?? '').toString().trim()).filter(Boolean);
-  // Rating column: (almost) every non-empty value is an int 0–10.
-  let rating = null;
-  for (const k of cols) {
-    if (INSIGHT_SKIP.test(k)) continue;
+  // Rating columns: (almost) every non-empty value is an int 0–10. A form can have
+  // several (familiarity, sentiment…), so prefer a familiarity/rating-worded header,
+  // else fall back to the first such column — and always show the label so it's honest.
+  const ratingCols = cols.filter((k) => {
+    if (SKIP_ID.test(k)) return false;
     const vs = vals(k);
-    if (vs.length >= Math.max(3, n * 0.5) && vs.every((v) => /^\d{1,2}$/.test(v) && +v <= 10)) {
-      const avg = vs.reduce((s, v) => s + +v, 0) / vs.length;
-      rating = { label: k, avg: Math.round(avg * 10) / 10 };
-      break;
-    }
+    return vs.length >= Math.max(3, n * 0.5) && vs.every((v) => /^\d{1,2}$/.test(v) && +v <= 10);
+  });
+  const ratingKey = ratingCols.find((k) => /familiar|rating|rate|confiden|comfort|score/i.test(k)) || ratingCols[0] || null;
+  let rating = null;
+  if (ratingKey) {
+    const vs = vals(ratingKey);
+    rating = { label: ratingKey, avg: Math.round((vs.reduce((s, v) => s + +v, 0) / vs.length) * 10) / 10 };
   }
   // List-like columns: a fair share of values contain a comma → multi-select. Tally tokens.
   const breakdowns = [];
   for (const k of cols) {
-    if (INSIGHT_SKIP.test(k) || (rating && k === rating.label)) continue;
+    if (SKIP_ID.test(k) || SKIP_PROSE.test(k) || (rating && k === rating.label)) continue;
     const vs = vals(k);
     if (vs.length < 3) continue;
     if (vs.filter((v) => v.includes(',')).length / vs.length < 0.3) continue;

@@ -106,7 +106,7 @@ export default function Login() {
           // Client businesses → back to where they were headed (the feature they
           // clicked), or their dashboard if they came in cold.
           if (user.role === 'admin') navigate('/admin');
-          else navigate(next || '/dashboard');
+          else navigate(next || '/');   // land on the main page (not the dashboard) on a cold sign-in
         } else if (next) {
           // safeNext already validated this is an in-app path. Use
           // window.location for /aikit/* (Express-served) so the page

@@ -9,6 +9,7 @@
 import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
 import { getBriefingSettings } from './briefing-settings.js';
+import { sourceHeroImage } from './briefing-image.js';
 
 const KEY = 'governance_today';
 
@@ -78,6 +79,7 @@ export async function generateGovernanceToday() {
     source: 'tracker',
     generated_at: new Date().toISOString(),
   };
+  try { value.hero_image = await sourceHeroImage('law', value.headlines); } catch (e) { console.warn('[governance-today:image]', e.message); }
   await pool.query(
     `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, NOW())
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,

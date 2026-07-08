@@ -7,6 +7,7 @@
 // money in US dollars.
 import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
+import { sourceHeroImage } from './briefing-image.js';
 
 const KEY = 'regulation_today';
 const ITEM_COUNT = 10;
@@ -75,6 +76,7 @@ export async function generateRegulationToday() {
     source: 'tracker',
     generated_at: new Date().toISOString(),
   };
+  try { value.hero_image = await sourceHeroImage('regulation', value.headlines); } catch (e) { console.warn('[regulation-today:image]', e.message); }
   await pool.query(
     `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, NOW())
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,

@@ -2,6 +2,7 @@
 // Mount BEFORE any auth middleware.
 import { Router } from 'express';
 import { readFile } from 'node:fs/promises';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import pool from '../db/pool.js';
@@ -11,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { getGovernanceToday, getGovernanceTodayHistory } from '../services/governance-today.js';
 import { getRegulationToday, getRegulationTodayHistory } from '../services/regulation-today.js';
 import { getAINewsToday, getAINewsTodayHistory } from '../services/ai-news-today.js';
+import { briefingImageDir, EXT_TYPE } from '../services/briefing-image.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
@@ -1180,6 +1182,19 @@ router.get('/regulation-today', async (req, res) => {
 router.get('/regulation-today/history', async (req, res) => {
   try { res.json(await getRegulationTodayHistory(60)); }
   catch (err) { console.error('[public/regulation-today/history]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// The self-hosted daily hero photo for a briefing (scraped from its top cited source).
+// Served same-origin so it always loads; ?v=<date> busts the cache when it refreshes.
+router.get('/briefing-image/:category', (req, res) => {
+  const cat = String(req.params.category || '').replace(/[^a-z]/g, '');
+  if (!cat) return res.status(404).end();
+  const dir = briefingImageDir();
+  for (const [ext, type] of Object.entries(EXT_TYPE)) {
+    const p = path.join(dir, `${cat}.${ext}`);
+    if (fs.existsSync(p)) { res.set('Cache-Control', 'public, max-age=3600'); res.type(type); return res.sendFile(p); }
+  }
+  return res.status(404).end();
 });
 
 // The "Today in AI" news briefing (cached; refreshed by the ai_news_today_digest

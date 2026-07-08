@@ -173,7 +173,7 @@ function LeadStory({ kicker, data, to, seed }) {
   return (
     <article style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 14, overflow: 'hidden', boxShadow: '0 5px 20px rgba(60,40,20,0.07)' }}>
       <div style={{ position: 'relative', aspectRatio: '16 / 6.5' }}>
-        <HeroCover cat={cat} seed={seed} />
+        <HeroCover cat={cat} image={data.hero_image} />
         <span style={{ position: 'absolute', top: 12, left: 14, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase', color: '#fff', background: 'rgba(20,12,8,0.34)', padding: '5px 11px', borderRadius: 999 }}>{kicker}</span>
       </div>
       <div style={{ padding: '18px 22px 22px' }}>
@@ -218,27 +218,24 @@ function SecondaryStory({ kicker, data, to, divider }) {
   );
 }
 
-// The daily "photo": a generated editorial cover — a category-tinted gradient with a
-// faint node-network motif, its composition seeded by the day so it refreshes daily.
-function HeroCover({ cat, seed }) {
-  const r = (m, a, b) => a + Math.abs(Math.sin((seed + 1) * m)) * (b - a);
-  const id = `hc-${cat.key}-${seed % 997}`;
-  const pts = Array.from({ length: 6 }, (_, i) => ({ x: r(i * 1.7 + 1.1, 6, 94) * 8, y: r(i * 2.3 + 0.6, 10, 90) * 3.2 }));
+// The daily "photo" for the lead story: a real photo scraped from the day's top cited
+// article and self-hosted (data.hero_image, same-origin so it always loads). The category
+// gradient sits behind it — shown instantly, and as a graceful fallback if there's no
+// image that day or it fails to load.
+function HeroCover({ cat, image }) {
   return (
-    <svg viewBox="0 0 800 320" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" style={{ display: 'block' }} aria-hidden="true">
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor={cat.accent} /><stop offset="0.6" stopColor={cat.mid} /><stop offset="1" stopColor={cat.deep} />
-        </linearGradient>
-      </defs>
-      <rect width="800" height="320" fill={`url(#${id})`} />
-      <circle cx={r(1.3, 12, 55) * 8} cy={r(2.1, 8, 42) * 3.2} r={r(3.1, 150, 230)} fill="#fff" opacity="0.10" />
-      <circle cx={r(1.9, 55, 92) * 8} cy={r(2.7, 45, 82) * 3.2} r={r(3.7, 90, 150)} fill="#000" opacity="0.06" />
-      <g stroke="#fff" strokeWidth="1" opacity="0.30">
-        {pts.map((a, i) => (i < pts.length - 1 ? <line key={i} x1={a.x} y1={a.y} x2={pts[i + 1].x} y2={pts[i + 1].y} /> : null))}
-      </g>
-      <g fill="#fff" opacity="0.65">{pts.map((a, i) => <circle key={i} cx={a.x} cy={a.y} r="3.5" />)}</g>
-    </svg>
+    <>
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${cat.accent}, ${cat.deep})` }} />
+      {image && (
+        <img
+          src={image} alt=""
+          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      )}
+      {/* Subtle top-darkening so the category tag stays legible over any photo. */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(15,10,6,0.34) 0%, rgba(15,10,6,0) 36%)' }} />
+    </>
   );
 }
 
