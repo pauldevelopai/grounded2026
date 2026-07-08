@@ -37,6 +37,15 @@ export default function BeAIReadyLayout() {
 
   const nextParam = encodeURIComponent(location.pathname + location.search);
 
+  // Who's signed in, shown in the header — the name (or the email's handle) + an
+  // initials avatar, so it's clear at a glance which account you're in.
+  const displayName = user ? (user.name?.trim() || (user.email ? user.email.split('@')[0] : 'Account')) : '';
+  const initials = user
+    ? (user.name?.trim()
+        ? user.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('')
+        : (user.email || '?')[0]).toUpperCase()
+    : '';
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--content-bg)', color: 'var(--text-primary)' }}>
       <header style={{
@@ -59,6 +68,17 @@ export default function BeAIReadyLayout() {
             <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginLeft: 22 }}>
               {user ? (
                 <>
+                  {/* Who's signed in — a small initials avatar + name, so the account is clear at a glance. */}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, marginRight: 4 }}>
+                    <span aria-hidden="true" style={{
+                      width: 30, height: 30, flex: '0 0 auto', borderRadius: '50%', background: TERRACOTTA, color: '#fff',
+                      fontSize: 12, fontWeight: 700, letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}>{initials}</span>
+                    <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.12 }}>
+                      <span style={{ fontSize: 9, color: '#9a9087', textTransform: 'uppercase', letterSpacing: '0.09em', fontWeight: 700 }}>Signed in</span>
+                      <span style={{ fontSize: 13.5, color: '#f2ede7', fontWeight: 600, maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
+                    </span>
+                  </span>
                   {/* Clients navigate via the pillar tabs — no separate "My dashboard"
                       (it just repeats the tabs). Only admins get a portal button. */}
                   {user.role === 'admin' && (
