@@ -38,15 +38,17 @@ function TrainingRecord() {
   const [insights, setInsights] = useState(null);
   const [teamAnalysis, setTeamAnalysis] = useState(undefined); // undefined = loading, null = no survey yet
   const [curriculum, setCurriculum] = useState(undefined);     // undefined = loading, null = not indexed yet
+  const [match, setMatch] = useState(undefined);               // undefined = loading, null = no survey yet
 
   useEffect(() => {
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
     apiFetch('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
     apiFetch('/beaiready/training/form-insights').then(setInsights).catch(() => setInsights([]));
-    // The team analysis + curriculum are AI-generated on first view (then cached) — can take a few seconds.
+    // The team analysis, curriculum + expectations match are AI-generated on first view (then cached).
     apiFetch('/beaiready/training/team-analysis').then(setTeamAnalysis).catch(() => setTeamAnalysis(null));
     apiFetch('/beaiready/training/curriculum').then(setCurriculum).catch(() => setCurriculum(null));
+    apiFetch('/beaiready/training/expectations-match').then(setMatch).catch(() => setMatch(null));
   }, []);
 
   // Every published material shows somewhere: under its agenda when that agenda is
@@ -147,18 +149,21 @@ function TrainingRecord() {
             ) : !curriculum.sessions?.length ? (
               <p style={{ margin: 0 }}>A summary of what each session covered will appear here once your materials are indexed.</p>
             ) : (
-              <div style={{ display: 'grid', gap: 16 }}>
-                {curriculum.sessions.map((s, i) => (
-                  <div key={`${s.title}:${i}`}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#3a342e' }}>{s.title}</div>
-                    {s.points?.length > 0 && (
-                      <ul style={{ margin: '5px 0 0', paddingLeft: 18, display: 'grid', gap: 3 }}>
-                        {s.points.map((p, j) => <li key={j} style={{ fontSize: 13.5, color: '#5b5249', lineHeight: 1.5 }}>{p}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <>
+                <p style={{ margin: '0 0 8px', fontSize: 12.5, color: '#8a8076' }}>{curriculum.sessions.length} sessions — click any to see the topics covered.</p>
+                <div style={{ display: 'grid', gap: 2 }}>
+                  {curriculum.sessions.map((s, i) => (
+                    <details key={`${s.title}:${i}`} style={{ borderBottom: '1px solid #efe7dd', padding: '4px 0' }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#3a342e' }}>{s.title}</summary>
+                      {s.points?.length > 0 && (
+                        <ul style={{ margin: '6px 0 4px', paddingLeft: 18, display: 'grid', gap: 3 }}>
+                          {s.points.map((p, j) => <li key={j} style={{ fontSize: 13.5, color: '#5b5249', lineHeight: 1.5 }}>{p}</li>)}
+                        </ul>
+                      )}
+                    </details>
+                  ))}
+                </div>
+              </>
             )}
           </section>
         </>
@@ -210,6 +215,21 @@ function TrainingRecord() {
         )}
       </section>
 
+      {/* Did the training deliver what the team wanted — expectations (intake) vs what
+          was taught (curriculum), with feedback layered in once it's connected. */}
+      {match !== null && (
+        <>
+          <div className="hub-section-label">Did the training match what your team wanted?</div>
+          <section className="hub-band" style={{ marginBottom: 24 }}>
+            {match === undefined ? (
+              <p style={{ margin: 0, color: '#8a8076' }}>Matching what your team wanted to what was taught…</p>
+            ) : (
+              <MatchView m={match} />
+            )}
+          </section>
+        </>
+      )}
+
       {/* Post-training feedback (its own Google form) — shown only once one is connected. */}
       {(insights || []).some((f) => f.form_type === 'feedback') && (
         <>
@@ -239,6 +259,56 @@ function TrainingRecord() {
         </>
       )}
     </>
+  );
+}
+
+// Expectations vs delivery: each thing the team wanted, whether the training covered
+// it (and, once feedback is connected, how they rated it), plus uncovered gaps.
+const MATCH_STATUS = {
+  delivered: ['#dcfce7', '#166534', 'Delivered'],
+  partial: ['#fef3c7', '#92400e', 'Partly'],
+  gap: ['#fde2dd', '#9a3412', 'Gap'],
+};
+function MatchView({ m }) {
+  if (!m.summary && !(m.matches || []).length) {
+    return <p style={{ margin: 0 }}>Once your team&apos;s survey and session materials are in, we&apos;ll match what they wanted against what the training covered.</p>;
+  }
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      {m.summary && (
+        <div style={{ background: '#fff', borderLeft: '3px solid #c75b39', borderRadius: 8, padding: '12px 16px', fontSize: 14.5, lineHeight: 1.6, color: '#3a342e' }}>
+          {m.summary}
+        </div>
+      )}
+      <div style={{ display: 'grid', gap: 6 }}>
+        {(m.matches || []).map((x, i) => {
+          const [bg, fg, label] = MATCH_STATUS[x.status] || MATCH_STATUS.partial;
+          return (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 10, alignItems: 'start', background: '#fff', border: '1px solid #eee5da', borderRadius: 8, padding: '9px 12px' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, background: bg, color: fg, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap', marginTop: 1 }}>{label}</span>
+              <div>
+                <div style={{ fontSize: 13.5, color: '#3a342e' }}><strong>{x.expectation}</strong>{x.wanted_by ? <span style={{ color: '#8a8076' }}> · {x.wanted_by} wanted this</span> : null}</div>
+                {x.covered_in && <div style={{ fontSize: 12.5, color: '#6b6359', marginTop: 2 }}>Covered in: {x.covered_in}</div>}
+                {x.feedback && <div style={{ fontSize: 12.5, color: '#6b6359', marginTop: 2, fontStyle: 'italic' }}>Feedback: {x.feedback}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {m.gaps?.length > 0 && (
+        <div>
+          <div style={docLabel}>Wanted, but not covered</div>
+          <ul style={{ margin: '5px 0 0', paddingLeft: 18, display: 'grid', gap: 3 }}>
+            {m.gaps.map((g, i) => <li key={i} style={{ fontSize: 13.5, color: '#5b5249' }}>{g}</li>)}
+          </ul>
+        </div>
+      )}
+      {!m.has_feedback && (
+        <div style={{ fontSize: 12.5, color: '#8a8076', borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
+          Connect a post-training feedback survey (Admin → Training → Training feedback) to add how your team rated each of these.
+        </div>
+      )}
+    </div>
   );
 }
 

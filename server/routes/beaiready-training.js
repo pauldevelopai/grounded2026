@@ -451,6 +451,90 @@ router.get('/curriculum', async (req, res) => {
   } catch (err) { console.error('[bair-train/curriculum]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── "Did the training match what the team wanted?" — expectations vs delivery ──────
+// Matches what the team said they wanted (pre-training intake) against what the
+// training actually covered (curriculum) and, WHEN a post-training feedback form is
+// connected, how they rated it. Cached under kind='match'; the fingerprint includes
+// the feedback count, so connecting/syncing feedback automatically regenerates it.
+const MATCH_VERSION = 'v1';
+const NEGATIVE_ANSWER = /^(none|nothing|not sure|n\/?a|no|nope|unsure|nothing yet|not really)\.?$/i;
+
+async function generateExpectationsMatch({ wants, automates, curriculum, feedback }) {
+  const hasFeedback = feedback && feedback.length > 0;
+  const parts = [
+    `WHAT THE TEAM SAID THEY WANTED TO LEARN (pre-training survey):\n${wants.length ? wants.map((w) => `- ${w}`).join('\n') : '(most left this blank or unsure)'}`,
+    `\nWHAT THEY WANTED TO AUTOMATE:\n${automates.length ? automates.map((w) => `- ${w}`).join('\n') : '(none stated)'}`,
+    `\nWHAT THE TRAINING ACTUALLY COVERED:\n${curriculum.length ? curriculum.map((s) => `- ${s.title}: ${(s.points || []).join('; ')}`).join('\n') : '(curriculum not indexed yet)'}`,
+  ];
+  if (hasFeedback) {
+    parts.push(`\nPOST-TRAINING FEEDBACK FROM ATTENDEES:\n${feedback.map((f, i) =>
+      `#${i + 1}: ${Object.entries(f).filter(([k]) => !/name|email|timestamp/i.test(k)).map(([k, v]) => `${k}: ${v}`).join(' | ')}`
+    ).join('\n').slice(0, 6000)}`);
+  }
+  const system =
+    'You analyse whether an AI training programme delivered what a business\'s staff wanted. You are given what the ' +
+    'team wanted to learn/automate (pre-training), what the training covered, ' +
+    (hasFeedback ? 'and their post-training feedback. ' : 'but NO post-training feedback yet. ') +
+    'Match each real expectation to what was covered — ground everything in the data, invent nothing. Output ONLY JSON ' +
+    '(no markdown): {"summary": string (2-3 plain sentences: how well the training matched what the team wanted' +
+    (hasFeedback ? ' and how they rated it' : '') + '), "matches": [{"expectation": string, "wanted_by": number, ' +
+    '"covered_in": string (the session that covered it, or ""), "status": "delivered"|"partial"|"gap"' +
+    (hasFeedback ? ', "feedback": string (what attendees said about it, or "")' : '') + '}], "gaps": [string] (things ' +
+    'they wanted that were not covered)}. 3-7 matches, ordered most-wanted first.';
+  const raw = await callClaude({ system, userContent: parts.join('\n') + '\n\nReturn the JSON now.', maxTokens: 1800, temperature: 0.2 });
+  const j = parseJsonObject(raw);
+  const okStatus = (s) => (['delivered', 'partial', 'gap'].includes(s) ? s : 'partial');
+  return {
+    summary: typeof j.summary === 'string' ? j.summary.slice(0, 700) : null,
+    matches: (Array.isArray(j.matches) ? j.matches : []).filter((x) => x && x.expectation).map((x) => ({
+      expectation: String(x.expectation).slice(0, 120),
+      wanted_by: Number(x.wanted_by) || null,
+      covered_in: x.covered_in ? String(x.covered_in).slice(0, 90) : '',
+      status: okStatus(x.status),
+      feedback: x.feedback ? String(x.feedback).slice(0, 220) : null,
+    })).slice(0, 10),
+    gaps: (Array.isArray(j.gaps) ? j.gaps : []).filter(Boolean).map((g) => String(g).slice(0, 140)).slice(0, 6),
+  };
+}
+
+router.get('/expectations-match', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: intake } = await pool.query(
+      `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake'`, [newsroomId]);
+    if (!intake.length) return res.json(null);
+    const objs = intake.map((r) => r.response || {});
+    const cols = []; for (const o of objs) for (const k of Object.keys(o)) if (!cols.includes(k)) cols.push(k);
+    const learnCol = cols.find((k) => /would like to learn|want to learn|heard about ai/i.test(k));
+    const autoCol = cols.find((k) => /automate/i.test(k));
+    const collect = (col) => col ? [...new Set(objs.map((o) => String(o[col] ?? '').trim())
+      .filter((v) => v && !NEGATIVE_ANSWER.test(v)))].slice(0, 40) : [];
+    const wants = collect(learnCol), automates = collect(autoCol);
+
+    const { rows: [cur] } = await pool.query(
+      `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'curriculum'`, [newsroomId]);
+    const curriculum = (cur && cur.analysis && Array.isArray(cur.analysis.sessions)) ? cur.analysis.sessions : [];
+    const { rows: fb } = await pool.query(
+      `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'feedback'`, [newsroomId]);
+    const feedback = fb.map((r) => r.response || {});
+
+    const fingerprint = `${MATCH_VERSION}:${intake.length}:${feedback.length}:${curriculum.length}`;
+    const { rows: [cached] } = await pool.query(
+      `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'match' AND fingerprint = $2`,
+      [newsroomId, fingerprint]);
+    let m = cached?.analysis;
+    if (!m) {
+      m = await generateExpectationsMatch({ wants, automates, curriculum, feedback }).catch((e) => { console.error('[match gen]', e.message); return {}; });
+      await pool.query(
+        `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+         VALUES ($1,'match',$2,$3::jsonb,NOW())
+         ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+        [newsroomId, fingerprint, JSON.stringify(m)]);
+    }
+    res.json({ has_feedback: feedback.length > 0, ...m });
+  } catch (err) { console.error('[bair-train/expectations-match]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Agendas (+ items) ───────────────────────────────────────────────────────────
 router.get('/agendas', async (req, res) => {
   try {
