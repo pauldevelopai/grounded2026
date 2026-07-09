@@ -37,14 +37,16 @@ function TrainingRecord() {
   const [myMaterials, setMyMaterials] = useState(null);
   const [insights, setInsights] = useState(null);
   const [teamAnalysis, setTeamAnalysis] = useState(undefined); // undefined = loading, null = no survey yet
+  const [curriculum, setCurriculum] = useState(undefined);     // undefined = loading, null = not indexed yet
 
   useEffect(() => {
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
     apiFetch('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
     apiFetch('/beaiready/training/form-insights').then(setInsights).catch(() => setInsights([]));
-    // The team analysis is AI-generated on first view (then cached) — can take a few seconds.
+    // The team analysis + curriculum are AI-generated on first view (then cached) — can take a few seconds.
     apiFetch('/beaiready/training/team-analysis').then(setTeamAnalysis).catch(() => setTeamAnalysis(null));
+    apiFetch('/beaiready/training/curriculum').then(setCurriculum).catch(() => setCurriculum(null));
   }, []);
 
   // Every published material shows somewhere: under its agenda when that agenda is
@@ -133,6 +135,34 @@ function TrainingRecord() {
           </div>
         )}
       </section>
+
+      {/* What was actually taught — AI summary of the harvested session decks. Only
+          shown once the materials are indexed (hidden entirely when there's nothing). */}
+      {curriculum !== null && (
+        <>
+          <div className="hub-section-label">What your training covered</div>
+          <section className="hub-band" style={{ marginBottom: 24 }}>
+            {curriculum === undefined ? (
+              <p style={{ margin: 0, color: '#8a8076' }}>Summarising your sessions…</p>
+            ) : !curriculum.sessions?.length ? (
+              <p style={{ margin: 0 }}>A summary of what each session covered will appear here once your materials are indexed.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 16 }}>
+                {curriculum.sessions.map((s, i) => (
+                  <div key={`${s.title}:${i}`}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#3a342e' }}>{s.title}</div>
+                    {s.points?.length > 0 && (
+                      <ul style={{ margin: '5px 0 0', paddingLeft: 18, display: 'grid', gap: 3 }}>
+                        {s.points.map((p, j) => <li key={j} style={{ fontSize: 13.5, color: '#5b5249', lineHeight: 1.5 }}>{p}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
 
       <div className="hub-section-label">Your materials</div>
       <section className="hub-band" style={{ marginBottom: 24 }}>

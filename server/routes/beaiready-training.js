@@ -396,6 +396,61 @@ router.get('/team-analysis', async (req, res) => {
   } catch (err) { console.error('[bair-train/team-analysis]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── "What your training covered" — AI curriculum from the harvested slide decks ───
+// Reads the extracted text of the client's training material PDFs (the session
+// decks) and turns each into a short title + key-topic bullets, so the dashboard
+// shows what was actually taught — not just a list of PDFs. Cached in the same
+// table under kind='curriculum'. Needs the decks harvested first (Harvest now).
+const CURRICULUM_VERSION = 'v1';
+
+async function generateCurriculum(docs) {
+  const body = docs.map((d) => `=== ${d.name} ===\n${(d.text || '').slice(0, 4500)}`).join('\n\n').slice(0, 42000);
+  const system =
+    'You are summarising the slide decks from a COMPLETED AI training programme for a business, so its staff can ' +
+    'revisit what was covered. For EACH deck, produce a short session title and 3-5 concise bullet points of the ' +
+    'key topics and practical takeaways ACTUALLY taught — ground every point in the slide text, invent nothing. ' +
+    'Output ONLY JSON (no markdown): {"sessions":[{"title": string, "points": [string, ...]}]}, in the given order.';
+  const userContent = `The training decks:\n\n${body}\n\nReturn the JSON now.`;
+  const raw = await callClaude({ system, userContent, maxTokens: 2200, temperature: 0.2 });
+  const j = parseJsonObject(raw);
+  return (Array.isArray(j.sessions) ? j.sessions : [])
+    .filter((s) => s && s.title)
+    .map((s) => ({
+      title: String(s.title).slice(0, 120),
+      points: (Array.isArray(s.points) ? s.points : []).filter(Boolean).map((p) => String(p).slice(0, 240)).slice(0, 6),
+    }))
+    .slice(0, 20);
+}
+
+router.get('/curriculum', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: docs } = await pool.query(
+      `SELECT ud.id, ud.original_name AS name, ud.extracted_text AS text
+         FROM uploaded_documents ud
+        WHERE ud.entity_type = 'training_material_file'
+          AND ud.entity_id IN (SELECT id FROM training_materials WHERE newsroom_id = $1)
+          AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 60
+        ORDER BY ud.original_name`, [newsroomId]);
+    if (!docs.length) return res.json(null);
+    const totalLen = docs.reduce((s, d) => s + (d.text ? d.text.length : 0), 0);
+    const fingerprint = `${CURRICULUM_VERSION}:${docs.length}:${totalLen}`;
+    const { rows: [cached] } = await pool.query(
+      `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'curriculum' AND fingerprint = $2`,
+      [newsroomId, fingerprint]);
+    let sessions = cached?.analysis?.sessions;
+    if (!sessions) {
+      sessions = await generateCurriculum(docs).catch((e) => { console.error('[curriculum gen]', e.message); return []; });
+      await pool.query(
+        `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+         VALUES ($1,'curriculum',$2,$3::jsonb,NOW())
+         ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+        [newsroomId, fingerprint, JSON.stringify({ sessions })]);
+    }
+    res.json({ sessions });
+  } catch (err) { console.error('[bair-train/curriculum]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Agendas (+ items) ───────────────────────────────────────────────────────────
 router.get('/agendas', async (req, res) => {
   try {
