@@ -1269,7 +1269,9 @@ let _bairNodesCache = { at: 0, data: null };
 
 // Nodes kept out of the storefront panels (registry stays the single source of
 // truth; these are just not surfaced here). Paul's call, 2026-07-08.
-const HIDDEN_STOREFRONT_SLUGS = new Set(['podcasting', 'progress', 'salesrep']);
+// 'aiready' is folded into KnowHow (Knowledge) — hidden here so it isn't a separate
+// BE AI READY tool; it stays on the Grounded front door for newsrooms.
+const HIDDEN_STOREFRONT_SLUGS = new Set(['podcasting', 'progress', 'salesrep', 'aiready']);
 
 async function loadNodesRegistry() {
   const candidates = [
