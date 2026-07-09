@@ -15,6 +15,7 @@ import { extractText } from '../services/document-processor.js';
 import { encryptFor, decryptFor } from '../services/crypto.js';
 import { indexSource, searchCompanyChunks, sourceChunkStats } from '../services/company-knowledge-index.js';
 import { ingestUrls, ingestSitemap, ingestDriveFolder, driveAvailable } from '../services/company-knowledge-ingest.js';
+import { getSettings, saveSettings, buildBundle, bundleStats } from '../services/company-knowledge-bundle.js';
 
 const router = Router();
 
@@ -109,7 +110,7 @@ router.get('/sources', async (req, res) => {
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.json([]);
     const [{ rows }, stats] = await Promise.all([
       pool.query(
-        `SELECT id, kind, title, url, file_id, extracted_text, included, sensitive, created_at
+        `SELECT id, kind, title, url, file_id, extracted_text, included, sensitive, publish, created_at
            FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]),
       sourceChunkStats(newsroomId),
     ]);
@@ -118,7 +119,7 @@ router.get('/sources', async (req, res) => {
       const st = stats[r.id] || { chunks: 0, embedded: 0 };
       return { id: r.id, kind: r.kind, title: r.title, url: r.url, file_id: r.file_id, created_at: r.created_at,
         snippet: text.slice(0, 220), has_text: text.length > 0,
-        included: r.included, sensitive: r.sensitive, chunks: st.chunks, embedded: st.embedded };
+        included: r.included, sensitive: r.sensitive, publish: r.publish, chunks: st.chunks, embedded: st.embedded };
     }));
   } catch (err) { console.error('[beaiready-knowhow/sources:get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -140,12 +141,13 @@ router.patch('/sources/:id', async (req, res) => {
     const fields = [], vals = [];
     if (typeof req.body?.included === 'boolean') { fields.push(`included = $${fields.length + 1}`); vals.push(req.body.included); }
     if (typeof req.body?.sensitive === 'boolean') { fields.push(`sensitive = $${fields.length + 1}`); vals.push(req.body.sensitive); }
+    if (typeof req.body?.publish === 'boolean') { fields.push(`publish = $${fields.length + 1}`); vals.push(req.body.publish); }
     if (!fields.length) return res.status(400).json({ message: 'Nothing to update.' });
     vals.push(req.params.id, newsroomId);
     const { rows } = await pool.query(
       `UPDATE beaiready_company_sources SET ${fields.join(', ')}
         WHERE id = $${vals.length - 1} AND newsroom_id = $${vals.length}
-        RETURNING id, included, sensitive`, vals);
+        RETURNING id, included, sensitive, publish`, vals);
     if (!rows.length) return res.status(404).json({ message: 'Not found' });
     res.json(rows[0]);
   } catch (err) { console.error('[beaiready-knowhow/sources:patch]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -270,6 +272,36 @@ router.delete('/sources/:id', async (req, res) => {
     if (!rowCount) return res.status(404).json({ message: 'Not found' });
     res.json({ deleted: true });
   } catch (err) { console.error('[beaiready-knowhow/sources:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Outward publishing: the AI-ready export bundle for the business's own website ──
+router.get('/settings', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.json({ settings: null, publishable: 0 });
+    const [settings, stats] = await Promise.all([getSettings(newsroomId), bundleStats(newsroomId)]);
+    res.json({ settings, publishable: stats.publishable });
+  } catch (err) { console.error('[beaiready-knowhow/settings:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/settings', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    res.json(await saveSettings(newsroomId, req.body || {}));
+  } catch (err) { console.error('[beaiready-knowhow/settings:put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Download the deploy-ready zip (binary — streamed outside the JSON handlers).
+router.get('/bundle', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const { buffer, filename } = await buildBundle(newsroomId);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (err) { console.error('[beaiready-knowhow/bundle]', err); res.status(500).json({ message: 'Could not build the bundle.' }); }
 });
 
 export default router;

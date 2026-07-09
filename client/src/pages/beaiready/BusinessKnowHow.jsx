@@ -13,6 +13,7 @@ const TABS = [
   { key: 'ask', label: 'Ask' },
   { key: 'knowledge', label: 'Your knowledge' },
   { key: 'workflows', label: 'My know-how' },
+  { key: 'publish', label: 'Publish' },
 ];
 
 const SOURCE_LABEL = { document: 'your documents', knowledge: 'company knowledge', pattern: 'sector pattern', team_history: 'earlier team Q&A' };
@@ -44,7 +45,78 @@ export default function BusinessKnowHow() {
       {tab === 'ask' && <AskPanel setErr={setErr} />}
       {tab === 'knowledge' && <KnowledgePanel setErr={setErr} />}
       {tab === 'workflows' && <WorkflowsPanel setErr={setErr} />}
+      {tab === 'publish' && <PublishPanel setErr={setErr} />}
     </div>
+  );
+}
+
+// ── Publish — the outward AI-ready export bundle for the business's own website ───
+const EXPORT_CRAWLERS = ['ClaudeBot', 'GPTBot', 'PerplexityBot', 'CCBot', 'Google-Extended', '*'];
+function PublishPanel({ setErr }) {
+  const [settings, setSettings] = useState(null);
+  const [publishable, setPublishable] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState('');
+
+  const load = useCallback(() => {
+    apiFetch('/beaiready/knowhow/settings')
+      .then((d) => { setSettings(d.settings || { org_name: '', site_url: '', crawlers: {} }); setPublishable(d.publishable || 0); })
+      .catch((e) => setErr(e.message));
+  }, [setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const setField = (k, v) => setSettings((s) => ({ ...s, [k]: v }));
+  const setCrawler = (bot, v) => setSettings((s) => ({ ...s, crawlers: { ...(s.crawlers || {}), [bot]: v } }));
+  const save = async () => {
+    setBusy(true); setErr(''); setSaved('');
+    try { await apiFetch('/beaiready/knowhow/settings', { method: 'PUT', body: JSON.stringify(settings) }); setSaved('Saved.'); load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  if (!settings) return <p style={muted}>Loading…</p>;
+  return (
+    <>
+      <p style={{ ...muted, maxWidth: '70ch', marginTop: 0 }}>
+        Publish selected knowledge as a bundle you put on your <b>own public website</b>, so AI systems read and
+        cite your business correctly. Only sources you mark <b>Publish</b> in “Your knowledge” are included —
+        never anything marked sensitive. Opt-in, never automatic.
+      </p>
+
+      <div style={{ ...card, marginBottom: 14, display: 'grid', gap: 8 }}>
+        <div style={kicker}>Site details</div>
+        <input value={settings.org_name || ''} onChange={(e) => setField('org_name', e.target.value)} placeholder="Business name" style={input} />
+        <input value={settings.site_url || ''} onChange={(e) => setField('site_url', e.target.value)} placeholder="https://your-business.co.za" style={input} />
+      </div>
+
+      <div style={{ ...card, marginBottom: 16 }}>
+        <div style={kicker}>AI crawler policy (robots.txt)</div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {EXPORT_CRAWLERS.map((bot) => (
+            <div key={bot} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ flex: 1, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 13 }}>{bot === '*' ? 'All others (*)' : bot}</span>
+              {['allow', 'disallow'].map((v) => (
+                <label key={v} style={{ fontSize: 13, color: '#5b5249' }}>
+                  <input type="radio" name={`cr-${bot}`} checked={((settings.crawlers || {})[bot] || 'allow') === v} onChange={() => setCrawler(bot, v)} /> {v}
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={save} disabled={busy} style={btn}>{busy ? 'Saving…' : 'Save settings'}</button>
+        <a href="/api/beaiready/knowhow/bundle" style={{ ...btn, textDecoration: 'none', background: publishable ? '#166534' : '#b8b2a8', pointerEvents: publishable ? 'auto' : 'none' }}>
+          Download bundle{publishable ? ` (${publishable})` : ''}
+        </a>
+        {saved && <span style={{ ...muted, color: '#166534' }}>{saved}</span>}
+      </div>
+      <p style={{ ...muted, fontSize: 12, marginTop: 8 }}>
+        {publishable ? `${publishable} item(s) marked Publish will be in the bundle (llms.txt, robots.txt, JSON-LD, markdown mirrors).`
+          : 'Nothing marked Publish yet — go to Your knowledge and hit Publish on the sources you want AI to cite.'}
+      </p>
+    </>
   );
 }
 
@@ -300,6 +372,7 @@ function KnowledgePanel({ setErr }) {
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <button onClick={() => patch(s.id, { included: !s.included })} style={tag} title={s.included ? 'Exclude from the AI' : 'Include in the AI'}>{s.included ? 'Exclude' : 'Include'}</button>
                     <button onClick={() => patch(s.id, { sensitive: !s.sensitive })} style={{ ...tag, ...(s.sensitive ? { color: '#b91c1c' } : {}) }} title="Mark sensitive — kept on file but never used by the AI">{s.sensitive ? 'Unmark' : 'Sensitive'}</button>
+                    <button onClick={() => patch(s.id, { publish: !s.publish })} style={{ ...tag, ...(s.publish ? { color: '#166534', borderColor: '#bbf7d0', background: '#dcfce7' } : {}) }} title="Include in the public AI-ready export bundle">{s.publish ? 'Published' : 'Publish'}</button>
                     <button onClick={() => del(s.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
                   </div>
                 </div>
