@@ -40,6 +40,7 @@ export default function BeAIReadyAdminTraining() {
 
       {clientId && (
         <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'minmax(0, 1fr)' }}>
+          <DashboardRefresh clientId={clientId} setErr={setErr} />
           <HarvestSection clientId={clientId} setErr={setErr} />
           <IntakeSection clientId={clientId} setErr={setErr} />
           <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
@@ -66,6 +67,40 @@ function Section({ title, hint, children }) {
       </div>
       {children}
     </section>
+  );
+}
+
+// ── Update client dashboard — regenerate the AI analyses the client sees ──────────
+// The client's dashboard (team readiness, what-was-covered, expectations vs
+// feedback) is AI-generated and cached; it refreshes itself over time, but this
+// pushes the latest surveys / materials / feedback live right away.
+function DashboardRefresh({ clientId, setErr }) {
+  const api = useApi(clientId);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const run = async () => {
+    setBusy(true); setErr(''); setNote('');
+    try {
+      const r = await api('/beaiready/training/refresh-analysis', { method: 'POST' });
+      const bits = ['team readiness'];
+      if (r.curriculum) bits.push(`${r.curriculum} session summaries`);
+      bits.push(`expectations match${r.has_feedback ? ' (with feedback)' : ''}`);
+      setNote(`Updated ✓ — ${bits.join(', ')}. The client sees it now.`);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ ...card, background: '#fbf7f4', borderColor: '#eaddd3', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ flex: 1, minWidth: 240 }}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>Update the client’s dashboard</div>
+        <div style={{ ...muted, fontSize: 12.5, marginTop: 2 }}>
+          Regenerate the AI analysis the client sees — team readiness, what the training covered, and how it matched what they
+          wanted (with feedback if connected) — from the latest surveys, materials and feedback. It also refreshes on its own over time.
+        </div>
+        {note && <div style={{ fontSize: 12.5, color: '#166534', marginTop: 6 }}>{note}</div>}
+      </div>
+      <button type="button" onClick={run} disabled={busy} style={btn}>{busy ? 'Updating…' : 'Update dashboard'}</button>
+    </div>
   );
 }
 

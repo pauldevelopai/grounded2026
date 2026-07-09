@@ -550,6 +550,70 @@ router.get('/expectations-match', async (req, res) => {
   } catch (err) { console.error('[bair-train/expectations-match]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Refresh the client's dashboard analyses on demand (admin "process" button) ────
+// The GET endpoints above lazily regenerate when their fingerprint changes (new
+// survey/feedback/materials), but that first regeneration is slow. This lets the
+// admin push all of it live at once after adding data. The fingerprints below MUST
+// match the GET handlers so the warmed cache is a hit on the next client view.
+async function upsertAnalysis(newsroomId, kind, fingerprint, analysis) {
+  await pool.query(
+    `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+     VALUES ($1,$2,$3,$4::jsonb,NOW())
+     ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+    [newsroomId, kind, fingerprint, JSON.stringify(analysis)]);
+}
+async function refreshTeamAnalysis(newsroomId) {
+  const { rows: resp } = await pool.query(
+    `SELECT response, imported_at FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake' ORDER BY imported_at DESC`, [newsroomId]);
+  if (!resp.length) return false;
+  const objs = resp.map((r) => r.response || {});
+  const maxImported = resp[0].imported_at ? new Date(resp[0].imported_at).getTime() : 0;
+  const ai = await generateTeamAnalysis(objs).catch((e) => { console.error('[refresh ta]', e.message); return {}; });
+  await upsertAnalysis(newsroomId, 'intake', `${TEAM_ANALYSIS_VERSION}:${resp.length}:${maxImported}`, ai);
+  return true;
+}
+async function refreshCurriculum(newsroomId) {
+  const { rows: docs } = await pool.query(
+    `SELECT ud.id, ud.original_name AS name, ud.extracted_text AS text FROM uploaded_documents ud
+      WHERE ud.entity_type = 'training_material_file'
+        AND ud.entity_id IN (SELECT id FROM training_materials WHERE newsroom_id = $1)
+        AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 60 ORDER BY ud.original_name`, [newsroomId]);
+  if (!docs.length) {
+    const { rows: [c] } = await pool.query(`SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'curriculum'`, [newsroomId]);
+    return (c && c.analysis && Array.isArray(c.analysis.sessions)) ? c.analysis.sessions : [];
+  }
+  const totalLen = docs.reduce((s, d) => s + (d.text ? d.text.length : 0), 0);
+  const sessions = await generateCurriculum(docs).catch((e) => { console.error('[refresh cur]', e.message); return []; });
+  await upsertAnalysis(newsroomId, 'curriculum', `${CURRICULUM_VERSION}:${docs.length}:${totalLen}`, { sessions });
+  return sessions;
+}
+async function refreshMatch(newsroomId, curriculum) {
+  const { rows: resp } = await pool.query(`SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake'`, [newsroomId]);
+  if (!resp.length) return { ok: false, has_feedback: false };
+  const objs = resp.map((r) => r.response || {});
+  const cols = []; for (const o of objs) for (const k of Object.keys(o)) if (!cols.includes(k)) cols.push(k);
+  const learnCol = cols.find((k) => /would like to learn|want to learn|heard about ai/i.test(k));
+  const autoCol = cols.find((k) => /automate/i.test(k));
+  const collect = (col) => col ? [...new Set(objs.map((o) => String(o[col] ?? '').trim()).filter((v) => v && !NEGATIVE_ANSWER.test(v)))].slice(0, 40) : [];
+  const { rows: fb } = await pool.query(`SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'feedback'`, [newsroomId]);
+  const feedback = fb.map((r) => r.response || {});
+  const m = await generateExpectationsMatch({ wants: collect(learnCol), automates: collect(autoCol), curriculum, feedback })
+    .catch((e) => { console.error('[refresh match]', e.message); return {}; });
+  await upsertAnalysis(newsroomId, 'match', `${MATCH_VERSION}:${resp.length}:${feedback.length}:${curriculum.length}`, m);
+  return { ok: true, has_feedback: feedback.length > 0 };
+}
+
+router.post('/refresh-analysis', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    // Team analysis runs in parallel with the curriculum→match chain (match needs the curriculum).
+    const taP = refreshTeamAnalysis(newsroomId);
+    const cmP = (async () => { const sessions = await refreshCurriculum(newsroomId); const mt = await refreshMatch(newsroomId, sessions); return { sessions, mt }; })();
+    const [ta, cm] = await Promise.all([taP, cmP]);
+    res.json({ ok: true, team_analysis: ta, curriculum: (cm.sessions || []).length, match: cm.mt.ok, has_feedback: cm.mt.has_feedback });
+  } catch (err) { console.error('[bair-train/refresh-analysis]', err); res.status(500).json({ message: err.message || 'Refresh failed' }); }
+});
+
 // ── Agendas (+ items) ───────────────────────────────────────────────────────────
 router.get('/agendas', async (req, res) => {
   try {
