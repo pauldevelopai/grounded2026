@@ -9,22 +9,10 @@ import { VISIBLE_PILLARS, STATUS_LABEL, SCOPING_WHATSAPP } from './pillars.js';
 const STATUS_DOT = { live: '#16a34a', partial: '#d97706', building: '#94a3b8' };
 
 export default function BeAIReadyHome() {
-  const [stats, setStats] = useState({ lawsuits: null, regulations: null, tools: null });
   // The three daily briefings that lead the page (undefined = loading, null = none yet).
   const [briefings, setBriefings] = useState({ news: undefined, law: undefined, regulation: undefined });
 
   useEffect(() => {
-    Promise.allSettled([
-      publicFetch('/public/lawsuits?pageSize=1').then((r) => r.total),
-      publicFetch('/public/regulations?pageSize=1').then((r) => r.total),
-      publicFetch('/public/tools').then((r) => (Array.isArray(r) ? r.length : (r?.total ?? null))),
-    ]).then(([l, rg, t]) =>
-      setStats({
-        lawsuits: l.status === 'fulfilled' ? l.value : null,
-        regulations: rg.status === 'fulfilled' ? rg.value : null,
-        tools: t.status === 'fulfilled' ? t.value : null,
-      })
-    );
     publicFetch('/public/ai-news-today').then((v) => setBriefings((b) => ({ ...b, news: v || null }))).catch(() => setBriefings((b) => ({ ...b, news: null })));
     publicFetch('/public/governance-today').then((v) => setBriefings((b) => ({ ...b, law: v || null }))).catch(() => setBriefings((b) => ({ ...b, law: null })));
     publicFetch('/public/regulation-today').then((v) => setBriefings((b) => ({ ...b, regulation: v || null }))).catch(() => setBriefings((b) => ({ ...b, regulation: null })));
@@ -76,20 +64,6 @@ export default function BeAIReadyHome() {
         ))}
       </section>
 
-      {/* ── Live proof from the shared tracker ── */}
-      <div className="hub-section-label">Built on live infrastructure, not guesswork</div>
-      <section className="hub-stats">
-        <Link className="hub-stat" to="/tracker">
-          <div className="hub-stat-value">{n(stats.lawsuits)}</div><div className="hub-stat-label">AI lawsuits tracked daily</div>
-        </Link>
-        <Link className="hub-stat" to="/tracker">
-          <div className="hub-stat-value">{n(stats.regulations)}</div><div className="hub-stat-label">AI regulations tracked</div>
-        </Link>
-        <Link className="hub-stat" to="/toolbox">
-          <div className="hub-stat-value">{n(stats.tools)}</div><div className="hub-stat-label">AI tools assessed in the toolbox</div>
-        </Link>
-      </section>
-
       {/* ── Closing / contact (no pricing — scoped per engagement) ── */}
       <p className="hub-foot-note">
         Every engagement includes the full audit across all pillars, the findings report and action plan, and
@@ -106,8 +80,6 @@ export default function BeAIReadyHome() {
     </div>
   );
 }
-
-function n(v) { return v == null ? '—' : v.toLocaleString(); }
 
 // Per-category visual identity — accent + gradient shades + a soft tint + a line icon.
 const ICON = {
