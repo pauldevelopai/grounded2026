@@ -1095,6 +1095,18 @@ export async function runLawsuitTracker() {
         for (const lawsuit of extracted) {
           if (!lawsuit.case_name || lawsuit.case_name.length < 5) continue;
 
+          // Quality gate (Paul, 2026-07-09): the extractor sometimes emits placeholder
+          // cases ("Unknown - Insufficient Data", "Unknown Plaintiffs v. X"). Since the
+          // tracker auto-publishes, skip anything with an unknown/insufficient party or
+          // name, and require a real source URL, so junk never reaches the public page.
+          const nm = String(lawsuit.case_name);
+          const parties = [...(lawsuit.plaintiffs || []), ...(lawsuit.defendants || [])].join(' | ');
+          const JUNK = /\b(unknown|insufficient|not specified|undetermined|unnamed|unspecified|no data|placeholder|n\/?a|tbd)\b/i;
+          if (JUNK.test(nm) || JUNK.test(parties) || !article.url) {
+            updateScan({ phase: 'saving', step: `Skipped low-quality: ${nm.slice(0, 40)}` });
+            continue;
+          }
+
           // Try to match existing case by name similarity
           const { rows: existing } = await pool.query(
             `SELECT id FROM ai_lawsuits WHERE LOWER(case_name) = LOWER($1) OR LOWER(case_name) LIKE LOWER($2) LIMIT 1`,
