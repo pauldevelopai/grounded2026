@@ -14,6 +14,7 @@ import { scrapeArticle } from '../services/web-scraper.js';
 import { extractText } from '../services/document-processor.js';
 import { encryptFor, decryptFor } from '../services/crypto.js';
 import { indexSource, searchCompanyChunks, sourceChunkStats } from '../services/company-knowledge-index.js';
+import { ingestUrls, ingestSitemap, ingestDriveFolder, driveAvailable } from '../services/company-knowledge-ingest.js';
 
 const router = Router();
 
@@ -223,6 +224,41 @@ router.post('/sources/note', async (req, res) => {
     try { await indexSource(src.id, newsroomId, text.trim()); } catch (e) { console.error('[knowhow index note]', e.message); }
     res.status(201).json(src);
   } catch (err) { console.error('[beaiready-knowhow/sources:note]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// What bulk sources are available (Drive needs a server-side Google API key).
+router.get('/sources/capabilities', async (_req, res) => {
+  res.json({ drive: driveAvailable() });
+});
+
+// Add many web pages at once (multi-line list).
+router.post('/sources/urls', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const r = await ingestUrls(newsroomId, req.user.id, req.body?.urls);
+    return r.total === 0 ? res.status(400).json({ message: r.message || 'No usable URLs.' }) : res.status(201).json(r);
+  } catch (err) { console.error('[beaiready-knowhow/sources:urls]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Crawl a sitemap.xml → ingest every page it lists.
+router.post('/sources/sitemap', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const r = await ingestSitemap(newsroomId, req.user.id, req.body?.sitemap);
+    return r.total === 0 ? res.status(400).json({ message: r.message || 'No pages found.' }) : res.status(201).json(r);
+  } catch (err) { console.error('[beaiready-knowhow/sources:sitemap]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Import a public "anyone with the link" Google Drive folder.
+router.post('/sources/drive', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const r = await ingestDriveFolder(newsroomId, req.user.id, req.body?.folder);
+    return r.error ? res.status(400).json({ message: r.message }) : res.status(201).json(r);
+  } catch (err) { console.error('[beaiready-knowhow/sources:drive]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // Remove a source (newsroom-scoped).

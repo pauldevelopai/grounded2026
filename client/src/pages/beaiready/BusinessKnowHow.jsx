@@ -133,11 +133,27 @@ function KnowledgePanel({ setErr }) {
   const [noteText, setNoteText] = useState('');
   const [sq, setSq] = useState('');
   const [results, setResults] = useState(null);
+  const [urls, setUrls] = useState('');
+  const [sitemap, setSitemap] = useState('');
+  const [driveFolder, setDriveFolder] = useState('');
+  const [caps, setCaps] = useState({ drive: false });
+  const [bulkMsg, setBulkMsg] = useState('');
 
   const load = useCallback(() => {
     apiFetch('/beaiready/knowhow/sources').then(setSources).catch((e) => setErr(e.message));
   }, [setErr]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { apiFetch('/beaiready/knowhow/sources/capabilities').then(setCaps).catch(() => {}); }, []);
+
+  const runBulk = async (path, body, label) => {
+    setBusy(true); setErr(''); setBulkMsg(`Fetching + indexing ${label}…`);
+    try {
+      const r = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
+      setBulkMsg(`Added ${r.added || 0}${r.failed ? `, ${r.failed} failed` : ''} — indexing now.`);
+      load();
+    } catch (e) { setErr(e.message); setBulkMsg(''); }
+    setBusy(false);
+  };
 
   const onFiles = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -235,6 +251,32 @@ function KnowledgePanel({ setErr }) {
         <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Type anything the AI should know about your business…" style={{ ...input, minHeight: 70 }} />
         <div><button onClick={addNote} disabled={busy || !noteText.trim()} style={btn}>Save note</button></div>
       </div>
+
+      <div style={{ ...card, marginBottom: 12, display: 'grid', gap: 8 }}>
+        <div style={kicker}>Add many pages at once</div>
+        <textarea value={urls} onChange={(e) => setUrls(e.target.value)} placeholder="Paste page URLs, one per line…" style={{ ...input, minHeight: 64, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 13 }} />
+        <div><button onClick={() => runBulk('/beaiready/knowhow/sources/urls', { urls }, 'pages').then(() => setUrls(''))} disabled={busy || !urls.trim()} style={btn}>Add pages</button></div>
+      </div>
+
+      <div style={{ ...card, marginBottom: 12, display: 'grid', gap: 8 }}>
+        <div style={kicker}>Crawl a sitemap</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={sitemap} onChange={(e) => setSitemap(e.target.value)} placeholder="https://your-business.co.za/sitemap.xml" style={input} />
+          <button onClick={() => runBulk('/beaiready/knowhow/sources/sitemap', { sitemap }, 'the site').then(() => setSitemap(''))} disabled={busy || !sitemap.trim()} style={btn}>Crawl</button>
+        </div>
+        <span style={{ ...muted, fontSize: 12 }}>Adds every page listed in your sitemap.xml (up to 150).</span>
+      </div>
+
+      <div style={{ ...card, marginBottom: 22, display: 'grid', gap: 8 }}>
+        <div style={kicker}>Import a Google Drive folder</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={driveFolder} onChange={(e) => setDriveFolder(e.target.value)} placeholder="https://drive.google.com/drive/folders/…" style={input} disabled={!caps.drive} />
+          <button onClick={() => runBulk('/beaiready/knowhow/sources/drive', { folder: driveFolder }, 'the folder').then(() => setDriveFolder(''))} disabled={busy || !caps.drive || !driveFolder.trim()} style={btn}>Import</button>
+        </div>
+        <span style={{ ...muted, fontSize: 12 }}>{caps.drive ? 'Share the folder as “anyone with the link (Viewer)”. Google Docs, PDFs and Word files are imported.' : 'Google Drive import isn’t enabled on the server yet — use file upload or paste URLs instead.'}</span>
+      </div>
+
+      {bulkMsg && <p style={{ ...muted, marginTop: -8, marginBottom: 14 }}>{bulkMsg}</p>}
 
       <div className="hub-section-label">Your knowledge sources</div>
       {sources == null ? <p style={muted}>Loading…</p> : sources.length === 0 ? (
