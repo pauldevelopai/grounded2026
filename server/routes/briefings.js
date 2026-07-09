@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { generateGovernanceToday } from '../services/governance-today.js';
+import { generateRegulationToday } from '../services/regulation-today.js';
 import { runAINewsTodayDigest } from '../services/background-jobs.js';
 import { getBriefingSettings, setBriefingSettings } from '../services/briefing-settings.js';
 
@@ -16,6 +17,7 @@ const router = Router();
 const CONF = {
   'ai-news':    { key: 'ai_news_today',    history: 'ai_news_today_history' },
   'governance': { key: 'governance_today', history: 'governance_today_history' },
+  'regulation': { key: 'regulation_today', history: 'regulation_today_history' },
 };
 
 // Save an edited briefing summary. Keeps the existing headlines + generated_at and
@@ -58,9 +60,9 @@ router.post('/:which/refresh', async (req, res) => {
     if (which === 'ai-news') {
       await runAINewsTodayDigest();
       const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = 'ai_news_today'");
-      return res.json(rows[0]?.value || { summary: null, message: 'No recent newsletter items — briefing is empty.' });
+      return res.json(rows[0]?.value || { summary: null, message: 'No AI-news items found — briefing is empty.' });
     }
-    const v = await generateGovernanceToday();
+    const v = which === 'regulation' ? await generateRegulationToday() : await generateGovernanceToday();
     res.json(v || { summary: null, message: 'Nothing generated.' });
   } catch (err) {
     console.error('[briefings:refresh]', err);

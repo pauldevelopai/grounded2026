@@ -1176,8 +1176,10 @@ export async function runLawsuitTracker() {
                 (case_name, plaintiffs, defendants, court, judge, jurisdiction, district, circuit,
                  status, case_type, key_issues, filing_date, last_update, next_deadline,
                  next_deadline_notes, outcome, settlement_amount, case_url, source_url, source_urls, summary,
-                 curriculum_relevance, is_curriculum_relevant, last_scraped_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13::date,$14::date,$15,$16,$17,$18,$19,$20,$21,$22,true,NOW())
+                 curriculum_relevance, is_curriculum_relevant, last_scraped_at,
+                 auto_added, review_status, source_origin)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13::date,$14::date,$15,$16,$17,$18,$19,$20,$21,$22,true,NOW(),
+                 true, 'pending', 'lawsuit_tracker')
                ON CONFLICT (case_name) DO NOTHING`,
               [
                 lawsuit.case_name,

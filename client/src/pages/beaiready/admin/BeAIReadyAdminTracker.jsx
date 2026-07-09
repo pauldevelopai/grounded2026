@@ -7,7 +7,12 @@ import { apiFetch } from '../../../hooks/useApi.js';
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
 // Where an auto-added entry came from (source_origin → friendly label).
-const SOURCE_LABEL = { governance_today: 'Daily briefing', techieray: 'TechieRay tracker' };
+const SOURCE_LABEL = {
+  governance_today: 'Daily briefing',
+  techieray: 'TechieRay tracker',
+  lawsuit_tracker: 'AI-litigation news scan',
+  courtlistener: 'CourtListener',
+};
 
 export default function BeAIReadyAdminTracker() {
   const [data, setData] = useState(null);
@@ -30,10 +35,11 @@ export default function BeAIReadyAdminTracker() {
     <div style={{ maxWidth: 920 }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Tracker review</h1>
       <p style={{ color: '#6b6359', marginBottom: 16, maxWidth: '70ch' }}>
-        Lawsuits and regulations added automatically by our sources — the daily 05:00 briefing and the
-        weekly TechieRay harvest. Each row shows <strong>where it came from</strong> (“via …”) and links to
-        its source. They’re already live on the public tracker — confirm the ones that are right, and remove
-        anything inaccurate or duplicated. {pending > 0 && <strong>{pending} pending review.</strong>}
+        Every lawsuit and regulation added automatically by our sources — the daily AI-litigation news scan,
+        the daily briefing, the CourtListener sync and the TechieRay harvest. Each row shows <strong>where it
+        came from</strong> (“via …”) and links to its source. They go live on the public tracker the moment
+        they’re found — review them here: confirm the ones that are right, and remove anything inaccurate or
+        duplicated. {pending > 0 && <strong>{pending} pending review.</strong>}
       </p>
       {err && <div style={banner}>{err}</div>}
 

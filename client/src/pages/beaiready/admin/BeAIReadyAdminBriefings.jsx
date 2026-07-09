@@ -6,17 +6,22 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../../../hooks/useApi.js';
 
-// AI News on top, AI Law underneath — the same order they appear on the home page.
+// AI News, AI Law, Regulation — the same order they appear on the home page.
 const BRIEFINGS = [
   {
     which: 'ai-news', kicker: 'AI News',
-    blurb: 'A short daily read on the biggest AI developments. Drawn from your curated newsletters (the AI ones ingested from Gmail’s Forums tab); if none have come in, it falls back to a live web search. Set the source below.',
+    blurb: 'A short daily read on the biggest AI developments, written from a live, domain-restricted web search of reputable AI outlets and official company blogs. (Source is set below; the legacy newsletter modes need Gmail connected.)',
     path: '/public/ai-news-today',
   },
   {
     which: 'governance', kicker: 'AI Law',
-    blurb: 'AI law, regulation and enforcement — written directly from your own Law & Regulation tracker, so the team has full oversight of what it can say. The same briefing that leads the tracker.',
+    blurb: 'AI lawsuits and litigation — written directly from your own tracker, so the team has full oversight. The same briefing that leads the tracker. Vet the underlying cases under “Tracker review”.',
     path: '/public/governance-today',
+  },
+  {
+    which: 'regulation', kicker: 'Regulation',
+    blurb: 'AI regulation, standards and enforcement — written from your own Regulation tracker. Vet the underlying regulations under “Tracker review”.',
+    path: '/public/regulation-today',
   },
 ];
 
@@ -31,7 +36,7 @@ export default function BeAIReadyAdminBriefings() {
     <div style={{ maxWidth: 820 }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Briefings</h1>
       <p style={{ color: '#6b6359', marginBottom: 18, maxWidth: '66ch' }}>
-        The two daily briefings at the top of the Be AI Ready home page. Edit either by hand and save, or
+        The three daily briefings at the top of the Be AI Ready home page. Edit any by hand and save, or
         regenerate it from source. They also refresh automatically each morning.
       </p>
       <div style={{ display: 'grid', gap: 16, marginBottom: 16 }}>
