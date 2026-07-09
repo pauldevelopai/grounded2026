@@ -46,6 +46,7 @@ export default function BeAIReadyAdminTraining() {
           <AgendaSection clientId={clientId} setErr={setErr} />
           <MaterialsSection clientId={clientId} setErr={setErr} />
           <FeedbackSection clientId={clientId} setErr={setErr} />
+          <ExpectationsMatchSection clientId={clientId} setErr={setErr} />
           <RecommendationsSection clientId={clientId} setErr={setErr} pillars={['training']} />
         </div>
       )}
@@ -341,6 +342,55 @@ function FeedbackSection({ clientId, setErr }) {
         </ul>
       )}
       {responses && responses.length > 0 && <IntakeResponses responses={responses} />}
+    </Section>
+  );
+}
+
+// ── Training vs what the team wanted (ADMIN, honest — includes gaps) ──────────────
+// The same /expectations-match analysis the client sees, but the admin request
+// (role=admin) returns the candid admin_summary + the "gaps" the client view hides.
+function ExpectationsMatchSection({ clientId, setErr }) {
+  const api = useApi(clientId);
+  const [m, setM] = useState(undefined);
+  useEffect(() => {
+    setM(undefined);
+    api('/beaiready/training/expectations-match').then(setM).catch((e) => { setErr(e.message); setM(null); });
+  }, [api, setErr]);
+  const statusColor = (s) => (s === 'delivered' ? ['#dcfce7', '#166534'] : s === 'gap' ? ['#fee2e2', '#991b1b'] : ['#fef3c7', '#92400e']);
+  return (
+    <Section title="Training vs what the team wanted" hint="Honest match — the client sees a positive version of this (without the gaps below)">
+      {m === undefined ? <p style={muted}>Analysing…</p>
+        : (m === null || (!m.summary && !(m.matches || []).length)) ? <p style={muted}>Needs the intake survey plus indexed session materials (run Harvest, then open the client’s training page once).</p>
+        : (
+          <div style={{ ...card, display: 'grid', gap: 12 }}>
+            {m.summary && <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: '#3a342e' }}>{m.summary}</p>}
+            <div style={{ display: 'grid', gap: 5 }}>
+              {(m.matches || []).map((x, i) => {
+                const [bg, fg] = statusColor(x.status);
+                return (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 8, alignItems: 'start', fontSize: 13 }}>
+                    <span style={{ ...pill, background: bg, color: fg }}>{x.status}</span>
+                    <div><strong>{x.expectation}</strong>
+                      {x.wanted_by ? <span style={muted}> · {x.wanted_by} wanted</span> : null}
+                      {x.covered_in ? ` → ${x.covered_in}` : ''}
+                      {x.feedback && <div style={{ color: '#6b6359', marginTop: 2, fontStyle: 'italic' }}>Feedback: {x.feedback}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {m.gaps?.length > 0 && (
+              <div style={{ borderTop: '1px solid #f0ebe3', paddingTop: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Gaps — wanted, not covered · client does NOT see this
+                </div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, display: 'grid', gap: 3 }}>
+                  {m.gaps.map((g, i) => <li key={i} style={{ fontSize: 13, color: '#5b5249' }}>{g}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
     </Section>
   );
 }

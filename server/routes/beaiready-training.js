@@ -456,7 +456,7 @@ router.get('/curriculum', async (req, res) => {
 // training actually covered (curriculum) and, WHEN a post-training feedback form is
 // connected, how they rated it. Cached under kind='match'; the fingerprint includes
 // the feedback count, so connecting/syncing feedback automatically regenerates it.
-const MATCH_VERSION = 'v1';
+const MATCH_VERSION = 'v2';   // bumped: dual client/admin summaries
 const NEGATIVE_ANSWER = /^(none|nothing|not sure|n\/?a|no|nope|unsure|nothing yet|not really)\.?$/i;
 
 async function generateExpectationsMatch({ wants, automates, curriculum, feedback }) {
@@ -475,17 +475,22 @@ async function generateExpectationsMatch({ wants, automates, curriculum, feedbac
     'You analyse whether an AI training programme delivered what a business\'s staff wanted. You are given what the ' +
     'team wanted to learn/automate (pre-training), what the training covered, ' +
     (hasFeedback ? 'and their post-training feedback. ' : 'but NO post-training feedback yet. ') +
-    'Match each real expectation to what was covered — ground everything in the data, invent nothing. Output ONLY JSON ' +
-    '(no markdown): {"summary": string (2-3 plain sentences: how well the training matched what the team wanted' +
-    (hasFeedback ? ' and how they rated it' : '') + '), "matches": [{"expectation": string, "wanted_by": number, ' +
+    'Match each real expectation to what was covered — ground everything in the data, invent nothing. Produce TWO ' +
+    'summaries: a CLIENT summary (encouraging, written for the client\'s own staff to read — celebrate what they ' +
+    'gained and can now do, warm and positive, do NOT dwell on what was missed) and an ADMIN summary (candid, for ' +
+    'the training consultant\'s eyes only — honestly note what was only partly covered or missed and what to do next). ' +
+    'Output ONLY JSON (no markdown): {"client_summary": string (2-3 sentences), "admin_summary": string (2-3 sentences' +
+    (hasFeedback ? ', reflecting the feedback' : '') + '), "matches": [{"expectation": string, "wanted_by": number, ' +
     '"covered_in": string (the session that covered it, or ""), "status": "delivered"|"partial"|"gap"' +
     (hasFeedback ? ', "feedback": string (what attendees said about it, or "")' : '') + '}], "gaps": [string] (things ' +
-    'they wanted that were not covered)}. 3-7 matches, ordered most-wanted first.';
-  const raw = await callClaude({ system, userContent: parts.join('\n') + '\n\nReturn the JSON now.', maxTokens: 1800, temperature: 0.2 });
+    'they wanted that were not covered — admin-only)}. 3-7 matches, ordered most-wanted first.';
+  const raw = await callClaude({ system, userContent: parts.join('\n') + '\n\nReturn the JSON now.', maxTokens: 1900, temperature: 0.2 });
   const j = parseJsonObject(raw);
   const okStatus = (s) => (['delivered', 'partial', 'gap'].includes(s) ? s : 'partial');
+  const str = (x, n) => (typeof x === 'string' ? x.slice(0, n) : null);
   return {
-    summary: typeof j.summary === 'string' ? j.summary.slice(0, 700) : null,
+    client_summary: str(j.client_summary, 700) || str(j.summary, 700),
+    admin_summary: str(j.admin_summary, 700) || str(j.summary, 700),
     matches: (Array.isArray(j.matches) ? j.matches : []).filter((x) => x && x.expectation).map((x) => ({
       expectation: String(x.expectation).slice(0, 120),
       wanted_by: Number(x.wanted_by) || null,
@@ -531,7 +536,17 @@ router.get('/expectations-match', async (req, res) => {
          ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
         [newsroomId, fingerprint, JSON.stringify(m)]);
     }
-    res.json({ has_feedback: feedback.length > 0, ...m });
+    // The client sees a positive view (no "gaps", no gap-status rows, encouraging
+    // summary). The admin sees the candid version — gaps + the honest summary.
+    const admin = isAdmin(req);
+    const matches = m.matches || [];
+    res.json({
+      has_feedback: feedback.length > 0,
+      is_admin_view: admin,
+      summary: admin ? (m.admin_summary || m.client_summary) : (m.client_summary || m.admin_summary),
+      matches: admin ? matches : matches.filter((x) => x.status !== 'gap'),
+      gaps: admin ? (m.gaps || []) : [],
+    });
   } catch (err) { console.error('[bair-train/expectations-match]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 

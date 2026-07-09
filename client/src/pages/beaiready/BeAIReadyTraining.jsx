@@ -219,7 +219,7 @@ function TrainingRecord() {
           was taught (curriculum), with feedback layered in once it's connected. */}
       {match !== null && (
         <>
-          <div className="hub-section-label">Did the training match what your team wanted?</div>
+          <div className="hub-section-label">What your training delivered</div>
           <section className="hub-band" style={{ marginBottom: 24 }}>
             {match === undefined ? (
               <p style={{ margin: 0, color: '#8a8076' }}>Matching what your team wanted to what was taught…</p>
@@ -264,9 +264,11 @@ function TrainingRecord() {
 
 // Expectations vs delivery: each thing the team wanted, whether the training covered
 // it (and, once feedback is connected, how they rated it), plus uncovered gaps.
+// Client-facing, so framed positively: the client only ever receives delivered /
+// partial rows (gaps are stripped server-side and shown to admins only).
 const MATCH_STATUS = {
   delivered: ['#dcfce7', '#166534', 'Delivered'],
-  partial: ['#fef3c7', '#92400e', 'Partly'],
+  partial: ['#e7eefb', '#2f4b8a', 'Introduced'],
   gap: ['#fde2dd', '#9a3412', 'Gap'],
 };
 function MatchView({ m }) {
@@ -295,19 +297,6 @@ function MatchView({ m }) {
           );
         })}
       </div>
-      {m.gaps?.length > 0 && (
-        <div>
-          <div style={docLabel}>Wanted, but not covered</div>
-          <ul style={{ margin: '5px 0 0', paddingLeft: 18, display: 'grid', gap: 3 }}>
-            {m.gaps.map((g, i) => <li key={i} style={{ fontSize: 13.5, color: '#5b5249' }}>{g}</li>)}
-          </ul>
-        </div>
-      )}
-      {!m.has_feedback && (
-        <div style={{ fontSize: 12.5, color: '#8a8076', borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
-          Connect a post-training feedback survey (Admin → Training → Training feedback) to add how your team rated each of these.
-        </div>
-      )}
     </div>
   );
 }
