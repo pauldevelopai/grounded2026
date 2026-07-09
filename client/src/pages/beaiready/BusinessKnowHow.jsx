@@ -5,13 +5,14 @@
 //   • Ask          — the pooled company AI assistant (/beaiready/workspace/*)
 //   • Your knowledge — documents / website / notes that ground the AI (/beaiready/knowhow/sources*)
 //   • My know-how   — my workflows + the knowledge accrued from my use (/beaiready/knowhow/*)
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch, getActiveNewsroomId } from '../../hooks/useApi.js';
 
 const TABS = [
   { key: 'ask', label: 'Ask' },
   { key: 'knowledge', label: 'Your knowledge' },
+  { key: 'manifest', label: 'Manifest' },
   { key: 'workflows', label: 'My know-how' },
   { key: 'publish', label: 'Publish' },
 ];
@@ -44,9 +45,135 @@ export default function BusinessKnowHow() {
 
       {tab === 'ask' && <AskPanel setErr={setErr} />}
       {tab === 'knowledge' && <KnowledgePanel setErr={setErr} />}
+      {tab === 'manifest' && <ManifestPanel setErr={setErr} />}
       {tab === 'workflows' && <WorkflowsPanel setErr={setErr} />}
       {tab === 'publish' && <PublishPanel setErr={setErr} />}
     </div>
+  );
+}
+
+// ── Manifest — full per-document editorial control (inclusion, publication toggles,
+// sensitivity, metadata, bulk rules, AI Generate, JSON-LD copy) ───────────────────
+const INCLUSIONS = ['include', 'exclude', 'local_only'];
+const SENSITIVITIES = ['none', 'source-protected', 'legal-hold', 'embargoed', 'withdrawn'];
+const TOGGLE_KEYS = ['out_clean_markdown', 'out_json_ld', 'out_mirror_md', 'in_llms_txt', 'in_llms_full'];
+const TOGGLE_LABEL = { out_clean_markdown: 'Clean MD', out_json_ld: 'JSON-LD', out_mirror_md: 'Mirror', in_llms_txt: 'llms.txt', in_llms_full: 'llms-full' };
+
+function ManifestPanel({ setErr }) {
+  const [data, setData] = useState(null);
+  const [gen, setGen] = useState('');
+  const [editId, setEditId] = useState(null);
+  const [edit, setEdit] = useState({});
+  const [rule, setRule] = useState({ field: 'category', op: 'eq', value: '', then_field: 'inclusion', then_value: 'exclude' });
+  const [preview, setPreview] = useState('');
+
+  const load = useCallback(() => { apiFetch('/beaiready/knowhow/manifest').then(setData).catch((e) => setErr(e.message)); }, [setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const patchDoc = async (id, changes) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/manifest/${id}`, { method: 'PUT', body: JSON.stringify(changes) }); load(); } catch (e) { setErr(e.message); } };
+  const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+  const copyLd = async (id) => {
+    try { const r = await apiFetch(`/beaiready/knowhow/jsonld/${id}`); try { await navigator.clipboard.writeText(r.script); alert('JSON-LD copied — paste it into the page <head>.'); } catch { prompt('Copy this JSON-LD:', r.script); } }
+    catch (e) { setErr(e.message); }
+  };
+  const generate = async () => {
+    if (!window.confirm('Use AI to write short summaries for documents that need them?')) return;
+    setGen('Generating…'); setErr('');
+    try { const r = await apiFetch('/beaiready/knowhow/generate', { method: 'POST', body: JSON.stringify({}) }); setGen(`Done — ${r.done} written, ${r.failed} failed.`); load(); }
+    catch (e) { setErr(e.message); setGen(''); }
+  };
+  const startEdit = (s) => { setEditId(s.id); setEdit({ title: s.title || '', category: s.category || '', author: s.author || '', published_at: s.published_at ? String(s.published_at).slice(0, 10) : '', summary: s.summary || '', notes: s.notes || '' }); };
+  const saveEdit = async () => { await patchDoc(editId, edit); setEditId(null); };
+
+  const currentWhen = () => rule.op === 'is_empty' ? { field: rule.field, op: rule.op } : (rule.value ? { field: rule.field, op: rule.op, value: rule.value } : null);
+  const doPreview = async () => { const when = currentWhen(); if (!when) { setPreview(''); return; } try { const r = await apiFetch('/beaiready/knowhow/rules/preview', { method: 'POST', body: JSON.stringify({ when }) }); setPreview(`Would match ${r.matches} document(s).`); } catch { /* ignore */ } };
+  const addRule = async () => {
+    const when = currentWhen(); if (!when) return;
+    let v = rule.then_value; if (v === 'true') v = true; else if (v === 'false') v = false;
+    const nr = { id: 'r' + Date.now(), when, then: { [rule.then_field]: v } };
+    try { await apiFetch('/beaiready/knowhow/rules', { method: 'PUT', body: JSON.stringify({ rules: [...(data.rules || []), nr] }) }); setRule({ ...rule, value: '' }); setPreview(''); load(); } catch (e) { setErr(e.message); }
+  };
+  const delRule = async (id) => { try { await apiFetch('/beaiready/knowhow/rules', { method: 'PUT', body: JSON.stringify({ rules: (data.rules || []).filter((r) => r.id !== id) }) }); load(); } catch (e) { setErr(e.message); } };
+
+  if (!data) return <p style={muted}>Loading…</p>;
+  const c = data.counts || {};
+  return (
+    <>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12.5, color: '#6b6359', marginBottom: 14 }}>
+        {[['Documents', c.total], ['Converted', c.converted], ['Embedded', c.embedded], ['Publishable', c.publishable], ['Excluded', c.excluded], ['Local-only', c.local_only], ['Sensitive', c.sensitive], ['In llms.txt', c.in_llms_txt]].map(([k, v]) => <span key={k}>{k}: <b>{v || 0}</b></span>)}
+      </div>
+
+      <div style={{ ...card, marginBottom: 16 }}>
+        <div style={kicker}>Bulk rules</div>
+        <p style={{ ...muted, marginTop: 0, fontSize: 12.5 }}>Set defaults across many documents at once. A hand edit always wins over a rule.</p>
+        {(data.rules || []).length === 0 ? <p style={{ ...muted, fontSize: 13 }}>No rules yet.</p> : (data.rules || []).map((r) => {
+          const k = Object.keys(r.then || {})[0];
+          return (<div key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, fontSize: 13 }}>
+            <span style={{ flex: 1 }}>When <b>{r.when.field}</b> {String(r.when.op).replace(/_/g, ' ')} {r.when.op !== 'is_empty' && <b>{String(r.when.value)}</b>} → <b>{TOGGLE_LABEL[k] || k}</b> = <b>{String(r.then[k])}</b></span>
+            <button onClick={() => delRule(r.id)} style={tag}>Remove</button>
+          </div>);
+        })}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+          <select value={rule.field} onChange={(e) => setRule({ ...rule, field: e.target.value })} style={sel}>{(data.fields.whenFields || []).map((f) => <option key={f}>{f}</option>)}</select>
+          <select value={rule.op} onChange={(e) => setRule({ ...rule, op: e.target.value })} style={sel}>{(data.fields.ops || []).map((o) => <option key={o}>{o}</option>)}</select>
+          <input value={rule.value} onChange={(e) => setRule({ ...rule, value: e.target.value })} onBlur={doPreview} placeholder="value" style={{ ...input, width: 120 }} />
+          <span style={muted}>→</span>
+          <select value={rule.then_field} onChange={(e) => setRule({ ...rule, then_field: e.target.value, then_value: e.target.value === 'inclusion' ? 'exclude' : 'true' })} style={sel}><option value="inclusion">inclusion</option>{TOGGLE_KEYS.map((t) => <option key={t} value={t}>{TOGGLE_LABEL[t]}</option>)}</select>
+          <select value={String(rule.then_value)} onChange={(e) => setRule({ ...rule, then_value: e.target.value })} style={sel}>{(rule.then_field === 'inclusion' ? INCLUSIONS : ['true', 'false']).map((v) => <option key={v}>{v}</option>)}</select>
+          <button onClick={addRule} style={btn}>Add rule</button>
+        </div>
+        {preview && <p style={{ ...muted, fontSize: 12, marginTop: 6 }}>{preview}</p>}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Documents</div>
+        <button onClick={generate} style={tag} title="AI-write summaries that feed llms.txt + JSON-LD">Generate summaries</button>
+        {gen && <span style={{ ...muted, fontSize: 12 }}>{gen}</span>}
+      </div>
+
+      {data.sources.length === 0 ? <p style={muted}>Nothing added yet — add sources in “Your knowledge”.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <thead><tr style={{ textAlign: 'left', color: '#8a8076' }}>
+              <th style={th}>Document</th><th style={th}>Inclusion</th>{TOGGLE_KEYS.map((t) => <th key={t} style={{ ...th, textAlign: 'center' }}>{TOGGLE_LABEL[t]}</th>)}<th style={th}>Sensitivity</th><th style={th} />
+            </tr></thead>
+            <tbody>
+              {data.sources.map((s) => {
+                const eff = s._effective || {};
+                const ruled = (k) => eff[k] !== undefined && eff[k] !== s[k];
+                return (
+                  <Fragment key={s.id}>
+                    <tr style={{ borderTop: '1px solid #eee5da' }}>
+                      <td style={td}><div style={{ fontWeight: 600, cursor: 'pointer' }} onClick={() => startEdit(s)} title="Edit details">{s.title || '(untitled)'}</div>
+                        <div style={{ ...muted, fontSize: 11 }}>{s.kind}{s.category ? ` · ${s.category}` : ''}{s.chunks ? ` · ${s.chunks} passages` : ''}{s.summary ? ' · summarised' : ''}</div></td>
+                      <td style={td}><select value={s.inclusion} onChange={(e) => patchDoc(s.id, { inclusion: e.target.value })} style={{ ...sel, ...(ruled('inclusion') ? { borderColor: '#c9b27a' } : {}) }}>{INCLUSIONS.map((v) => <option key={v}>{v}</option>)}</select></td>
+                      {TOGGLE_KEYS.map((t) => <td key={t} style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!s[t]} onChange={(e) => patchDoc(s.id, { [t]: e.target.checked })} title={ruled(t) ? `effective: ${eff[t]} (by rule)` : ''} style={ruled(t) ? { outline: '2px solid #c9b27a' } : {}} /></td>)}
+                      <td style={td}><select value={s.sensitivity} onChange={(e) => patchDoc(s.id, { sensitivity: e.target.value })} style={sel}>{SENSITIVITIES.map((v) => <option key={v}>{v}</option>)}</select></td>
+                      <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => copyLd(s.id)} style={tag} title="Copy JSON-LD snippet">&lt;ld&gt;</button> <button onClick={() => del(s.id)} style={{ ...tag, color: '#b91c1c' }}>✕</button></td>
+                    </tr>
+                    {editId === s.id && (
+                      <tr style={{ background: '#fbf7f4' }}>
+                        <td colSpan={9} style={{ padding: 12 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} placeholder="Title" style={input} />
+                            <input value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })} placeholder="Category (groups llms.txt)" style={input} />
+                            <input value={edit.author} onChange={(e) => setEdit({ ...edit, author: e.target.value })} placeholder="Author" style={input} />
+                            <input value={edit.published_at} onChange={(e) => setEdit({ ...edit, published_at: e.target.value })} placeholder="Published (YYYY-MM-DD)" style={input} />
+                          </div>
+                          <textarea value={edit.summary} onChange={(e) => setEdit({ ...edit, summary: e.target.value })} placeholder="Summary (feeds llms.txt + JSON-LD)" style={{ ...input, minHeight: 50, marginTop: 8 }} />
+                          <textarea value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} placeholder="Private notes" style={{ ...input, minHeight: 40, marginTop: 8 }} />
+                          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}><button onClick={saveEdit} style={btn}>Save</button><button onClick={() => setEditId(null)} style={tag}>Cancel</button></div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -55,6 +182,7 @@ const EXPORT_CRAWLERS = ['ClaudeBot', 'GPTBot', 'PerplexityBot', 'CCBot', 'Googl
 function PublishPanel({ setErr }) {
   const [settings, setSettings] = useState(null);
   const [publishable, setPublishable] = useState(0);
+  const [prev, setPrev] = useState(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState('');
 
@@ -62,6 +190,7 @@ function PublishPanel({ setErr }) {
     apiFetch('/beaiready/knowhow/settings')
       .then((d) => { setSettings(d.settings || { org_name: '', site_url: '', crawlers: {} }); setPublishable(d.publishable || 0); })
       .catch((e) => setErr(e.message));
+    apiFetch('/beaiready/knowhow/bundle/preview').then(setPrev).catch(() => {});
   }, [setErr]);
   useEffect(() => { load(); }, [load]);
 
@@ -87,6 +216,8 @@ function PublishPanel({ setErr }) {
         <div style={kicker}>Site details</div>
         <input value={settings.org_name || ''} onChange={(e) => setField('org_name', e.target.value)} placeholder="Business name" style={input} />
         <input value={settings.site_url || ''} onChange={(e) => setField('site_url', e.target.value)} placeholder="https://your-business.co.za" style={input} />
+        <input value={settings.llms_summary || ''} onChange={(e) => setField('llms_summary', e.target.value)} placeholder="One-line description (llms.txt header)" style={input} />
+        <input value={settings.mirror_base || ''} onChange={(e) => setField('mirror_base', e.target.value)} placeholder="Mirror base path (default /)" style={input} />
       </div>
 
       <div style={{ ...card, marginBottom: 16 }}>
@@ -112,10 +243,16 @@ function PublishPanel({ setErr }) {
         </a>
         {saved && <span style={{ ...muted, color: '#166534' }}>{saved}</span>}
       </div>
-      <p style={{ ...muted, fontSize: 12, marginTop: 8 }}>
-        {publishable ? `${publishable} item(s) marked Publish will be in the bundle (llms.txt, robots.txt, JSON-LD, markdown mirrors).`
-          : 'Nothing marked Publish yet — go to Your knowledge and hit Publish on the sources you want AI to cite.'}
-      </p>
+      {prev ? (
+        <p style={{ ...muted, fontSize: 12, marginTop: 8 }}>
+          Bundle will contain: <b>{prev.publishable || 0}</b> publishable · <b>{prev.mirror || 0}</b> mirrors · <b>{prev.jsonld || 0}</b> JSON-LD · <b>{prev.llms_txt || 0}</b> in llms.txt · <b>{prev.llms_full || 0}</b> in llms-full.
+          {' '}Set which outputs each document uses in the <b>Manifest</b> tab.
+        </p>
+      ) : (
+        <p style={{ ...muted, fontSize: 12, marginTop: 8 }}>
+          {publishable ? `${publishable} publishable item(s).` : 'Nothing publishable yet — mark sources Publish (or set outputs in Manifest).'}
+        </p>
+      )}
     </>
   );
 }
@@ -507,3 +644,6 @@ const kicker = { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', lett
 const muted = { color: '#8a8076', fontSize: 13.5 };
 const tabBtn = { padding: '9px 16px', background: 'none', border: 'none', borderBottom: '2px solid transparent', fontSize: 14, fontWeight: 600, color: '#8a8076', cursor: 'pointer', marginBottom: -1 };
 const tabActive = { color: '#1c1b1a', borderBottomColor: '#c75b39' };
+const sel = { padding: '5px 6px', border: '1px solid #e4dcd2', borderRadius: 6, fontSize: 12.5, fontFamily: 'inherit', background: '#fff' };
+const th = { padding: '6px 8px', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.03, fontWeight: 600, whiteSpace: 'nowrap' };
+const td = { padding: '6px 8px', verticalAlign: 'top' };

@@ -16,6 +16,8 @@ import { encryptFor, decryptFor } from '../services/crypto.js';
 import { indexSource, searchCompanyChunks, sourceChunkStats } from '../services/company-knowledge-index.js';
 import { ingestUrls, ingestSitemap, ingestDriveFolder, driveAvailable } from '../services/company-knowledge-ingest.js';
 import { getSettings, saveSettings, buildBundle, bundleStats } from '../services/company-knowledge-bundle.js';
+import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
+import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 
 const router = Router();
 
@@ -110,16 +112,18 @@ router.get('/sources', async (req, res) => {
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.json([]);
     const [{ rows }, stats] = await Promise.all([
       pool.query(
-        `SELECT id, kind, title, url, file_id, extracted_text, included, sensitive, publish, created_at
+        `SELECT id, kind, title, url, file_id, extracted_text, inclusion, sensitivity, created_at,
+                out_clean_markdown, out_json_ld, out_mirror_md, in_llms_txt, in_llms_full
            FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]),
       sourceChunkStats(newsroomId),
     ]);
     res.json(rows.map((r) => {
       const text = decryptFor(newsroomId, r.extracted_text) || '';
       const st = stats[r.id] || { chunks: 0, embedded: 0 };
+      const publish = r.out_clean_markdown && r.out_json_ld && r.out_mirror_md && r.in_llms_txt && r.in_llms_full;
       return { id: r.id, kind: r.kind, title: r.title, url: r.url, file_id: r.file_id, created_at: r.created_at,
         snippet: text.slice(0, 220), has_text: text.length > 0,
-        included: r.included, sensitive: r.sensitive, publish: r.publish, chunks: st.chunks, embedded: st.embedded };
+        included: r.inclusion !== 'exclude', sensitive: r.sensitivity !== 'none', publish, chunks: st.chunks, embedded: st.embedded };
     }));
   } catch (err) { console.error('[beaiready-knowhow/sources:get]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -134,20 +138,25 @@ router.get('/sources/search', async (req, res) => {
   } catch (err) { console.error('[beaiready-knowhow/sources:search]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
-// Per-document controls: include/exclude from the AI, flag sensitive.
+// "Your knowledge" quick controls — map the simple Include / Sensitive / Publish
+// toggles onto the manifest columns (inclusion / sensitivity / the five out_* toggles)
+// and mark them as manual so bulk rules never overwrite a hand edit.
 router.patch('/sources/:id', async (req, res) => {
   try {
     const { newsroomId } = await ctx(req);
-    const fields = [], vals = [];
-    if (typeof req.body?.included === 'boolean') { fields.push(`included = $${fields.length + 1}`); vals.push(req.body.included); }
-    if (typeof req.body?.sensitive === 'boolean') { fields.push(`sensitive = $${fields.length + 1}`); vals.push(req.body.sensitive); }
-    if (typeof req.body?.publish === 'boolean') { fields.push(`publish = $${fields.length + 1}`); vals.push(req.body.publish); }
-    if (!fields.length) return res.status(400).json({ message: 'Nothing to update.' });
+    const b = req.body || {};
+    const sets = [], vals = [], touched = [];
+    const OUTS = ['out_clean_markdown', 'out_json_ld', 'out_mirror_md', 'in_llms_txt', 'in_llms_full'];
+    if (typeof b.included === 'boolean') { sets.push(`inclusion = $${vals.length + 1}`); vals.push(b.included ? 'include' : 'exclude'); touched.push('inclusion'); }
+    if (typeof b.sensitive === 'boolean') { sets.push(`sensitivity = $${vals.length + 1}`); vals.push(b.sensitive ? 'source-protected' : 'none'); }
+    if (typeof b.publish === 'boolean') { for (const c of OUTS) { sets.push(`${c} = $${vals.length + 1}`); vals.push(b.publish); touched.push(c); } }
+    if (!sets.length) return res.status(400).json({ message: 'Nothing to update.' });
+    if (touched.length) { sets.push(`manual_overrides = (SELECT COALESCE(jsonb_agg(DISTINCT e), '[]'::jsonb) FROM jsonb_array_elements_text(manual_overrides || $${vals.length + 1}::jsonb) e)`); vals.push(JSON.stringify(touched)); }
     vals.push(req.params.id, newsroomId);
     const { rows } = await pool.query(
-      `UPDATE beaiready_company_sources SET ${fields.join(', ')}
+      `UPDATE beaiready_company_sources SET ${sets.join(', ')}
         WHERE id = $${vals.length - 1} AND newsroom_id = $${vals.length}
-        RETURNING id, included, sensitive, publish`, vals);
+        RETURNING id, inclusion, sensitivity`, vals);
     if (!rows.length) return res.status(404).json({ message: 'Not found' });
     res.json(rows[0]);
   } catch (err) { console.error('[beaiready-knowhow/sources:patch]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -302,6 +311,116 @@ router.get('/bundle', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
   } catch (err) { console.error('[beaiready-knowhow/bundle]', err); res.status(500).json({ message: 'Could not build the bundle.' }); }
+});
+
+// ── Manifest: the full per-document editorial view (aiready parity) ──
+function pickEffective(a) {
+  return { inclusion: a.inclusion, out_clean_markdown: a.out_clean_markdown, out_json_ld: a.out_json_ld,
+    out_mirror_md: a.out_mirror_md, in_llms_txt: a.in_llms_txt, in_llms_full: a.in_llms_full };
+}
+
+router.get('/manifest', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.json({ sources: [], rules: [], counts: {}, fields: {} });
+    const [{ rows }, stats, settings] = await Promise.all([
+      pool.query(
+        `SELECT id, kind, title, url, author, category, published_at, summary, slug, notes,
+                inclusion, sensitivity, out_clean_markdown, out_json_ld, out_mirror_md, in_llms_txt, in_llms_full, manual_overrides
+           FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]),
+      sourceChunkStats(newsroomId),
+      getSettings(newsroomId),
+    ]);
+    const rules = settings.rules || [];
+    const effective = applyRulesAll(rows, rules);
+    const sources = rows.map((r, i) => ({ ...r, chunks: stats[r.id]?.chunks || 0, embedded: stats[r.id]?.embedded || 0, _effective: pickEffective(effective[i]) }));
+    const count = (p) => effective.filter(p).length;
+    const counts = {
+      total: rows.length,
+      converted: rows.filter((r) => (stats[r.id]?.chunks || 0) > 0).length,
+      embedded: rows.filter((r) => (stats[r.id]?.embedded || 0) > 0).length,
+      publishable: count(isPublishable),
+      excluded: count((a) => a.inclusion === 'exclude'),
+      local_only: count((a) => a.inclusion === 'local_only'),
+      sensitive: rows.filter((r) => r.sensitivity !== 'none').length,
+      in_llms_txt: count((a) => isPublishable(a) && a.in_llms_txt),
+    };
+    res.json({ sources, rules, counts, fields: {
+      inclusion: ['include', 'exclude', 'local_only'],
+      sensitivity: ['none', 'source-protected', 'legal-hold', 'embargoed', 'withdrawn'],
+      toggles: RULE_TARGET_FIELDS.filter((f) => f !== 'inclusion'),
+      whenFields: RULE_WHEN_FIELDS, ops: OPS } });
+  } catch (err) { console.error('[beaiready-knowhow/manifest:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/manifest/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    const EDITABLE = ['inclusion', 'sensitivity', 'out_clean_markdown', 'out_json_ld', 'out_mirror_md', 'in_llms_txt', 'in_llms_full', 'title', 'author', 'category', 'published_at', 'summary', 'slug', 'notes'];
+    const CONTROL = new Set(['inclusion', 'out_clean_markdown', 'out_json_ld', 'out_mirror_md', 'in_llms_txt', 'in_llms_full']);
+    const b = req.body || {};
+    const sets = [], vals = [], touched = [];
+    for (const k of EDITABLE) {
+      if (!(k in b)) continue;
+      sets.push(`${k} = $${vals.length + 1}`); vals.push(b[k] === '' ? null : b[k]);
+      if (CONTROL.has(k)) touched.push(k);
+    }
+    if (!sets.length) return res.status(400).json({ message: 'Nothing to update.' });
+    if (touched.length) { sets.push(`manual_overrides = (SELECT COALESCE(jsonb_agg(DISTINCT e), '[]'::jsonb) FROM jsonb_array_elements_text(manual_overrides || $${vals.length + 1}::jsonb) e)`); vals.push(JSON.stringify(touched)); }
+    vals.push(req.params.id, newsroomId);
+    const { rows } = await pool.query(`UPDATE beaiready_company_sources SET ${sets.join(', ')} WHERE id = $${vals.length - 1} AND newsroom_id = $${vals.length} RETURNING id`, vals);
+    if (!rows.length) return res.status(404).json({ message: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[beaiready-knowhow/manifest:put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Bulk rules
+router.get('/rules', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ rules: (await getSettings(newsroomId)).rules || [] }); }
+  catch (err) { console.error('[beaiready-knowhow/rules:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.put('/rules', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const rules = Array.isArray(req.body?.rules) ? req.body.rules : [];
+    await saveSettings(newsroomId, { rules });
+    res.json({ rules });
+  } catch (err) { console.error('[beaiready-knowhow/rules:put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.post('/rules/preview', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    const { rows } = await pool.query('SELECT title, author, category, kind, published_at, inclusion FROM beaiready_company_sources WHERE newsroom_id = $1', [newsroomId]);
+    res.json({ matches: countMatches(rows, req.body?.when) });
+  } catch (err) { console.error('[beaiready-knowhow/rules:preview]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// AI: write summaries (feed llms.txt + JSON-LD descriptions)
+router.post('/generate', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    res.json(await generateSummaries(newsroomId, { force: !!req.body?.force }));
+  } catch (err) { console.error('[beaiready-knowhow/generate]', err); res.status(500).json({ message: err.message || 'Generate failed' }); }
+});
+
+// One document's schema.org JSON-LD (copy into a page's <head>)
+router.get('/jsonld/:id', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    const { rows: [r] } = await pool.query(
+      'SELECT id, title, url, author, category, published_at, summary, slug FROM beaiready_company_sources WHERE id = $1 AND newsroom_id = $2', [req.params.id, newsroomId]);
+    if (!r) return res.status(404).json({ message: 'Not found' });
+    const obj = buildJsonLd(r, await getSettings(newsroomId));
+    res.json({ jsonld: obj, script: jsonLdScript(obj) });
+  } catch (err) { console.error('[beaiready-knowhow/jsonld]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// What the export bundle will contain
+router.get('/bundle/preview', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json(await bundleStats(newsroomId)); }
+  catch (err) { console.error('[beaiready-knowhow/bundle:preview]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

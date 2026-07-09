@@ -1,12 +1,15 @@
-// company-knowledge-bundle.js — KnowHow's OUTWARD export. Assembles a deploy-ready
-// zip the business drops onto its OWN public website: llms.txt, llms-full.txt,
+// company-knowledge-bundle.js — KnowHow's OUTWARD export. Assembles the deploy-ready
+// zip a business drops onto its OWN public website: llms.txt, llms-full.txt,
 // robots.txt, markdown mirrors, and schema.org JSON-LD — built in memory with jszip.
-// Only sources the business explicitly marked PUBLISH (and not sensitive) are included;
-// their encrypted text is decrypted in memory only. Ported from node-aiready
-// lib/bundle.js + jsonld.js, adapted to beaiready_company_sources.
+// Honours the full manifest: bulk rules → effective toggles, per-document output
+// toggles (out_*), and the publish gate (inclusion=include AND sensitivity=none).
+// Encrypted source text is decrypted in memory only. Ported from node-aiready
+// lib/bundle.js, adapted to beaiready_company_sources.
 import JSZip from 'jszip';
 import pool from '../db/pool.js';
 import { decryptFor } from './crypto.js';
+import { applyRules, isPublishable } from './company-knowledge-rules.js';
+import { buildJsonLd } from './company-knowledge-generate.js';
 
 export const CRAWLERS = ['ClaudeBot', 'GPTBot', 'PerplexityBot', 'CCBot', 'Google-Extended'];
 
@@ -20,60 +23,79 @@ function yaml(s) { const v = String(s ?? ''); return /[:#]/.test(v) ? JSON.strin
 
 export async function getSettings(newsroomId) {
   const { rows: [s] } = await pool.query(
-    'SELECT org_name, site_url, crawlers FROM beaiready_knowhow_settings WHERE newsroom_id = $1', [newsroomId]);
+    'SELECT org_name, site_url, crawlers, llms_summary, mirror_base, rules FROM beaiready_knowhow_settings WHERE newsroom_id = $1', [newsroomId]);
   const { rows: [nr] } = await pool.query('SELECT name FROM newsrooms WHERE id = $1', [newsroomId]);
   return {
     org_name: s?.org_name || nr?.name || 'Our business',
     site_url: s?.site_url || '',
+    llms_summary: s?.llms_summary || '',
+    mirror_base: s?.mirror_base || '/',
     crawlers: { ...Object.fromEntries([...CRAWLERS, '*'].map((c) => [c, 'allow'])), ...(s?.crawlers || {}) },
+    rules: s?.rules || [],
   };
 }
 
-export async function saveSettings(newsroomId, { org_name, site_url, crawlers }) {
-  const { rows: [s] } = await pool.query(
-    `INSERT INTO beaiready_knowhow_settings (newsroom_id, org_name, site_url, crawlers, updated_at)
-     VALUES ($1,$2,$3,$4,NOW())
+// Merge-upsert: only the provided keys change (so /settings and /rules don't clobber).
+export async function saveSettings(newsroomId, patch = {}) {
+  const cur = await getSettings(newsroomId);
+  const next = { ...cur, ...patch };
+  await pool.query(
+    `INSERT INTO beaiready_knowhow_settings (newsroom_id, org_name, site_url, crawlers, llms_summary, mirror_base, rules, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
      ON CONFLICT (newsroom_id) DO UPDATE SET org_name = EXCLUDED.org_name, site_url = EXCLUDED.site_url,
-       crawlers = EXCLUDED.crawlers, updated_at = NOW()
-     RETURNING org_name, site_url, crawlers`,
-    [newsroomId, org_name || null, site_url || null, JSON.stringify(crawlers || {})]);
-  return s;
+       crawlers = EXCLUDED.crawlers, llms_summary = EXCLUDED.llms_summary, mirror_base = EXCLUDED.mirror_base,
+       rules = EXCLUDED.rules, updated_at = NOW()`,
+    [newsroomId, next.org_name || null, next.site_url || null, JSON.stringify(next.crawlers || {}),
+     next.llms_summary || null, next.mirror_base || null, JSON.stringify(next.rules || [])]);
+  return getSettings(newsroomId);
 }
 
-// Published, non-sensitive sources with decrypted text + a stable, collision-free slug.
-async function publishableSources(newsroomId) {
+// Publishable items (rules applied, isPublishable gate), decrypted, with a stable slug.
+async function publishableItems(newsroomId, settings) {
+  const rules = settings.rules || [];
   const { rows } = await pool.query(
-    `SELECT id, kind, title, url, summary, extracted_text FROM beaiready_company_sources
-      WHERE newsroom_id = $1 AND publish = true AND sensitive = false
-        AND extracted_text IS NOT NULL AND length(extracted_text) > 0
-      ORDER BY created_at DESC`, [newsroomId]);
+    `SELECT id, kind, title, url, author, category, published_at, summary, slug, inclusion, sensitivity,
+            out_clean_markdown, out_json_ld, out_mirror_md, in_llms_txt, in_llms_full, manual_overrides, extracted_text
+       FROM beaiready_company_sources WHERE newsroom_id = $1 ORDER BY created_at DESC`, [newsroomId]);
   const used = new Set();
   const out = [];
   for (const r of rows) {
+    const eff = applyRules(r, rules);
+    if (!isPublishable(eff)) continue;
     const text = decryptFor(newsroomId, r.extracted_text) || '';
     if (!text) continue;
-    let slug = slugify(r.title || r.url || 'page'); const base = slug; let i = 2;
+    let slug = r.slug || slugify(r.title || r.url || 'page'); const base = slug; let i = 2;
     while (used.has(slug)) slug = `${base}-${i++}`;
     used.add(slug);
-    out.push({ ...r, text, slug, summary: r.summary || oneLine(text).slice(0, 200) });
+    out.push({ ...eff, text, slug, summary: r.summary || oneLine(text).slice(0, 200) });
   }
   return out;
 }
 
 export async function bundleStats(newsroomId) {
-  return { publishable: (await publishableSources(newsroomId)).length };
+  const settings = await getSettings(newsroomId);
+  const items = await publishableItems(newsroomId, settings);
+  return {
+    publishable: items.length,
+    mirror: items.filter((a) => a.out_mirror_md).length,
+    jsonld: items.filter((a) => a.out_json_ld).length,
+    llms_txt: items.filter((a) => a.in_llms_txt).length,
+    llms_full: items.filter((a) => a.in_llms_full).length,
+  };
 }
 
 export async function buildBundle(newsroomId) {
   const settings = await getSettings(newsroomId);
-  const items = await publishableSources(newsroomId);
+  const items = await publishableItems(newsroomId, settings);
   const zip = new JSZip();
   for (const a of items) {
-    zip.file(`mirror/${a.slug}.md`, mirrorFile(a));
-    zip.file(`jsonld/${a.slug}.json`, JSON.stringify(jsonLd(a, settings), null, 2));
+    if (a.out_mirror_md) zip.file(`mirror/${a.slug}.md`, mirrorFile(a));
+    if (a.out_json_ld) zip.file(`jsonld/${a.slug}.json`, JSON.stringify(buildJsonLd(a, settings), null, 2));
   }
-  zip.file('llms.txt', buildLlmsTxt(settings, items));
-  zip.file('llms-full.txt', buildLlmsFull(settings, items));
+  const llmsList = items.filter((a) => a.in_llms_txt);
+  const llmsFull = items.filter((a) => a.in_llms_full);
+  zip.file('llms.txt', buildLlmsTxt(settings, llmsList));
+  zip.file('llms-full.txt', buildLlmsFull(settings, llmsFull));
   zip.file('robots.txt', buildRobots(settings));
   zip.file('README.md', buildReadme(settings, items.length));
   const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
@@ -83,33 +105,32 @@ export async function buildBundle(newsroomId) {
 function mirrorFile(a) {
   const fm = ['---', `title: ${yaml(a.title || a.slug)}`];
   if (a.url) fm.push(`source_url: ${yaml(a.url)}`);
+  if (a.author) fm.push(`author: ${yaml(a.author)}`);
+  if (a.category) fm.push(`section: ${yaml(a.category)}`);
   fm.push('---', '');
   const heading = /^\s*#\s+\S/.test(a.text) ? '' : `# ${a.title || a.slug}\n\n`;
   return fm.join('\n') + heading + a.text + '\n';
 }
 
-function jsonLd(a, settings) {
-  return {
-    '@context': 'https://schema.org', '@type': 'Article',
-    headline: a.title || a.slug,
-    ...(a.url ? { url: a.url, mainEntityOfPage: a.url } : {}),
-    description: a.summary,
-    articleBody: oneLine(a.text).slice(0, 5000),
-    publisher: { '@type': 'Organization', name: settings.org_name, ...(settings.site_url ? { url: settings.site_url } : {}) },
-  };
-}
-
 function buildLlmsTxt(settings, items) {
-  const out = [`# ${settings.org_name}`, '', '## Knowledge', ''];
-  for (const a of items) {
-    const link = a.url || `${(settings.site_url || '').replace(/\/$/, '')}/mirror/${a.slug}.md`;
-    out.push(`- [${a.title || a.slug}](${link})${a.summary ? `: ${oneLine(a.summary)}` : ''}`);
+  const out = [`# ${settings.org_name}`, ''];
+  if (settings.llms_summary) out.push(`> ${oneLine(settings.llms_summary)}`, '');
+  const groups = new Map();
+  for (const a of items) { const g = a.category || 'Knowledge'; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(a); }
+  for (const [g, list] of groups) {
+    out.push(`## ${g}`, '');
+    for (const a of list) {
+      const link = a.url || `${(settings.mirror_base || '/').replace(/\/$/, '')}/mirror/${a.slug}.md`;
+      out.push(`- [${a.title || a.slug}](${link})${a.summary ? `: ${oneLine(a.summary)}` : ''}`);
+    }
+    out.push('');
   }
   return out.join('\n').trim() + '\n';
 }
 
 function buildLlmsFull(settings, items) {
   const out = [`# ${settings.org_name} — full text`, ''];
+  if (settings.llms_summary) out.push(`> ${oneLine(settings.llms_summary)}`, '');
   for (const a of items) {
     out.push('---', '', `# ${a.title || a.slug}`);
     if (a.url) out.push(`Source: ${a.url}`);
@@ -140,10 +161,10 @@ cite your business correctly. Nothing here is hosted for you.
 | \`llms.txt\` | Your site root (\`/llms.txt\`) — an index of what you've published. |
 | \`llms-full.txt\` | Your site root — the full text for AI to ingest. |
 | \`robots.txt\` | Your site root (merge with any existing one) — per-AI-crawler policy. |
-| \`mirror/<slug>.md\` | Serve at a public path; match it to your site URL. |
+| \`mirror/<slug>.md\` | Serve at your mirror base path (\`${settings.mirror_base || '/'}\`). |
 | \`jsonld/<slug>.json\` | Inject into each page's \`<head>\` inside \`<script type="application/ld+json">\`. |
 
-Included: ${count} published item(s). Anything not marked **Publish**, or marked
-**Sensitive**, is deliberately left out. Re-export any time you change what's published.
+Included: ${count} published item(s). Anything set to **exclude**/**local-only**, marked
+**sensitive**, or with a publication toggle off is left out. Re-export any time.
 `;
 }

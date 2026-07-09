@@ -53,7 +53,7 @@ export async function retrieveCompanyChunks(newsroomId, question, { limit = 12 }
          FROM beaiready_source_chunks c
          JOIN beaiready_company_sources s ON s.id = c.source_id
         WHERE c.newsroom_id = $1 AND c.embedding IS NOT NULL
-          AND s.included = true AND s.sensitive = false
+          AND s.inclusion <> 'exclude' AND s.sensitivity <> 'withdrawn'
         ORDER BY c.embedding <=> $2::vector
         LIMIT $3`, [newsroomId, toPgVector(emb), limit]).catch(() => ({ rows: [] }));
     if (rows.length) {
@@ -69,7 +69,7 @@ export async function retrieveCompanyChunks(newsroomId, question, { limit = 12 }
 async function sourceLevelFallback(newsroomId, limit) {
   const { rows } = await pool.query(
     `SELECT kind, title, extracted_text FROM beaiready_company_sources
-      WHERE newsroom_id = $1 AND included = true AND sensitive = false
+      WHERE newsroom_id = $1 AND inclusion <> 'exclude' AND sensitivity <> 'withdrawn'
         AND extracted_text IS NOT NULL AND length(extracted_text) > 0
       ORDER BY created_at DESC LIMIT $2`, [newsroomId, limit]).catch(() => ({ rows: [] }));
   const out = [];
@@ -92,7 +92,7 @@ export async function searchCompanyChunks(newsroomId, q, { limit = 8 } = {}) {
        FROM beaiready_source_chunks c
        JOIN beaiready_company_sources s ON s.id = c.source_id
       WHERE c.newsroom_id = $1 AND c.embedding IS NOT NULL
-        AND s.included = true AND s.sensitive = false
+        AND s.inclusion <> 'exclude' AND s.sensitivity <> 'withdrawn'
       ORDER BY c.source_id, c.embedding <=> $2::vector`, [newsroomId, toPgVector(emb)]).catch(() => ({ rows: [] }));
   return rows
     .map((r) => ({ source_id: r.source_id, kind: r.kind, title: r.title, score: Number(r.score) || 0, snippet: (decryptFor(newsroomId, r.text_chunk) || '').slice(0, 300) }))
