@@ -71,12 +71,6 @@ export default function BeAIReadyHome() {
         &nbsp;<a href="mailto:paul@developai.co.za">paul@developai.co.za</a>
         &nbsp;· <a href="https://developai.co.za" target="_blank" rel="noreferrer">developai.co.za</a>
       </p>
-
-      <p style={{ fontSize: 11.5, color: '#a89e92', marginTop: 18 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT.live }} /> Live</span>
-        &nbsp;&nbsp;<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT.partial }} /> In progress</span>
-        &nbsp;&nbsp;<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT.building }} /> In development</span>
-      </p>
     </div>
   );
 }
