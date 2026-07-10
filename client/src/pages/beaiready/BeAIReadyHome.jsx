@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
-import { VISIBLE_PILLARS, STATUS_LABEL, SCOPING_WHATSAPP } from './pillars.js';
+import { VISIBLE_PILLARS, STATUS_LABEL } from './pillars.js';
 
 const STATUS_DOT = { live: '#16a34a', partial: '#d97706', building: '#94a3b8' };
 
@@ -29,10 +29,10 @@ export default function BeAIReadyHome() {
           and legal, put the right AI tools in their hands, and prove the results. A living dashboard, included
           for life.
         </p>
-        <div className="hub-hero-cta">
-          <a href={SCOPING_WHATSAPP} target="_blank" rel="noreferrer" className="hub-btn hub-btn-solid">
-            Book a scoping call
-          </a>
+        <div className="hub-hero-cta" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <Link to="/training" className="hub-btn hub-btn-solid">Your Trainings</Link>
+          <Link to="/feature/prompt-library" className="hub-btn hub-btn-solid">Your Prompts</Link>
+          <Link to="/nodes" className="hub-btn hub-btn-solid">Your Tools</Link>
         </div>
       </section>
 

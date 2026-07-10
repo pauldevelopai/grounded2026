@@ -13,6 +13,7 @@ import { getGovernanceToday, getGovernanceTodayHistory } from '../services/gover
 import { getRegulationToday, getRegulationTodayHistory } from '../services/regulation-today.js';
 import { getAINewsToday, getAINewsTodayHistory } from '../services/ai-news-today.js';
 import { briefingImageDir, EXT_TYPE } from '../services/briefing-image.js';
+import { listStorefrontNodes } from '../services/node-catalogue.js';
 import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
@@ -1259,66 +1260,14 @@ router.get('/toolkit', async (req, res) => {
   }
 });
 
-// ── BE AI READY — product-filtered Nodes registry ───────────────────────────
-// The BAIR storefront (beaiready host) has no /nodes/ route of its own, so it can't
-// read the static front-door registry same-origin. This reads nodes.json (the box
-// copy, the local sibling repo, or the live URL as a fallback) and returns only the
-// Nodes tagged for the 'bair' product — keeping nodes.json the single source of
-// truth (one Node, two storefronts; never duplicated).
-let _bairNodesCache = { at: 0, data: null };
-
-// Nodes kept out of the storefront panels (registry stays the single source of
-// truth; these are just not surfaced here). Paul's call, 2026-07-08.
-// 'aiready' is folded into KnowHow (Knowledge) — hidden here so it isn't a separate
-// BE AI READY tool; it stays on the Grounded front door for newsrooms.
-const HIDDEN_STOREFRONT_SLUGS = new Set(['podcasting', 'progress', 'salesrep', 'aiready']);
-
-async function loadNodesRegistry() {
-  const candidates = [
-    process.env.NODES_REGISTRY_FILE,
-    '/var/www/nodes/nodes.json',                              // the box
-    path.join(__dirname, '../../../Nodes/nodes/nodes.json'),  // local dev sibling repo
-  ].filter(Boolean);
-  for (const f of candidates) {
-    try { return JSON.parse(await readFile(f, 'utf8')); } catch { /* try next */ }
-  }
-  const url = process.env.NODES_REGISTRY_URL || 'https://grounded.developai.co.za/nodes/nodes.json';
-  const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
-  if (!r.ok) throw new Error(`registry ${r.status}`);
-  return r.json();
-}
-
+// ── BE AI READY — Nodes storefront (public browse; everyone) ─────────────────
+// The full storefront list (shaped from nodes.json). A signed-in client's own subset
+// is served separately by /api/beaiready/my-nodes. One registry, never duplicated.
 router.get('/bair-nodes', async (req, res) => {
   try {
-    if (!_bairNodesCache.data || Date.now() - _bairNodesCache.at > 5 * 60 * 1000) {
-      const reg = await loadNodesRegistry();
-      const nodes = ((reg && reg.nodes) || [])
-        // Show ALL Nodes in the storefront — the bair-tagged ones AND the GROUNDED ones
-        // (Paul's call, 2026-07-07). Any registry entry with at least one product tag.
-        .filter((n) => Array.isArray(n.products) && n.products.length > 0)
-        .filter((n) => !HIDDEN_STOREFRONT_SLUGS.has(n.slug))
-        .map((n) => {
-          // A 'builtin' Node lives inside the tracker app (e.g. LeadFinder) — it
-          // opens at its in-app href, not a hosted /nodes/<slug>/app/ process, and
-          // has no download link.
-          const builtin = n.kind === 'builtin';
-          return {
-            slug: n.slug, name: n.name, desc: n.desc || '', status: n.status || 'soon',
-            hosted: !!n.hosted, builtin,
-            // Every hosted Node's /nodes/<slug>/app/* route is served on the beaiready
-            // host too (one shared Caddy block for all hosts), so a SAME-ORIGIN URL runs
-            // it IN-PLACE and sends the host-scoped tracker_token cookie — no second
-            // login, and no Caddy change needed.
-            runUrl: builtin ? (n.href || null) : (n.hosted ? `/nodes/${n.slug}/app/` : null),
-          };
-        })
-        // Built-in Nodes (the flagship in-app tools) lead the storefront, then live, then soon.
-        .sort((a, b) => (Number(b.builtin) - Number(a.builtin))
-          || (Number(b.status === 'live') - Number(a.status === 'live')));
-      _bairNodesCache = { at: Date.now(), data: { nodes } };
-    }
+    const nodes = await listStorefrontNodes();
     res.set('Cache-Control', 'public, max-age=120');
-    res.json(_bairNodesCache.data);
+    res.json({ nodes });
   } catch (err) {
     console.error('[public/bair-nodes]', err.message);
     res.status(500).json({ nodes: [], message: 'Could not load the Nodes list.' });

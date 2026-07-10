@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { apiFetch } from '../../hooks/useApi.js';
 
 const TERRACOTTA = '#c75b39';
 const CHARCOAL = '#1c1b1a';
@@ -25,8 +26,11 @@ export default function BeAIReadyNodes() {
   useEffect(() => {
     let live = true;
     const load = (attempt = 0) => {
-      fetch('/api/public/bair-nodes')
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('load'))))
+      // Signed in → the client's OWN entitled Nodes; logged out → the full storefront to browse.
+      const fetchNodes = user
+        ? apiFetch('/beaiready/my-nodes')
+        : fetch('/api/public/bair-nodes').then((r) => (r.ok ? r.json() : Promise.reject(new Error('load'))));
+      Promise.resolve(fetchNodes)
         .then((d) => { if (live) { setNodes((d && d.nodes) || []); setError(false); } })
         .catch(() => {
           if (!live) return;
@@ -36,7 +40,7 @@ export default function BeAIReadyNodes() {
     };
     load();
     return () => { live = false; };
-  }, []);
+  }, [user]);
 
   const nextParam = encodeURIComponent(location.pathname + location.search);
 

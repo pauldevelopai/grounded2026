@@ -17,6 +17,7 @@ import { getRelevantKnowledge } from '../services/knowledge.js';
 import { ingestGovernanceDocument } from '../services/governance-ingest.js';
 import { computeAndSaveScore } from './bair-score.js';
 import { loadAssessment, submitAnswers, computeGovernanceScorecard, resolveOrCreateAudit, AssessmentError } from '../services/gov-assessment.js';
+import { listStorefrontNodes } from '../services/node-catalogue.js';
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -1200,6 +1201,20 @@ router.post('/governance/assessment/attest', requireRole('admin'), async (req, r
     if (err instanceof AssessmentError) return res.status(409).json({ message: err.message, code: err.code });
     console.error('[beaiready/gov/assessment/attest]', err); res.status(500).json({ message: 'Internal server error' });
   }
+});
+
+// ── My Nodes — the signed-in client's OWN entitled Nodes (the /nodes storefront,
+// scoped). If a client has explicit entitlements (beaiready_newsroom_nodes) they see
+// only those; if none are set they see the full storefront (so no one is blocked). ──
+router.get('/my-nodes', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const all = await listStorefrontNodes();
+    const { rows } = await pool.query('SELECT node_slug FROM beaiready_newsroom_nodes WHERE newsroom_id = $1', [newsroomId]);
+    const entitled = new Set(rows.map((r) => r.node_slug));
+    const nodes = entitled.size ? all.filter((n) => entitled.has(n.slug)) : all;
+    res.json({ nodes, scoped: entitled.size > 0 });
+  } catch (err) { console.error('[beaiready/my-nodes]', err); res.status(500).json({ nodes: [], message: 'Could not load your Nodes.' }); }
 });
 
 // ── Governance Learning (Part 5) — the four-unit course, per-person progress ──
