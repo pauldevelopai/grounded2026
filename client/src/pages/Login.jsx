@@ -59,6 +59,14 @@ export default function Login() {
     setResetLink('');
   }
 
+  // Leave the login page without signing in — return to the previous page if we
+  // arrived from within the app, otherwise the public home. Gives the login a way
+  // out so it isn't a dead-end (it's a full-screen page with no site chrome).
+  function goBack() {
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/');
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
@@ -131,6 +139,10 @@ export default function Login() {
   return (
     <div className={IS_BEAIREADY ? 'login-page beaiready' : 'login-page'}>
       <div className="login-card">
+        <button type="button" onClick={goBack}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: '#8a8076', cursor: 'pointer', fontSize: 13, padding: 0, marginBottom: 14, textDecoration: 'none' }}>
+          ← Back to {IS_BEAIREADY ? 'Be AI Ready' : 'Grounded'}
+        </button>
         <h1>{IS_BEAIREADY ? 'Be AI Ready' : 'Grounded'}</h1>
         <p className="brand-sub">{IS_BEAIREADY ? 'by Develop AI' : 'Newsroom-owned AI · by Develop AI'}</p>
         <p className="login-instruction">
