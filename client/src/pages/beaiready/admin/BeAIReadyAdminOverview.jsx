@@ -87,8 +87,11 @@ export default function BeAIReadyAdminOverview() {
   const [orgForm, setOrgForm] = useState({ name: '', website: '' }); // add-organisation form
   const [codeInputs, setCodeInputs] = useState({});                  // { [clientId]: plaintext code }
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // silent:true re-reads the server without flashing the "Loading…" state — used
+  // after an inline action so this page's counts stay authoritative (the same
+  // refetch-after-write the /admin/tracker page does).
+  const load = useCallback(async ({ silent } = {}) => {
+    if (!silent) setLoading(true);
     const results = await Promise.allSettled([
       apiFetch('/beaiready/admin/clients'),
       apiFetch('/tracker-review'),
@@ -132,11 +135,13 @@ export default function BeAIReadyAdminOverview() {
     finally { setItemBusy(`fb-${id}`, false); }
   }
 
+  // Both tracker actions re-read the server afterwards rather than patching local
+  // state, so this page and /admin/tracker (which does the same) can never drift.
   async function keepTracker(kind, id) {
     setItemBusy(`tr-${id}`, true);
     try {
       await apiFetch(`/tracker-review/${kind}/${id}/keep`, { method: 'PUT' });
-      setData((d) => ({ ...d, tracker: { ...d.tracker, [kind]: d.tracker[kind].map((r) => (r.id === id ? { ...r, review_status: 'kept' } : r)) } }));
+      await load({ silent: true });
       setNotice('Kept on the tracker.');
     } catch (e) { setNotice(e.message || 'Could not keep entry.'); }
     finally { setItemBusy(`tr-${id}`, false); }
@@ -146,7 +151,7 @@ export default function BeAIReadyAdminOverview() {
     setItemBusy(`tr-${id}`, true);
     try {
       await apiFetch(`/tracker-review/${kind}/${id}`, { method: 'DELETE' });
-      setData((d) => ({ ...d, tracker: { ...d.tracker, [kind]: d.tracker[kind].filter((r) => r.id !== id) } }));
+      await load({ silent: true });
       setNotice('Removed from the tracker.');
     } catch (e) { setNotice(e.message || 'Could not remove entry.'); }
     finally { setItemBusy(`tr-${id}`, false); }
@@ -190,7 +195,10 @@ export default function BeAIReadyAdminOverview() {
   }
 
   // ── Derived signals ──────────────────────────────────────────────────────────
-  const pendingTracker = [...(data.tracker.lawsuit || []), ...(data.tracker.regulation || [])].filter((r) => r.review_status === 'pending');
+  // /admin/tracker lists EVERY auto-added entry (pending + already-kept); this page
+  // shows only what still needs a decision. Same endpoint, same rows — different filter.
+  const autoAdded = [...(data.tracker.lawsuit || []), ...(data.tracker.regulation || [])];
+  const pendingTracker = autoAdded.filter((r) => r.review_status === 'pending');
   const openFeedback = (data.feedback || []).filter((f) => f.status !== 'resolved');
   const pendingSuggestions = (data.suggestions || []).filter((s) => s.status === 'pending');
   const newClients = (data.clients || []).filter((c) => isRecent(c.created_at));
@@ -245,6 +253,12 @@ export default function BeAIReadyAdminOverview() {
       ) : nothingToDo ? (
         <div style={{ ...card, color: '#5a7a5a', background: '#f4f9f4', border: '1px solid #d6e8d6' }}>
           ✓ You’re all caught up — nothing waiting for review, no open feedback, no new tool suggestions.
+          {autoAdded.length > 0 && (
+            <div style={{ fontSize: 12, color: '#6b8a6b', marginTop: 6 }}>
+              <Link to="/admin/tracker" style={{ color: '#4a7a4a', fontWeight: 600 }}>Tracker review</Link> still lists
+              all {autoAdded.length} auto-added entries — those are already reviewed, kept on the public tracker.
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -283,7 +297,7 @@ export default function BeAIReadyAdminOverview() {
           {(errors.tracker || pendingTracker.length > 0) && (
             <div style={card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ ...kicker, marginBottom: 0 }}>Auto-added tracker entries to check{errors.tracker ? '' : ` · ${pendingTracker.length} pending`}</span>
+                <span style={{ ...kicker, marginBottom: 0 }}>Auto-added tracker entries to check{errors.tracker ? '' : ` · ${pendingTracker.length} pending of ${autoAdded.length} auto-added`}</span>
                 <Link to="/admin/tracker" style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Full review →</Link>
               </div>
               {errors.tracker && <LoadError what="the tracker queue" message={errors.tracker} onRetry={load} />}
