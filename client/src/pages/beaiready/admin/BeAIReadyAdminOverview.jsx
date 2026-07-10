@@ -48,19 +48,33 @@ function greeting() {
   return 'Good evening';
 }
 
-// A queue count chip in the top summary strip. Terracotta when it needs attention.
-function QueueChip({ label, count, to }) {
-  const active = count > 0;
+// A queue count chip in the top summary strip. Terracotta when it needs attention,
+// red "!" when that queue failed to load (never a misleading 0).
+function QueueChip({ label, count, to, error }) {
+  const active = !error && count > 0;
   const inner = (
     <div style={{
       minWidth: 130, padding: '12px 16px', borderRadius: 10, textAlign: 'left',
-      background: active ? 'rgba(199,91,57,0.10)' : '#fff', border: `1px solid ${active ? 'rgba(199,91,57,0.35)' : '#e7ddd1'}`,
+      background: error ? '#fef2f2' : active ? 'rgba(199,91,57,0.10)' : '#fff',
+      border: `1px solid ${error ? '#fecaca' : active ? 'rgba(199,91,57,0.35)' : '#e7ddd1'}`,
     }}>
-      <div style={{ fontSize: 26, fontWeight: 800, color: active ? TERRACOTTA : '#a89f95', lineHeight: 1 }}>{count}</div>
-      <div style={{ fontSize: 12, color: '#6b6359', marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, color: error ? '#b91c1c' : active ? TERRACOTTA : '#a89f95', lineHeight: 1 }}>
+        {error ? '!' : count}
+      </div>
+      <div style={{ fontSize: 12, color: error ? '#b91c1c' : '#6b6359', marginTop: 4 }}>{error ? `${label} — failed to load` : label}</div>
     </div>
   );
   return to ? <Link to={to} style={{ textDecoration: 'none' }}>{inner}</Link> : inner;
+}
+
+// Inline "this section couldn't load" state, with a retry.
+function LoadError({ what, message, onRetry }) {
+  return (
+    <div style={{ fontSize: 13, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+      <span>Couldn’t load {what}: {message}</span>
+      <button onClick={onRetry} style={{ fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', cursor: 'pointer' }}>Retry</button>
+    </div>
+  );
 }
 
 export default function BeAIReadyAdminOverview() {
@@ -69,6 +83,7 @@ export default function BeAIReadyAdminOverview() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState({});      // per-item action spinner: { [key]: true }
   const [notice, setNotice] = useState('');
+  const [errors, setErrors] = useState({});  // per-source load failure: { feedback: 'msg', … }
   const [orgForm, setOrgForm] = useState({ name: '', website: '' }); // add-organisation form
   const [codeInputs, setCodeInputs] = useState({});                  // { [clientId]: plaintext code }
 
@@ -83,6 +98,14 @@ export default function BeAIReadyAdminOverview() {
       apiFetch('/public/governance-today'),
     ]);
     const val = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+    // A failed fetch must NOT masquerade as an empty list — record it so the page
+    // can say "couldn't load" instead of the (false) "nothing here".
+    const SOURCES = ['clients', 'tracker', 'feedback', 'suggestions', 'nodes', 'today'];
+    const errs = {};
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') errs[SOURCES[i]] = r.reason?.message || 'Request failed';
+    });
+    setErrors(errs);
     setData({
       clients: val(0, []) || [],
       tracker: val(1, { lawsuit: [], regulation: [] }) || { lawsuit: [], regulation: [] },
@@ -182,7 +205,9 @@ export default function BeAIReadyAdminOverview() {
   activity.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
   const recentActivity = activity.slice(0, 12);
 
-  const nothingToDo = pendingTracker.length === 0 && openFeedback.length === 0 && pendingSuggestions.length === 0;
+  // "All caught up" is only true if every queue actually LOADED and is empty.
+  const queueFailed = Boolean(errors.tracker || errors.feedback || errors.suggestions);
+  const nothingToDo = !queueFailed && pendingTracker.length === 0 && openFeedback.length === 0 && pendingSuggestions.length === 0;
 
   return (
     <div style={{ maxWidth: 980 }}>
@@ -206,10 +231,10 @@ export default function BeAIReadyAdminOverview() {
 
       {/* Summary strip — the three action queues */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
-        <QueueChip label="Tracker items to review" count={pendingTracker.length} to="/admin/tracker" />
-        <QueueChip label="Open feedback" count={openFeedback.length} />
-        <QueueChip label="Toolbox suggestions" count={pendingSuggestions.length} to="/admin/tools" />
-        <QueueChip label="New clients (48h)" count={newClients.length} to="/admin/users" />
+        <QueueChip label="Tracker items to review" count={pendingTracker.length} to="/admin/tracker" error={errors.tracker} />
+        <QueueChip label="Open feedback" count={openFeedback.length} error={errors.feedback} />
+        <QueueChip label="Toolbox suggestions" count={pendingSuggestions.length} to="/admin/tools" error={errors.suggestions} />
+        <QueueChip label="New clients (48h)" count={newClients.length} to="/admin/users" error={errors.clients} />
       </div>
 
       {/* ═══ NEEDS YOU TODAY ═══ */}
@@ -223,38 +248,46 @@ export default function BeAIReadyAdminOverview() {
         </div>
       ) : (
         <>
-          {/* Open feedback — resolve inline */}
-          {openFeedback.length > 0 && (
-            <div style={card}>
-              <span style={kicker}>Feedback from users · {openFeedback.length} open</span>
-              {openFeedback.slice(0, 6).map((f) => {
-                const [bg, fg] = PRIORITY_STYLE[f.priority] || PRIORITY_STYLE.medium;
-                return (
-                  <div key={f.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid #f0e9df' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, color: '#2a2622' }}>{f.content}</div>
-                      <div style={{ fontSize: 12, color: '#8a8076', marginTop: 4 }}>
-                        {f.user_name || 'Someone'}{f.page ? ` · on ${f.page}` : ''} · {timeAgo(f.created_at)} <span style={{ ...pill(bg, fg), marginLeft: 6 }}>{f.priority || 'medium'}</span>
+          {/* Open feedback — ALWAYS rendered so the section is never silently absent:
+              it either errors, says it's empty, or lists items you can resolve inline. */}
+          <div style={card}>
+            <span style={kicker}>Feedback from users{errors.feedback ? '' : ` · ${openFeedback.length} open`}</span>
+            {errors.feedback ? (
+              <LoadError what="feedback" message={errors.feedback} onRetry={load} />
+            ) : openFeedback.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#8a8076' }}>No open feedback right now.</div>
+            ) : (
+              <>
+                {openFeedback.slice(0, 6).map((f) => {
+                  const [bg, fg] = PRIORITY_STYLE[f.priority] || PRIORITY_STYLE.medium;
+                  return (
+                    <div key={f.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid #f0e9df' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, color: '#2a2622' }}>{f.content}</div>
+                        <div style={{ fontSize: 12, color: '#8a8076', marginTop: 4 }}>
+                          {f.user_name || 'Someone'}{f.page ? ` · on ${f.page}` : ''} · {timeAgo(f.created_at)} <span style={{ ...pill(bg, fg), marginLeft: 6 }}>{f.priority || 'medium'}</span>
+                        </div>
                       </div>
+                      <button onClick={() => resolveFeedback(f.id)} disabled={busy[`fb-${f.id}`]} style={btn(false)}>
+                        {busy[`fb-${f.id}`] ? '…' : 'Resolve'}
+                      </button>
                     </div>
-                    <button onClick={() => resolveFeedback(f.id)} disabled={busy[`fb-${f.id}`]} style={btn(false)}>
-                      {busy[`fb-${f.id}`] ? '…' : 'Resolve'}
-                    </button>
-                  </div>
-                );
-              })}
-              {openFeedback.length > 6 && <div style={{ fontSize: 12, color: '#8a8076', marginTop: 10 }}>+ {openFeedback.length - 6} more open</div>}
-            </div>
-          )}
+                  );
+                })}
+                {openFeedback.length > 6 && <div style={{ fontSize: 12, color: '#8a8076', marginTop: 10 }}>+ {openFeedback.length - 6} more open</div>}
+              </>
+            )}
+          </div>
 
-          {/* Tracker review queue — keep / remove inline */}
-          {pendingTracker.length > 0 && (
+          {/* Tracker review queue — keep / remove inline. Shown when pending OR failed. */}
+          {(errors.tracker || pendingTracker.length > 0) && (
             <div style={card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ ...kicker, marginBottom: 0 }}>Auto-added tracker entries to check · {pendingTracker.length} pending</span>
+                <span style={{ ...kicker, marginBottom: 0 }}>Auto-added tracker entries to check{errors.tracker ? '' : ` · ${pendingTracker.length} pending`}</span>
                 <Link to="/admin/tracker" style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Full review →</Link>
               </div>
-              {pendingTracker.slice(0, 6).map((r) => (
+              {errors.tracker && <LoadError what="the tracker queue" message={errors.tracker} onRetry={load} />}
+              {!errors.tracker && pendingTracker.slice(0, 6).map((r) => (
                 <div key={r.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid #f0e9df' }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, color: '#2a2622' }}>
@@ -275,14 +308,15 @@ export default function BeAIReadyAdminOverview() {
             </div>
           )}
 
-          {/* Toolbox suggestions — review on the Toolbox admin page */}
-          {pendingSuggestions.length > 0 && (
+          {/* Toolbox suggestions — review on the Toolbox admin page. Shown when pending OR failed. */}
+          {(errors.suggestions || pendingSuggestions.length > 0) && (
             <div style={card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ ...kicker, marginBottom: 0 }}>Tool suggestions from users · {pendingSuggestions.length} pending</span>
+                <span style={{ ...kicker, marginBottom: 0 }}>Tool suggestions from users{errors.suggestions ? '' : ` · ${pendingSuggestions.length} pending`}</span>
                 <Link to="/admin/tools" style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Review & approve →</Link>
               </div>
-              {pendingSuggestions.slice(0, 5).map((s) => (
+              {errors.suggestions && <LoadError what="tool suggestions" message={errors.suggestions} onRetry={load} />}
+              {!errors.suggestions && pendingSuggestions.slice(0, 5).map((s) => (
                 <div key={s.id} style={{ padding: '10px 0', borderTop: '1px solid #f0e9df' }}>
                   <div style={{ fontSize: 14, color: '#2a2622' }}>
                     {s.url ? <a href={s.url} target="_blank" rel="noreferrer" style={{ color: '#2a2622', fontWeight: 600 }}>{s.name}</a> : <span style={{ fontWeight: 600 }}>{s.name}</span>}
