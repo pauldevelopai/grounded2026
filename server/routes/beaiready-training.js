@@ -562,14 +562,22 @@ async function upsertAnalysis(newsroomId, kind, fingerprint, analysis) {
      ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
     [newsroomId, kind, fingerprint, JSON.stringify(analysis)]);
 }
+// Each refresh* regenerates ONLY if its cache fingerprint is stale (inputs changed),
+// so a click after adding just feedback re-runs only the match, not the whole set.
+async function isFresh(newsroomId, kind, fingerprint) {
+  const { rows: [c] } = await pool.query(
+    `SELECT 1 FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = $2 AND fingerprint = $3`, [newsroomId, kind, fingerprint]);
+  return !!c;
+}
 async function refreshTeamAnalysis(newsroomId) {
   const { rows: resp } = await pool.query(
     `SELECT response, imported_at FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake' ORDER BY imported_at DESC`, [newsroomId]);
   if (!resp.length) return false;
-  const objs = resp.map((r) => r.response || {});
   const maxImported = resp[0].imported_at ? new Date(resp[0].imported_at).getTime() : 0;
-  const ai = await generateTeamAnalysis(objs).catch((e) => { console.error('[refresh ta]', e.message); return {}; });
-  await upsertAnalysis(newsroomId, 'intake', `${TEAM_ANALYSIS_VERSION}:${resp.length}:${maxImported}`, ai);
+  const fp = `${TEAM_ANALYSIS_VERSION}:${resp.length}:${maxImported}`;
+  if (await isFresh(newsroomId, 'intake', fp)) return true;
+  const ai = await generateTeamAnalysis(resp.map((r) => r.response || {})).catch((e) => { console.error('[refresh ta]', e.message); return {}; });
+  await upsertAnalysis(newsroomId, 'intake', fp, ai);
   return true;
 }
 async function refreshCurriculum(newsroomId) {
@@ -578,28 +586,33 @@ async function refreshCurriculum(newsroomId) {
       WHERE ud.entity_type = 'training_material_file'
         AND ud.entity_id IN (SELECT id FROM training_materials WHERE newsroom_id = $1)
         AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 60 ORDER BY ud.original_name`, [newsroomId]);
-  if (!docs.length) {
+  const cached = async () => {
     const { rows: [c] } = await pool.query(`SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'curriculum'`, [newsroomId]);
     return (c && c.analysis && Array.isArray(c.analysis.sessions)) ? c.analysis.sessions : [];
-  }
+  };
+  if (!docs.length) return cached();
   const totalLen = docs.reduce((s, d) => s + (d.text ? d.text.length : 0), 0);
+  const fp = `${CURRICULUM_VERSION}:${docs.length}:${totalLen}`;
+  if (await isFresh(newsroomId, 'curriculum', fp)) return cached();
   const sessions = await generateCurriculum(docs).catch((e) => { console.error('[refresh cur]', e.message); return []; });
-  await upsertAnalysis(newsroomId, 'curriculum', `${CURRICULUM_VERSION}:${docs.length}:${totalLen}`, { sessions });
+  await upsertAnalysis(newsroomId, 'curriculum', fp, { sessions });
   return sessions;
 }
 async function refreshMatch(newsroomId, curriculum) {
   const { rows: resp } = await pool.query(`SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake'`, [newsroomId]);
   if (!resp.length) return { ok: false, has_feedback: false };
+  const { rows: fb } = await pool.query(`SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'feedback'`, [newsroomId]);
+  const feedback = fb.map((r) => r.response || {});
+  const fp = `${MATCH_VERSION}:${resp.length}:${feedback.length}:${curriculum.length}`;
+  if (await isFresh(newsroomId, 'match', fp)) return { ok: true, has_feedback: feedback.length > 0 };
   const objs = resp.map((r) => r.response || {});
   const cols = []; for (const o of objs) for (const k of Object.keys(o)) if (!cols.includes(k)) cols.push(k);
   const learnCol = cols.find((k) => /would like to learn|want to learn|heard about ai/i.test(k));
   const autoCol = cols.find((k) => /automate/i.test(k));
   const collect = (col) => col ? [...new Set(objs.map((o) => String(o[col] ?? '').trim()).filter((v) => v && !NEGATIVE_ANSWER.test(v)))].slice(0, 40) : [];
-  const { rows: fb } = await pool.query(`SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'feedback'`, [newsroomId]);
-  const feedback = fb.map((r) => r.response || {});
   const m = await generateExpectationsMatch({ wants: collect(learnCol), automates: collect(autoCol), curriculum, feedback })
     .catch((e) => { console.error('[refresh match]', e.message); return {}; });
-  await upsertAnalysis(newsroomId, 'match', `${MATCH_VERSION}:${resp.length}:${feedback.length}:${curriculum.length}`, m);
+  await upsertAnalysis(newsroomId, 'match', fp, m);
   return { ok: true, has_feedback: feedback.length > 0 };
 }
 
