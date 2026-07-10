@@ -38,19 +38,25 @@ export default function BeAIReadyAdminTraining() {
         </select>
       </div>
 
-      {clientId && (
-        <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'minmax(0, 1fr)' }}>
-          <DashboardRefresh clientId={clientId} setErr={setErr} />
-          <HarvestSection clientId={clientId} setErr={setErr} />
-          <IntakeSection clientId={clientId} setErr={setErr} />
-          <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
-          <AgendaSection clientId={clientId} setErr={setErr} />
-          <MaterialsSection clientId={clientId} setErr={setErr} />
-          <FeedbackSection clientId={clientId} setErr={setErr} />
-          <ExpectationsMatchSection clientId={clientId} setErr={setErr} />
-          <RecommendationsSection clientId={clientId} setErr={setErr} pillars={['training']} />
-        </div>
-      )}
+      {clientId && <TrainingSections clientId={clientId} setErr={setErr} />}
+    </div>
+  );
+}
+
+// Every training section for ONE client, without the page chrome or client picker —
+// so the Client cockpit can render the same thing under its Training tab.
+export function TrainingSections({ clientId, setErr }) {
+  return (
+    <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'minmax(0, 1fr)' }}>
+      <DashboardRefresh clientId={clientId} setErr={setErr} />
+      <HarvestSection clientId={clientId} setErr={setErr} />
+      <IntakeSection clientId={clientId} setErr={setErr} />
+      <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
+      <AgendaSection clientId={clientId} setErr={setErr} />
+      <MaterialsSection clientId={clientId} setErr={setErr} />
+      <FeedbackSection clientId={clientId} setErr={setErr} />
+      <ExpectationsMatchSection clientId={clientId} setErr={setErr} />
+      <RecommendationsSection clientId={clientId} setErr={setErr} pillars={['training']} />
     </div>
   );
 }
@@ -74,7 +80,7 @@ function Section({ title, hint, children }) {
 // The client's dashboard (team readiness, what-was-covered, expectations vs
 // feedback) is AI-generated and cached; it refreshes itself over time, but this
 // pushes the latest surveys / materials / feedback live right away.
-function DashboardRefresh({ clientId, setErr }) {
+export function DashboardRefresh({ clientId, setErr }) {
   const api = useApi(clientId);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');

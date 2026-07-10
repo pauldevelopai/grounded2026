@@ -105,7 +105,7 @@ export default function BeAIReadyAdminUsers() {
   );
 }
 
-function LoginsPanel({ client, onChanged, setErr }) {
+export function LoginsPanel({ client, onChanged, setErr }) {
   const [users, setUsers] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [busy, setBusy] = useState(false);
@@ -142,7 +142,7 @@ function LoginsPanel({ client, onChanged, setErr }) {
 
 // Set / rotate / clear the company's self-registration access code. Team members
 // enter it (with their own password) to register into this company.
-function AccessCodeControl({ client, onChanged, setErr }) {
+export function AccessCodeControl({ client, onChanged, setErr }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -179,7 +179,7 @@ function AccessCodeControl({ client, onChanged, setErr }) {
 // Per-company consent to contribute to the anonymised cross-business insight pool.
 // Off by default. When on, this business's de-identified patterns can be aggregated
 // with others (only ever where >=2 businesses contribute) — never its raw content.
-function InsightsConsentControl({ client, onChanged, setErr }) {
+export function InsightsConsentControl({ client, onChanged, setErr }) {
   const [busy, setBusy] = useState(false);
   const on = !!client.shares_anonymised_insights;
   const toggle = async () => {

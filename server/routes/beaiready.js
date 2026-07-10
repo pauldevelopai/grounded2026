@@ -1475,6 +1475,44 @@ router.post('/admin/clients/:id/users', requireRole('admin'), async (req, res) =
   } catch (err) { console.error('[beaiready/admin/clients/users/post]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Admin · Tools curated FOR one client ────────────────────────────────────
+// The Toolbox is a global catalogue; this is the per-client join. The other half of
+// a client's tool picture (what their team already uses) is derived live from their
+// intake survey by /beaiready/training/team-analysis — never stored here.
+router.get('/admin/clients/:id/tools', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, tool_slug, tool_name, note, created_at FROM beaiready_client_tools
+        WHERE newsroom_id = $1 ORDER BY tool_name`, [req.params.id]);
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/admin/clients/tools:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.post('/admin/clients/:id/tools', requireRole('admin'), async (req, res) => {
+  try {
+    const { tool_slug, tool_name, note } = req.body || {};
+    if (!tool_slug || !tool_name) return res.status(400).json({ message: 'tool_slug and tool_name required' });
+    const nr = await pool.query("SELECT 1 FROM newsrooms WHERE id = $1 AND kind = 'business'", [req.params.id]);
+    if (!nr.rowCount) return res.status(404).json({ message: 'client not found' });
+    const { rows } = await pool.query(
+      `INSERT INTO beaiready_client_tools (newsroom_id, tool_slug, tool_name, note, created_by)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (newsroom_id, tool_slug) DO UPDATE SET note = EXCLUDED.note
+       RETURNING id, tool_slug, tool_name, note, created_at`,
+      [req.params.id, String(tool_slug).slice(0, 120), String(tool_name).slice(0, 160), note ? String(note).slice(0, 300) : null, req.user.id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { console.error('[beaiready/admin/clients/tools:post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.delete('/admin/clients/:id/tools/:toolId', requireRole('admin'), async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM beaiready_client_tools WHERE id = $1 AND newsroom_id = $2', [req.params.toolId, req.params.id]);
+    if (!rowCount) return res.status(404).json({ message: 'not found' });
+    res.json({ deleted: true });
+  } catch (err) { console.error('[beaiready/admin/clients/tools:del]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Admin · Models (provider config + per-function model choice) ────────────
 router.get('/admin/settings', requireRole('admin'), async (req, res) => {
   try {

@@ -113,6 +113,7 @@ import BairAudit from './pages/bair/BairAudit.jsx';
 import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
 import BeAIReadyAdminOverview from './pages/beaiready/admin/BeAIReadyAdminOverview.jsx';
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
+import BeAIReadyAdminClient from './pages/beaiready/admin/BeAIReadyAdminClient.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
 import BeAIReadyAdminTools from './pages/beaiready/admin/BeAIReadyAdminTools.jsx';
 import BeAIReadyAdminTracker from './pages/beaiready/admin/BeAIReadyAdminTracker.jsx';
@@ -299,6 +300,7 @@ export default function App() {
               <Route element={<AdminRoute />}>
                 <Route element={<BeAIReadyAdminShell />}>
                   <Route path="/admin" element={<BeAIReadyAdminOverview />} />
+                  <Route path="/admin/client" element={<BeAIReadyAdminClient />} />
                   <Route path="/admin/users" element={<BeAIReadyAdminUsers />} />
                   <Route path="/admin/tools" element={<BeAIReadyAdminTools />} />
                   <Route path="/admin/tracker" element={<BeAIReadyAdminTracker />} />
