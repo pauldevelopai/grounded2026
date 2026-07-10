@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../../hooks/useApi.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import { PILLAR_FLAGS, pillarDone } from './ClientUserPanels.jsx';
 
 const CHARCOAL = '#1c1b1a';
 const TERRACOTTA = '#c75b39';
@@ -418,6 +419,37 @@ export default function BeAIReadyAdminOverview() {
             {c.has_access_code && (
               <button onClick={() => saveCode(c.id, c.name, true)} disabled={busy[`code-${c.id}`]} style={btn(false)}>Clear</button>
             )}
+          </div>
+        ))}
+      </div>
+
+      {/* Cross-client roster: who's behind on what, at a glance — the one view the
+          per-client cockpit deliberately can't give. Each row opens that client in
+          the cockpit. (Moved here when /admin/users was retired.) */}
+      <div style={card}>
+        <span style={kicker}>Client status · who needs attention</span>
+        {(data.clients || []).length === 0 ? (
+          <div style={{ fontSize: 13, color: '#8a8076' }}>No organisations yet.</div>
+        ) : (data.clients || []).map((c, i) => (
+          <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 0', borderTop: i ? '1px solid #f0e9df' : 'none', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 190px' }}>
+              <span style={{ fontWeight: 600, color: '#2a2622' }}>{c.name}</span>
+              <span style={{ color: '#a89f95', fontSize: 12 }}> · {c.user_count} login{c.user_count === 1 ? '' : 's'}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {PILLAR_FLAGS.map(([key, label]) => {
+                const done = pillarDone(c, key);
+                return (
+                  <span key={key} style={{
+                    fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, whiteSpace: 'nowrap',
+                    background: done ? '#dcfce7' : '#f1f0ec', color: done ? '#166534' : '#a89e92',
+                  }}>
+                    {done ? '✓' : '○'} {label}{key !== 'has_policy' && c[key] ? ` ${c[key]}` : ''}
+                  </span>
+                );
+              })}
+            </div>
+            <Link to={`/admin/client?c=${c.id}`} style={{ ...btn(false), textDecoration: 'none', whiteSpace: 'nowrap' }}>Open in Client →</Link>
           </div>
         ))}
       </div>

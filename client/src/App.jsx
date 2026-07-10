@@ -112,7 +112,6 @@ import BairAudits from './pages/bair/BairAudits.jsx';
 import BairAudit from './pages/bair/BairAudit.jsx';
 import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
 import BeAIReadyAdminOverview from './pages/beaiready/admin/BeAIReadyAdminOverview.jsx';
-import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
 import BeAIReadyAdminClient from './pages/beaiready/admin/BeAIReadyAdminClient.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
 import BeAIReadyAdminTools from './pages/beaiready/admin/BeAIReadyAdminTools.jsx';
@@ -301,7 +300,10 @@ export default function App() {
                 <Route element={<BeAIReadyAdminShell />}>
                   <Route path="/admin" element={<BeAIReadyAdminOverview />} />
                   <Route path="/admin/client" element={<BeAIReadyAdminClient />} />
-                  <Route path="/admin/users" element={<BeAIReadyAdminUsers />} />
+                  {/* /admin/users retired 2026-07-10 — creating clients + the pillar roster
+                      moved to Overview, per-client people to the Client cockpit. Redirect
+                      so old bookmarks land somewhere useful instead of dead-ending. */}
+                  <Route path="/admin/users" element={<Navigate to="/admin" replace />} />
                   <Route path="/admin/tools" element={<BeAIReadyAdminTools />} />
                   <Route path="/admin/tracker" element={<BeAIReadyAdminTracker />} />
                   <Route path="/admin/governance" element={<BeAIReadyAdminGovernance />} />

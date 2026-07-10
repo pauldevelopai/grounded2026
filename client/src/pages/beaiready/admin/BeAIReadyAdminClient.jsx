@@ -8,8 +8,9 @@
 // It reuses the real section components (no duplicated logic): TrainingSections and
 // DashboardRefresh from the Training page, and the per-client panels from Users.
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../../hooks/useApi.js';
-import { LoginsPanel, AccessCodeControl, InsightsConsentControl } from './BeAIReadyAdminUsers.jsx';
+import { LoginsPanel, AccessCodeControl, InsightsConsentControl } from './ClientUserPanels.jsx';
 import { TrainingSections, DashboardRefresh } from './BeAIReadyAdminTraining.jsx';
 
 const TABS = [['overview', 'Overview'], ['users', 'Users'], ['training', 'Training'], ['prompts', 'Prompts'], ['tools', 'Tools']];
@@ -23,10 +24,15 @@ export default function BeAIReadyAdminClient() {
   const [clientId, setClientId] = useState('');
   const [tab, setTab] = useState('overview');
   const [err, setErr] = useState('');
+  const [params] = useSearchParams();
+  const wanted = params.get('c');   // deep-link from the Overview roster: /admin/client?c=<id>
 
   const loadClients = useCallback(() => apiFetch('/beaiready/admin/clients')
-    .then((c) => { setClients(c); setClientId((id) => id || (c[0] && c[0].id) || ''); })
-    .catch((e) => setErr(e.message)), []);
+    .then((c) => {
+      setClients(c);
+      setClientId((id) => id || (wanted && c.some((x) => x.id === wanted) ? wanted : (c[0] && c[0].id) || ''));
+    })
+    .catch((e) => setErr(e.message)), [wanted]);
   useEffect(() => { loadClients(); }, [loadClients]);
 
   const client = (clients || []).find((c) => c.id === clientId) || null;
