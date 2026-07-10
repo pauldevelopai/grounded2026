@@ -21,6 +21,7 @@ const btn = (solid) => ({
   border: solid ? 'none' : '1px solid #d8cfc4', background: solid ? TERRACOTTA : '#fff', color: solid ? '#fff' : '#5a524a',
 });
 const linkBtn = { ...btn(false), textDecoration: 'none', display: 'inline-block' };
+const input = { fontSize: 13, padding: '7px 10px', borderRadius: 7, border: '1px solid #d8cfc4', background: '#fff', color: '#2a2622', minWidth: 150 };
 
 const PRIORITY_STYLE = { high: ['#fee2e2', '#991b1b'], medium: ['#fef3c7', '#92400e'], low: ['#f1f5f9', '#475569'] };
 
@@ -68,6 +69,8 @@ export default function BeAIReadyAdminOverview() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState({});      // per-item action spinner: { [key]: true }
   const [notice, setNotice] = useState('');
+  const [orgForm, setOrgForm] = useState({ name: '', website: '' }); // add-organisation form
+  const [codeInputs, setCodeInputs] = useState({});                  // { [clientId]: plaintext code }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,6 +127,43 @@ export default function BeAIReadyAdminOverview() {
       setNotice('Removed from the tracker.');
     } catch (e) { setNotice(e.message || 'Could not remove entry.'); }
     finally { setItemBusy(`tr-${id}`, false); }
+  }
+
+  // ── Organisations: add + open for self-registration via an access code ───────
+  async function addOrg(e) {
+    e?.preventDefault();
+    const name = orgForm.name.trim();
+    if (!name) { setNotice('Enter an organisation name.'); return; }
+    setItemBusy('add-org', true);
+    try {
+      await apiFetch('/beaiready/admin/clients', {
+        method: 'POST',
+        body: JSON.stringify({ name, website: orgForm.website.trim() || undefined }),
+      });
+      setOrgForm({ name: '', website: '' });
+      setNotice(`Added “${name}”. Set an access code below to open it for client sign-up.`);
+      await load();
+    } catch (err) { setNotice(err.message || 'Could not add the organisation.'); }
+    finally { setItemBusy('add-org', false); }
+  }
+
+  // Set or clear a company's self-registration access code. Empty = clear (closes
+  // self-registration). The plaintext is hashed server-side; we never store it here.
+  async function saveCode(id, name, clear = false) {
+    const code = clear ? '' : (codeInputs[id] || '').trim();
+    setItemBusy(`code-${id}`, true);
+    try {
+      await apiFetch(`/beaiready/admin/clients/${id}/access-code`, {
+        method: 'POST',
+        body: JSON.stringify({ access_code: code }),
+      });
+      setCodeInputs((c) => ({ ...c, [id]: '' }));
+      setNotice(code
+        ? `Access code set for “${name}” — clients can now select it on sign-up and join with this code.`
+        : `Access code cleared for “${name}” — it's no longer open for self-registration.`);
+      await load();
+    } catch (err) { setNotice(err.message || 'Could not update the access code.'); }
+    finally { setItemBusy(`code-${id}`, false); }
   }
 
   // ── Derived signals ──────────────────────────────────────────────────────────
@@ -288,6 +328,50 @@ export default function BeAIReadyAdminOverview() {
             {newTracker.length === 0 ? 'None added.' : `${newTracker.length} auto-added and awaiting your review (above).`}
           </div>
         </div>
+      </div>
+
+      {/* ═══ ORGANISATIONS ═══ */}
+      <h2 style={{ fontSize: 15, fontWeight: 800, color: CHARCOAL, margin: '26px 0 12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Organisations</h2>
+      <div style={card}>
+        {/* Add a new organisation */}
+        <span style={kicker}>Add an organisation</span>
+        <form onSubmit={addOrg} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
+          <input value={orgForm.name} onChange={(e) => setOrgForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="Organisation name" style={{ ...input, flex: '1 1 220px' }} />
+          <input value={orgForm.website} onChange={(e) => setOrgForm((f) => ({ ...f, website: e.target.value }))}
+            placeholder="Website (optional)" style={{ ...input, flex: '1 1 200px' }} />
+          <button type="submit" disabled={busy['add-org']} style={btn(true)}>{busy['add-org'] ? 'Adding…' : 'Add organisation'}</button>
+        </form>
+        <p style={{ fontSize: 12, color: '#8a8076', margin: '8px 0 0' }}>
+          New organisations start closed. Set an access code below to open one for client self-sign-up — clients then
+          pick it from the list on the Create-account screen and join with that code.
+        </p>
+
+        {/* Access codes per organisation */}
+        <span style={{ ...kicker, marginTop: 18 }}>Access codes</span>
+        {(data.clients || []).length === 0 ? (
+          <div style={{ fontSize: 13, color: '#8a8076' }}>No organisations yet — add your first above.</div>
+        ) : (data.clients || []).map((c) => (
+          <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 0', borderTop: '1px solid #f0e9df', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 220px' }}>
+              <span style={{ fontWeight: 600, color: '#2a2622' }}>{c.name}</span>
+              {!c.is_active && <span style={{ color: '#a89f95', fontSize: 12 }}> · inactive</span>}
+              <span style={{ marginLeft: 8, ...(c.has_access_code ? pill('#dcfce7', '#166534') : pill('#f1f5f9', '#475569')) }}>
+                {c.has_access_code ? 'open for sign-up' : 'no code'}
+              </span>
+            </div>
+            <input type="text" value={codeInputs[c.id] || ''} autoComplete="off"
+              onChange={(e) => setCodeInputs((ci) => ({ ...ci, [c.id]: e.target.value }))}
+              placeholder={c.has_access_code ? 'New code…' : 'Set access code…'}
+              style={{ ...input, flex: '0 1 170px' }} />
+            <button onClick={() => saveCode(c.id, c.name)} disabled={busy[`code-${c.id}`] || !(codeInputs[c.id] || '').trim()} style={btn(true)}>
+              {busy[`code-${c.id}`] ? '…' : (c.has_access_code ? 'Change' : 'Set code')}
+            </button>
+            {c.has_access_code && (
+              <button onClick={() => saveCode(c.id, c.name, true)} disabled={busy[`code-${c.id}`]} style={btn(false)}>Clear</button>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* ═══ WHAT USERS HAVE BEEN DOING ═══ */}
