@@ -21,7 +21,10 @@ const PROV = {
   draft: { label: 'Draft', bg: '#f1f0ec', fg: '#6b6359' },
 };
 const MODEL_LABEL = Object.fromEntries(MODELS.map((m) => [m.key, m.label]));
-const STORED_MODEL = () => (typeof localStorage !== 'undefined' && localStorage.getItem('beaiready_prompt_model')) || 'claude';
+// Models we can independently lab-validate (a provider/validator exists). Copilot + Meta AI
+// have no API validator here, so we present them honestly rather than as "untested".
+const LAB_MODELS = new Set(['claude', 'gpt', 'gemini']);
+const STORED_MODEL = () => { try { return localStorage.getItem('beaiready_prompt_model') || ''; } catch { return ''; } };
 
 function ProvenanceBadge({ status, source }) {
   const p = PROV[status] || PROV.draft;
@@ -33,7 +36,8 @@ function ProvenanceBadge({ status, source }) {
   );
 }
 
-function ModelRating({ status, rating }) {
+function ModelRating({ status, rating, modelKey }) {
+  if (modelKey && !LAB_MODELS.has(modelKey)) return <span style={{ fontSize: 12, color: '#a89e92' }}>not lab‑tested</span>;
   if (!status || status === 'untested') return <span style={{ fontSize: 12, color: '#a89e92' }}>untested</span>;
   if (status === 'failed') return <span style={{ fontSize: 12, color: '#c2410c' }}>failed</span>;
   return <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>✓ validated{rating != null ? ` · ${Math.round(Number(rating))}/100` : ''}</span>;
@@ -43,7 +47,8 @@ function ModelRating({ status, rating }) {
 export default function BeAIReadyPrompts({ mode = 'library' }) {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [model, setModel] = useState(STORED_MODEL());
+  const [model, setModel] = useState(STORED_MODEL() || 'claude');
+  const [suggested, setSuggested] = useState(false);   // auto-picked from the company's tools
   const [items, setItems] = useState(null);
   const [role, setRole] = useState('');
   const [taskType, setTaskType] = useState('');
@@ -53,7 +58,13 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
   const [draft, setDraft] = useState({ title: '', body: '', task_type: 'other' });
   const [addBusy, setAddBusy] = useState(false);
 
-  const setAndStoreModel = (m) => { setModel(m); try { localStorage.setItem('beaiready_prompt_model', m); } catch { /* ignore */ } };
+  const setAndStoreModel = (m) => { setModel(m); setSuggested(false); try { localStorage.setItem('beaiready_prompt_model', m); } catch { /* ignore */ } };
+
+  // Default to the company's most-used AI tool when the member hasn't picked a model yet.
+  useEffect(() => {
+    if (STORED_MODEL()) return;
+    apiFetch('/prompts/meta/suggested-model').then((r) => { if (r?.model) { setModel(r.model); setSuggested(true); } }).catch(() => {});
+  }, []);
 
   const submitCompany = async (e) => {
     e.preventDefault();
@@ -117,6 +128,17 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
         <Labelled label="Search"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search prompts…" style={{ ...inp, minWidth: 200 }} /></Labelled>
       </div>
 
+      {suggested && (
+        <p style={{ fontSize: 12, color: '#6b6359', margin: '-4px 0 12px' }}>
+          Defaulted to <strong>{MODEL_LABEL[model]}</strong> — the AI tool your company uses most. Change it above anytime.
+        </p>
+      )}
+      {!LAB_MODELS.has(model) && (
+        <p style={{ fontSize: 12, color: '#8a8076', margin: '-4px 0 12px' }}>
+          {MODEL_LABEL[model]} isn’t independently lab‑tested here — prompts show community ratings rather than validation scores.
+        </p>
+      )}
+
       {items == null ? <p style={muted}>Loading…</p> : items.length === 0 ? (
         <p className="hub-band" style={{ margin: 0 }}>
           No prompts for <strong>{MODEL_LABEL[model]}</strong>{role ? ` in “${role.replace('_', ' ')}”` : ''} yet — try the “General” role or another model.
@@ -135,7 +157,7 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
                 <span style={taskTag}>{p.task_type}</span>
                 {(p.roles || []).map((r) => <span key={r} style={roleTag}>{r.replace('_', ' ')}</span>)}
               </div>
-              <div style={{ fontSize: 12, color: '#8a8076' }}>On {MODEL_LABEL[model]}: <ModelRating status={p.model_status} rating={p.model_rating} /></div>
+              <div style={{ fontSize: 12, color: '#8a8076' }}>On {MODEL_LABEL[model]}: <ModelRating status={p.model_status} rating={p.model_rating} modelKey={model} /></div>
             </Link>
           ))}
         </section>
@@ -249,7 +271,7 @@ function PromptDetail({ id, model, setModel, onBack }) {
               return (
                 <tr key={m.key} style={{ borderTop: '1px solid #eee5da', background: m.key === model ? '#faf6f3' : 'transparent' }}>
                   <td style={td}>{m.label}{m.key === model ? ' ·' : ''}</td>
-                  <td style={td}><ModelRating status={v?.status} rating={v?.rating} /></td>
+                  <td style={td}><ModelRating status={v?.status} rating={v?.rating} modelKey={m.key} /></td>
                   <td style={td}>{v?.rating != null ? `${Math.round(Number(v.rating))}/100${v.band ? ` (${v.band})` : ''}` : '—'}</td>
                   <td style={{ ...td, color: '#8a8076' }}>{v?.validated_at ? new Date(v.validated_at).toLocaleDateString() : '—'}</td>
                 </tr>
