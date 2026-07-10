@@ -22,11 +22,11 @@ export default function BeAIReadyLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Log out, then drop straight onto the sign-in screen so you can come back as a
-  // different user (e.g. switch between a client login and the Develop AI admin).
+  // Log out, then land on the public Be AI Ready home (no login box) — the same
+  // page a first-time visitor sees. Signing in again is a click away in the header.
   const signOut = async () => {
     try { await logout(); } catch { /* ignore */ }
-    navigate('/login');
+    navigate('/');
   };
 
   useEffect(() => {

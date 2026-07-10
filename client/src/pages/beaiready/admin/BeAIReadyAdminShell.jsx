@@ -1,7 +1,7 @@
 // BeAIReadyAdminShell — the BE AI READY admin portal chrome (admin-only, on the
 // beaiready host). Deliberately DISTINCT from Grounded's admin: BE AI READY's
-// own charcoal + terracotta. Four pages: Users (the client businesses + Pulse),
-// Pillars, Data, Models.
+// own charcoal + terracotta. Landing page is "Today" (BeAIReadyAdminOverview) —
+// the daily command centre; the rest of the nav are the per-area admin pages.
 import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext.jsx';
 
@@ -9,8 +9,8 @@ const CHARCOAL = '#1c1b1a';
 const TERRACOTTA = '#c75b39';
 
 const NAV = [
-  { to: '/admin', label: 'Users', end: true },
-  { to: '/admin/pillars', label: 'Pillars' },
+  { to: '/admin', label: 'Today', end: true },
+  { to: '/admin/users', label: 'Users' },
   { to: '/admin/tools', label: 'Toolbox' },
   { to: '/admin/nodes', label: 'Nodes' },
   { to: '/admin/tracker', label: 'Tracker review' },
@@ -72,8 +72,8 @@ export function AdminStub({ title, blurb }) {
       <p style={{ color: '#6b6359', marginBottom: 18 }}>{blurb}</p>
       <div style={{ border: '1px dashed #d8cfc4', borderRadius: 12, background: '#fff', padding: '28px 24px', color: '#8a8076' }}>
         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: TERRACOTTA }}>In development</span>
-        <p style={{ marginTop: 8 }}>This page is next. The Users page (client businesses + Pulse) is built first.
-          See <Link to="/admin">Users →</Link></p>
+        <p style={{ marginTop: 8 }}>This page is next. Start from your daily command centre.
+          See <Link to="/admin">Today →</Link></p>
       </div>
     </div>
   );

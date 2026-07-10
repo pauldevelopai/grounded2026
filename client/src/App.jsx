@@ -111,9 +111,9 @@ import BairShell from './pages/bair/BairShell.jsx';
 import BairAudits from './pages/bair/BairAudits.jsx';
 import BairAudit from './pages/bair/BairAudit.jsx';
 import BeAIReadyAdminShell from './pages/beaiready/admin/BeAIReadyAdminShell.jsx';
+import BeAIReadyAdminOverview from './pages/beaiready/admin/BeAIReadyAdminOverview.jsx';
 import BeAIReadyAdminUsers from './pages/beaiready/admin/BeAIReadyAdminUsers.jsx';
 import BeAIReadyAdminModels from './pages/beaiready/admin/BeAIReadyAdminModels.jsx';
-import BeAIReadyAdminPillars from './pages/beaiready/admin/BeAIReadyAdminPillars.jsx';
 import BeAIReadyAdminTools from './pages/beaiready/admin/BeAIReadyAdminTools.jsx';
 import BeAIReadyAdminTracker from './pages/beaiready/admin/BeAIReadyAdminTracker.jsx';
 import BeAIReadyAdminGovernance from './pages/beaiready/admin/BeAIReadyAdminGovernance.jsx';
@@ -298,8 +298,8 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AdminRoute />}>
                 <Route element={<BeAIReadyAdminShell />}>
-                  <Route path="/admin" element={<BeAIReadyAdminUsers />} />
-                  <Route path="/admin/pillars" element={<BeAIReadyAdminPillars />} />
+                  <Route path="/admin" element={<BeAIReadyAdminOverview />} />
+                  <Route path="/admin/users" element={<BeAIReadyAdminUsers />} />
                   <Route path="/admin/tools" element={<BeAIReadyAdminTools />} />
                   <Route path="/admin/tracker" element={<BeAIReadyAdminTracker />} />
                   <Route path="/admin/governance" element={<BeAIReadyAdminGovernance />} />
