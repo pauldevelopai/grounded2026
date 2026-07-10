@@ -12,8 +12,22 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId, OFFICE_NEWSROOM_ID } from '../lib/tenancy.js';
+import { getModelConfig } from '../lib/models.js';
 
 const router = Router();
+
+// Map a real-world AI-tool name (from the company's tool inventory) → a library model key.
+const toolToModelKey = (name = '') => {
+  const n = String(name).toLowerCase();
+  if (/chatgpt|openai|\bgpt\b/.test(n)) return 'gpt';
+  if (/claude|anthropic/.test(n)) return 'claude';
+  if (/gemini|bard/.test(n)) return 'gemini';
+  if (/copilot/.test(n)) return 'copilot';
+  if (/llama|meta ai|\bmeta\b/.test(n)) return 'meta';
+  return null;
+};
+// The platform provider (Models admin) → a library model key, as a fallback signal.
+const PROVIDER_TO_MODEL = { anthropic: 'claude', openai: 'gpt', gemini: 'gemini' };
 
 const TASK_TYPES = ['extract', 'summarise', 'draft', 'research', 'format', 'other'];
 const ROLES = ['researcher', 'boq_processor', 'admin', 'finance', 'it', 'general'];
@@ -285,6 +299,29 @@ router.post('/admin/feedback/:id/dismiss', requireRole('admin'), async (req, res
     if (!rows.length) return res.status(404).json({ message: 'Feedback not found' });
     res.json({ dismissed: true });
   } catch (err) { console.error('[admin/feedback/dismiss]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// GET /prompts/meta/suggested-model — the model the library should default to for this
+// company: the AI tool they ACTUALLY use most (from their tool inventory), else the
+// platform's configured chat provider, else null (client falls back to Claude). The
+// client only applies this when the member hasn't already picked a model themselves.
+router.get('/prompts/meta/suggested-model', async (req, res) => {
+  try {
+    const newsroomId = await resolveNewsroomId(req);
+    let model = null;
+    if (newsroomId && newsroomId !== OFFICE_NEWSROOM_ID) {
+      const { rows } = await pool.query('SELECT tool_name FROM ai_tool_inventory WHERE newsroom_id = $1', [newsroomId]);
+      const tally = {};
+      for (const r of rows) { const k = toolToModelKey(r.tool_name); if (k) tally[k] = (tally[k] || 0) + 1; }
+      const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0];
+      if (top) model = top[0];
+    }
+    if (!model) {
+      const cfg = await getModelConfig().catch(() => ({}));
+      model = PROVIDER_TO_MODEL[cfg.chat_model] || null;
+    }
+    res.json({ model: model && MODELS[model] ? model : null });
+  } catch (err) { console.error('[prompts:suggested-model]', err); res.json({ model: null }); }
 });
 
 export default router;

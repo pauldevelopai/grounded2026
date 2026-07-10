@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import pool from '../db/pool.js';
-import { providerStatus } from '../lib/models.js';
+import { providerStatus, askModel } from '../lib/models.js';
 
 const here = dirname(fileURLToPath(import.meta.url));            // server/scripts
 const serverDir = resolve(here, '..');                          // server
@@ -98,6 +98,33 @@ async function runPromptfoo(prompt, providerId, sample) {
   }
 }
 
+// Native validator — NO promptfoo, no extra install. Runs the prompt on the model via the
+// platform's own askModel(), then has a judge model score the output 0–100 against a task
+// rubric. Works with just the provider keys the box already has (e.g. ANTHROPIC_API_KEY),
+// so "proven" is achievable without the heavyweight promptfoo dependency. Returns
+// {rating,pass,evidence} or null (→ untested) on any failure.
+async function runNative(prompt, providerId, sample, judgeProvider) {
+  try {
+    const filled = /{{\s*input\s*}}/.test(prompt.body)
+      ? prompt.body.replace(/{{\s*input\s*}}/g, sample || 'N/A')
+      : `${prompt.body}\n\nINPUT:\n${sample || 'N/A'}`;
+    const output = await askModel({ provider: providerId, prompt: filled, maxTokens: 800, temperature: 0.2 });
+    if (!output || !String(output).trim()) return null;
+    const rubric =
+      `You are grading an AI assistant's response to a business task. Be a strict but fair judge.\n` +
+      `TASK: "${prompt.description || prompt.title}"\n\nRESPONSE:\n"""\n${String(output).slice(0, 4000)}\n"""\n\n` +
+      `Score 0–100 for how well the response accomplishes the task: correct, well-structured, follows the ` +
+      `instructions, and invents no facts. Reply with ONLY a JSON object: {"score": <integer 0-100>, "reason": "<one sentence>"}.`;
+    const verdict = await askModel({ provider: judgeProvider || providerId, prompt: rubric, maxTokens: 200, temperature: 0 });
+    const m = String(verdict).match(/\{[\s\S]*\}/);
+    const score = m ? Math.max(0, Math.min(100, Math.round(Number(JSON.parse(m[0]).score) || 0))) : 0;
+    return { rating: score, pass: score >= PASS_THRESHOLD, evidence: { tool: 'native', judge: judgeProvider || providerId, score } };
+  } catch (err) {
+    console.warn(`    native run failed (${err.message.split('\n')[0]}) — marking untested`);
+    return null;
+  }
+}
+
 async function upsertValidation(promptId, modelKey, { status, rating = null, evidence = null }) {
   const validatedAt = status === 'validated' ? new Date().toISOString() : null;
   await pool.query(
@@ -114,11 +141,13 @@ async function main() {
   const status = await providerStatus();
   const configured = Object.fromEntries(Object.entries(MODEL_PROVIDER).map(([m, p]) => [m, !!(p && status[p]?.configured)]));
   const pfOk = promptfooAvailable();
+  // The judge for the native path — prefer Claude (usually the always-on key on the box).
+  const judgeProvider = status.anthropic?.configured ? 'anthropic' : null;
   const { dir: fxDir, sample } = await pickFixtures();
 
   console.log('validate-prompts:');
   console.log('  models with keys:', Object.entries(configured).filter(([, v]) => v).map(([m]) => m).join(', ') || 'none');
-  console.log('  promptfoo installed:', pfOk, pfOk ? '' : '(opt-in: cd server && npm install -D promptfoo --legacy-peer-deps)');
+  console.log('  engine:', pfOk ? 'promptfoo' : 'native (built-in judge — no extra install)');
   console.log('  fixtures:', fxDir || 'none found');
 
   const { rows: prompts } = await pool.query("SELECT id, title, body, description FROM prompts WHERE validation_status IN ('pending','draft')");
@@ -129,8 +158,12 @@ async function main() {
     console.log(`• ${p.title}`);
     let anyPass = false;
     for (const modelKey of Object.keys(MODEL_PROVIDER)) {
-      if (!configured[modelKey] || !pfOk) { await upsertValidation(p.id, modelKey, { status: 'untested' }); continue; }
-      const r = await runPromptfoo(p, PROVIDER_PFID[MODEL_PROVIDER[modelKey]], sample);
+      const providerId = MODEL_PROVIDER[modelKey];
+      // No independent validator for this model (Copilot/Meta), or its provider key isn't
+      // configured → honestly untested. Otherwise validate: promptfoo if installed, else native.
+      if (!providerId || !configured[modelKey]) { await upsertValidation(p.id, modelKey, { status: 'untested' }); continue; }
+      const r = pfOk ? await runPromptfoo(p, PROVIDER_PFID[providerId], sample)
+                     : await runNative(p, providerId, sample, judgeProvider);
       if (!r) { await upsertValidation(p.id, modelKey, { status: 'untested' }); continue; }
       await upsertValidation(p.id, modelKey, { status: r.pass ? 'validated' : 'failed', rating: r.rating, evidence: r.evidence });
       console.log(`    ${modelKey}: ${r.pass ? 'validated' : 'failed'} (${r.rating}/100)`);
