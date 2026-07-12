@@ -699,6 +699,8 @@ const VERDICT_LABEL = { supported: 'Supported', contradicted: 'Contradicted', mi
 const VERDICT_ORDER = ['supported', 'contradicted', 'misleading', 'unverified', 'pending'];
 const ROLE_LABEL = { claim: "Company claim", reporting: 'EnviroPress reporting', external: 'External source' };
 const ROLE_PILL = { claim: { background: '#fee2e2', color: '#b91c1c' }, reporting: { background: '#dbeafe', color: '#1e40af' }, external: { background: '#dcfce7', color: '#166534' } };
+const STANCE_COLOR = { supports: '#166534', contradicts: '#b91c1c', context: '#8a8076' };
+const STANCE_LABEL = { supports: 'Supports', contradicts: 'Contradicts', context: 'Context' };
 
 function VerdictBar({ counts }) {
   const c = counts || {};
@@ -863,8 +865,26 @@ function MineView({ setErr, mine, back }) {
                 <strong style={{ fontSize: 13.5 }}>{cl.claim_text}</strong>
               </div>
               {cl.rationale && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0' }}>{cl.rationale}</p>}
-              {Array.isArray(cl.citations) && cl.citations.length > 0 && (
+              {Array.isArray(cl.evidence) && cl.evidence.length > 0 ? (
+                <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
+                  {cl.evidence.map((e, i) => (
+                    <div key={i} style={{ borderLeft: `3px solid ${STANCE_COLOR[e.stance] || '#e4dcd2'}`, padding: '1px 0 1px 8px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: STANCE_COLOR[e.stance] || '#8a8076' }}>
+                        {STANCE_LABEL[e.stance] || e.stance}{e.title ? ` · ${e.title}` : ''}{e.role ? ` · ${ROLE_LABEL[e.role] || e.role}` : ''}
+                      </div>
+                      {e.quote && <div style={{ fontSize: 12, color: '#5b5249', fontStyle: 'italic' }}>“{e.quote}”</div>}
+                    </div>
+                  ))}
+                </div>
+              ) : (Array.isArray(cl.citations) && cl.citations.length > 0 && (
                 <div style={{ ...muted, fontSize: 11.5, marginTop: 5 }}>Sources: {cl.citations.map((c) => c.title || c.kind).filter(Boolean).join(' · ')}</div>
+              ))}
+              {Array.isArray(cl.events) && cl.events.filter((e) => e.event_type === 'verdict_changed').length > 0 && (
+                <div style={{ ...muted, fontSize: 11, marginTop: 7 }}>
+                  History: {cl.events.filter((e) => e.event_type === 'verdict_changed').slice(0, 4).reverse().map((e, i) => (
+                    <span key={i}>{i > 0 ? ' → ' : ''}{VERDICT_LABEL[e.new_verdict] || e.new_verdict} <span style={{ opacity: 0.65 }}>{new Date(e.created_at).toLocaleDateString()}</span></span>
+                  ))}
+                </div>
               )}
             </div>
           ))}

@@ -52,7 +52,7 @@ export async function retrieveCompanyChunks(newsroomId, question, { limit = 12, 
   const emb = await generateEmbedding(question).catch(() => null);
   if (emb) {
     const { rows } = await pool.query(
-      `SELECT c.source_id, c.text_chunk, s.kind, s.title
+      `SELECT c.source_id, c.text_chunk, s.kind, s.title, s.role
          FROM beaiready_source_chunks c
          JOIN beaiready_company_sources s ON s.id = c.source_id
         WHERE c.newsroom_id = $1 AND c.embedding IS NOT NULL
@@ -63,7 +63,7 @@ export async function retrieveCompanyChunks(newsroomId, question, { limit = 12, 
         LIMIT $3`, [newsroomId, toPgVector(emb), limit, collection, roles]).catch(() => ({ rows: [] }));
     if (rows.length) {
       return rows
-        .map((r) => ({ source_id: r.source_id, kind: r.kind, title: r.title, text: decryptFor(newsroomId, r.text_chunk) || '' }))
+        .map((r) => ({ source_id: r.source_id, kind: r.kind, title: r.title, role: r.role, text: decryptFor(newsroomId, r.text_chunk) || '' }))
         .filter((r) => r.text);
     }
   }
@@ -73,7 +73,7 @@ export async function retrieveCompanyChunks(newsroomId, question, { limit = 12, 
 // Fallback: first ~2400 chars of each included, non-sensitive source (pre-chunk path).
 async function sourceLevelFallback(newsroomId, limit, { collection = null, roles = null } = {}) {
   const { rows } = await pool.query(
-    `SELECT kind, title, extracted_text FROM beaiready_company_sources
+    `SELECT id, kind, title, role, extracted_text FROM beaiready_company_sources
       WHERE newsroom_id = $1 AND inclusion <> 'exclude' AND sensitivity <> 'withdrawn'
         AND ($3::text IS NULL OR collection = $3)
         AND ($4::text[] IS NULL OR role = ANY($4))
@@ -82,7 +82,7 @@ async function sourceLevelFallback(newsroomId, limit, { collection = null, roles
   const out = [];
   for (const s of rows) {
     const text = (decryptFor(newsroomId, s.extracted_text) || '').slice(0, 2400);
-    if (text) out.push({ source_id: null, kind: s.kind, title: s.title, text });
+    if (text) out.push({ source_id: s.id, kind: s.kind, title: s.title, role: s.role, text });
   }
   return out;
 }

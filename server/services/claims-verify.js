@@ -5,15 +5,30 @@
 // citations. Verdicts persist and are re-computed as evidence is added; each run writes
 // a snapshot for the trend. Reuses KnowHow's retrieval, the tenant persona, callClaude.
 import pool from '../db/pool.js';
-import { decryptFor } from './crypto.js';
+import { decryptFor, encryptFor } from './crypto.js';
 import { callClaude } from './claude.js';
 import { retrieveCompanyChunks } from './company-knowledge-index.js';
+import { generateEmbedding, toPgVector } from './embeddings.js';
 import { assistantInstructionsFor } from './knowhow-presets.js';
 
 const VERDICTS = ['supported', 'contradicted', 'misleading', 'unverified'];
 const EMPTY_COUNTS = { supported: 0, contradicted: 0, misleading: 0, unverified: 0, pending: 0 };
+const DEDUPE_DIST = 0.18;   // cosine distance ≤ this ⇒ the same claim re-phrased (collapse, don't duplicate).
+                            // Calibrated: near-exact rewrites ~0.04, clear paraphrases ~0.16, distinct claims ≥0.5.
+                            // Kept conservative — over-merging would silently drop a real claim.
 
 function safeJson(t) { if (!t) return null; const m = String(t).match(/\{[\s\S]*\}/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } }
+function stanceFor(verdict) { return verdict === 'supported' ? 'supports' : (verdict === 'contradicted' || verdict === 'misleading') ? 'contradicts' : 'context'; }
+
+// Is there already a claim in this bucket that means the same thing? (semantic dedupe)
+async function findSimilarClaim(newsroomId, collection, vec) {
+  if (!vec) return null;
+  const { rows } = await pool.query(
+    `SELECT id, (embedding <=> $3::vector) AS dist FROM beaiready_claim_checks
+      WHERE newsroom_id=$1 AND collection=$2 AND embedding IS NOT NULL
+      ORDER BY embedding <=> $3::vector LIMIT 1`, [newsroomId, collection, toPgVector(vec)]).catch(() => ({ rows: [] }));
+  return rows[0] && Number(rows[0].dist) <= DEDUPE_DIST ? rows[0] : null;
+}
 
 async function verdictCounts(newsroomId, collection) {
   const { rows } = await pool.query(
@@ -47,8 +62,15 @@ export async function extractClaims(newsroomId, collection) {
       if (!c) continue;
       const { rowCount } = await pool.query(
         'SELECT 1 FROM beaiready_claim_checks WHERE newsroom_id=$1 AND collection=$2 AND lower(claim_text)=lower($3)', [newsroomId, collection, c]);
-      if (rowCount) continue;
-      await pool.query('INSERT INTO beaiready_claim_checks (newsroom_id, collection, claim_text, verdict) VALUES ($1,$2,$3,\'pending\')', [newsroomId, collection, c]);
+      if (rowCount) continue;                                     // exact duplicate
+      const vec = await generateEmbedding(c).catch(() => null);
+      if (await findSimilarClaim(newsroomId, collection, vec)) continue;   // same claim, re-phrased
+      const { rows: [ins] } = await pool.query(
+        'INSERT INTO beaiready_claim_checks (newsroom_id, collection, claim_text, verdict, embedding) VALUES ($1,$2,$3,\'pending\',$4) RETURNING id',
+        [newsroomId, collection, c, vec ? toPgVector(vec) : null]);
+      await pool.query(
+        'INSERT INTO beaiready_claim_events (newsroom_id, claim_id, event_type, new_verdict, detail) VALUES ($1,$2,\'created\',\'pending\',$3::jsonb)',
+        [newsroomId, ins.id, JSON.stringify({ from: r.title || 'a company document' })]);
       added++;
     }
   }
@@ -59,12 +81,12 @@ export async function extractClaims(newsroomId, collection) {
 export async function verifyClaims(newsroomId, collection) {
   await extractClaims(newsroomId, collection);
   const { rows: claims } = await pool.query(
-    'SELECT id, claim_text FROM beaiready_claim_checks WHERE newsroom_id=$1 AND collection=$2', [newsroomId, collection]);
+    'SELECT id, claim_text, verdict AS prev FROM beaiready_claim_checks WHERE newsroom_id=$1 AND collection=$2', [newsroomId, collection]);
   const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
   let done = 0;
   for (const cl of claims) {
     const evidence = await retrieveCompanyChunks(newsroomId, cl.claim_text, { collection, roles: ['reporting', 'external'], limit: 8 });
-    let verdict = 'unverified', rationale = 'No independent evidence has been added yet to test this claim.', citations = [];
+    let verdict = 'unverified', rationale = 'No independent evidence has been added yet to test this claim.', citations = [], used = [];
     if (evidence.length) {
       const ctx = evidence.map((e, i) => `[${i + 1}] (${e.kind}) ${e.title || ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 1200)}`).join('\n\n');
       const system = (persona ? persona + '\n\n' : '')
@@ -78,12 +100,27 @@ export async function verifyClaims(newsroomId, collection) {
         if (p && VERDICTS.includes(p.verdict)) {
           verdict = p.verdict;
           rationale = String(p.rationale || '').slice(0, 600);
-          citations = (Array.isArray(p.citations) ? p.citations : []).map((n) => evidence[n - 1]).filter(Boolean).map((e) => ({ title: e.title, kind: e.kind }));
+          used = (Array.isArray(p.citations) ? p.citations : []).map((n) => evidence[n - 1]).filter(Boolean);
+          citations = used.map((e) => ({ title: e.title, kind: e.kind }));
         }
       } catch (e) { console.error('[claims verify]', e.message); }
     }
-    await pool.query('UPDATE beaiready_claim_checks SET verdict=$1, rationale=$2, citations=$3::jsonb, updated_at=NOW() WHERE id=$4',
+    await pool.query('UPDATE beaiready_claim_checks SET verdict=$1, rationale=$2, citations=$3::jsonb, updated_at=NOW(), verified_at=NOW() WHERE id=$4',
       [verdict, rationale, JSON.stringify(citations), cl.id]);
+    // Frozen evidence links: the exact passages this verdict rests on (encrypted, immutable to later source edits).
+    await pool.query('DELETE FROM beaiready_claim_evidence WHERE claim_id=$1', [cl.id]);
+    const stance = stanceFor(verdict);
+    for (const e of used) {
+      await pool.query(
+        'INSERT INTO beaiready_claim_evidence (newsroom_id, claim_id, source_id, role, stance, quote, title) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [newsroomId, cl.id, e.source_id || null, e.role || null, stance, encryptFor(newsroomId, (e.text || '').slice(0, 1200)), e.title || null]);
+    }
+    // Append-only history: record every verdict change (incl. the first, from 'pending').
+    if (cl.prev !== verdict) {
+      await pool.query(
+        'INSERT INTO beaiready_claim_events (newsroom_id, claim_id, event_type, old_verdict, new_verdict, rationale, detail) VALUES ($1,$2,\'verdict_changed\',$3,$4,$5,$6::jsonb)',
+        [newsroomId, cl.id, cl.prev, verdict, rationale, JSON.stringify({ citations, evidence: used.length })]);
+    }
     done++;
   }
   const counts = await verdictCounts(newsroomId, collection);
@@ -130,10 +167,21 @@ export async function removeMine(newsroomId, name) {
 
 export async function getMine(newsroomId, collection) {
   const { rows: claims } = await pool.query(
-    'SELECT id, claim_text, verdict, rationale, citations, updated_at FROM beaiready_claim_checks WHERE newsroom_id=$1 AND collection=$2 ORDER BY updated_at DESC', [newsroomId, collection]);
+    'SELECT id, claim_text, verdict, rationale, citations, updated_at, verified_at FROM beaiready_claim_checks WHERE newsroom_id=$1 AND collection=$2 ORDER BY updated_at DESC', [newsroomId, collection]);
   const { rows: sources } = await pool.query(
     'SELECT id, title, role, url FROM beaiready_company_sources WHERE newsroom_id=$1 AND collection=$2 ORDER BY created_at DESC', [newsroomId, collection]);
-  return { collection, claims, sources, counts: await verdictCounts(newsroomId, collection) };
+  const ids = claims.map((c) => c.id);
+  const evByClaim = {}, evtByClaim = {};
+  if (ids.length) {
+    const { rows: ev } = await pool.query(
+      'SELECT claim_id, source_id, role, stance, quote, title FROM beaiready_claim_evidence WHERE claim_id = ANY($1) ORDER BY created_at', [ids]);
+    for (const e of ev) (evByClaim[e.claim_id] ||= []).push({ source_id: e.source_id, role: e.role, stance: e.stance, title: e.title, quote: (decryptFor(newsroomId, e.quote) || '').slice(0, 400) });
+    const { rows: evt } = await pool.query(
+      'SELECT claim_id, event_type, old_verdict, new_verdict, created_at FROM beaiready_claim_events WHERE claim_id = ANY($1) ORDER BY created_at DESC', [ids]);
+    for (const e of evt) (evtByClaim[e.claim_id] ||= []).push({ event_type: e.event_type, old_verdict: e.old_verdict, new_verdict: e.new_verdict, created_at: e.created_at });
+  }
+  const enriched = claims.map((c) => ({ ...c, evidence: evByClaim[c.id] || [], events: evtByClaim[c.id] || [] }));
+  return { collection, claims: enriched, sources, counts: await verdictCounts(newsroomId, collection) };
 }
 
 export async function claimsReport(newsroomId) {
