@@ -11,6 +11,7 @@ import { callClaude } from './claude.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
 import { getRelevantKnowledge } from './knowledge.js';
 import { retrieveCompanyChunks } from './company-knowledge-index.js';
+import { assistantInstructionsFor } from './knowhow-presets.js';
 
 // Prior team interactions most relevant to this question — hybrid (vector when an
 // embedding service is configured, else full-text). Scoped to the company; shared only.
@@ -83,13 +84,17 @@ async function gatherCorpus({ newsroomId, organisationId, sectorId, question }) 
 export async function askCompanyAI({ newsroomId, organisationId, sectorId, userId, question }) {
   const { context, sources } = await gatherCorpus({ newsroomId, organisationId, sectorId, question });
 
+  // Per-client persona (from the use-case preset a consultant picked) — shapes role /
+  // expertise / tone only; the grounding + privacy rules below always apply.
+  const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
   const system =
     'You are the shared AI assistant for ONE small/medium business on the Be AI Ready platform. Answer the team ' +
     "member's question using ONLY the company's own knowledge provided below — their documents, their training, " +
     'and the team\'s earlier answers — plus any clearly-marked general guidance. Ground every claim in that ' +
     'material. If the answer is not covered by the provided knowledge, say so plainly and suggest what the team ' +
     'should capture or ask their Be AI Ready consultant — do NOT invent facts, figures, policies or specifics. ' +
-    'Tone: plain, practical, for a non-technical team. Keep it tight (under ~180 words unless detail is needed).';
+    'Tone: plain, practical, for a non-technical team. Keep it tight (under ~180 words unless detail is needed).' +
+    (persona ? `\n\nRole & focus for this specific business: ${persona}` : '');
   const userContent = context
     ? `The company's knowledge:\n\n${context}\n\nTeam member's question: ${question}\n\nAnswer now, grounded only in the above.`
     : `There is no captured company knowledge yet.\n\nTeam member's question: ${question}\n\nSay honestly that the company hasn't captured knowledge on this yet, give only safe general guidance if any, and suggest what to capture. Do not invent company specifics.`;

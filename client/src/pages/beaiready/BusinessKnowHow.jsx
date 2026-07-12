@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch, getActiveNewsroomId } from '../../hooks/useApi.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 const TABS = [
   { key: 'ask', label: 'Ask' },
@@ -23,6 +24,9 @@ const KIND_LABEL = { doc: 'Document', website: 'Website', note: 'Note' };
 export default function BusinessKnowHow() {
   const [tab, setTab] = useState('ask');
   const [err, setErr] = useState('');
+  const { user } = useAuth();
+  // Consultants (admins) get an extra "Assistant" tab to set the client's AI persona.
+  const tabs = user?.role === 'admin' ? [...TABS, { key: 'assistant', label: 'Assistant' }] : TABS;
 
   return (
     <div className="hub hub-beaiready">
@@ -35,7 +39,7 @@ export default function BusinessKnowHow() {
       </p>
 
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #eee5da', marginBottom: 18 }}>
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.key} onClick={() => { setErr(''); setTab(t.key); }}
             style={{ ...tabBtn, ...(tab === t.key ? tabActive : {}) }}>{t.label}</button>
         ))}
@@ -48,7 +52,58 @@ export default function BusinessKnowHow() {
       {tab === 'manifest' && <ManifestPanel setErr={setErr} />}
       {tab === 'workflows' && <WorkflowsPanel setErr={setErr} />}
       {tab === 'publish' && <PublishPanel setErr={setErr} />}
+      {tab === 'assistant' && <AssistantPanel setErr={setErr} />}
     </div>
+  );
+}
+
+// ── Assistant — consultant sets this client's AI persona via a use-case preset ────
+function AssistantPanel({ setErr }) {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState('');
+
+  const load = useCallback(() => { apiFetch('/beaiready/knowhow/assistant').then(setD).catch((e) => setErr(e.message)); }, [setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const pick = (p) => { setSaved(''); setD((x) => ({ ...x, use_case: p.key, instructions: p.instructions })); };
+  const save = async () => {
+    setBusy(true); setErr(''); setSaved('');
+    try { await apiFetch('/beaiready/knowhow/assistant', { method: 'PUT', body: JSON.stringify({ use_case: d.use_case, instructions: d.instructions }) }); setSaved('Saved — the assistant now answers with this persona.'); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  if (!d) return <p style={muted}>Loading…</p>;
+  return (
+    <>
+      <p style={{ ...muted, maxWidth: '70ch', marginTop: 0 }}>
+        Set this client's AI persona. Pick a use-case preset to seed it, then tailor the wording. It shapes how the
+        assistant answers for this business — its role, expertise and tone — while grounding and privacy stay the same.
+        <b> Consultant setting.</b>
+      </p>
+
+      <div style={{ ...card, marginBottom: 14 }}>
+        <div style={kicker}>Use-case preset</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {(d.presets || []).map((p) => (
+            <button key={p.key} onClick={() => pick(p)} title={p.description}
+              style={{ ...tag, ...(d.use_case === p.key ? { borderColor: '#c75b39', color: '#c75b39', fontWeight: 700 } : {}) }}>{p.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ ...card, marginBottom: 14 }}>
+        <div style={kicker}>Assistant instructions</div>
+        <textarea value={d.instructions || ''} onChange={(e) => setD({ ...d, instructions: e.target.value })}
+          placeholder="Describe the assistant's role, expertise and tone for this client…" style={{ ...input, minHeight: 130 }} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <button onClick={save} disabled={busy} style={btn}>{busy ? 'Saving…' : 'Save persona'}</button>
+        {saved && <span style={{ ...muted, color: '#166534' }}>{saved}</span>}
+      </div>
+    </>
   );
 }
 

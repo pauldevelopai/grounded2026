@@ -18,6 +18,7 @@ import { ingestUrls, ingestSitemap, ingestDriveFolder, driveAvailable } from '..
 import { getSettings, saveSettings, buildBundle, bundleStats } from '../services/company-knowledge-bundle.js';
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
+import { PRESETS } from '../services/knowhow-presets.js';
 
 const router = Router();
 
@@ -421,6 +422,32 @@ router.get('/jsonld/:id', async (req, res) => {
 router.get('/bundle/preview', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json(await bundleStats(newsroomId)); }
   catch (err) { console.error('[beaiready-knowhow/bundle:preview]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Bespoke AI persona (consultant-picked use-case preset + editable instructions) ──
+router.get('/assistant', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    const { rows: [r] } = await pool.query(
+      'SELECT use_case, assistant_instructions FROM beaiready_knowhow_settings WHERE newsroom_id = $1', [newsroomId]);
+    res.json({ use_case: r?.use_case || '', instructions: r?.assistant_instructions || '', presets: PRESETS });
+  } catch (err) { console.error('[beaiready-knowhow/assistant:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/assistant', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const use_case = req.body?.use_case || null;
+    const instructions = (req.body?.instructions || '').trim() || null;
+    await pool.query(
+      `INSERT INTO beaiready_knowhow_settings (newsroom_id, use_case, assistant_instructions, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (newsroom_id) DO UPDATE SET use_case = EXCLUDED.use_case,
+         assistant_instructions = EXCLUDED.assistant_instructions, updated_at = NOW()`,
+      [newsroomId, use_case, instructions]);
+    res.json({ ok: true, use_case, instructions });
+  } catch (err) { console.error('[beaiready-knowhow/assistant:put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

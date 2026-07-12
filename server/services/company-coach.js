@@ -10,6 +10,7 @@ import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
 import { retrieveCompanyChunks } from './company-knowledge-index.js';
 import { knowhowTenantIdForNewsroom } from '../knowhow/identity.js';
+import { assistantInstructionsFor } from './knowhow-presets.js';
 
 // Everything the coach may ground in — company tier ONLY — plus the sources it drew on.
 async function gatherCompanyKnowledge({ newsroomId, question }) {
@@ -54,13 +55,15 @@ async function gatherCompanyKnowledge({ newsroomId, question }) {
 export async function askCompanyCoach({ newsroomId, question }) {
   const { context, sources } = await gatherCompanyKnowledge({ newsroomId, question });
 
+  const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
   const system =
     'You are the onboarding coach for a NEW member of staff at ONE small/medium business on the Be AI Ready ' +
     "platform. Answer the new hire's question using ONLY the company knowledge provided below — the company's " +
     'documents, its promoted know-how, and its workflows. Ground every claim in that material. If a workflow is ' +
     "relevant, walk them through it step by step, in order. If the answer isn't covered by the provided company " +
     'knowledge, say so plainly and point them to their manager or Be AI Ready consultant — do NOT invent ' +
-    'procedures, names, figures or policies. Tone: warm, plain, practical — you are helping someone find their feet.';
+    'procedures, names, figures or policies. Tone: warm, plain, practical — you are helping someone find their feet.' +
+    (persona ? `\n\nRole & focus for this specific business: ${persona}` : '');
   const userContent = context
     ? `The company's knowledge:\n\n${context}\n\nNew hire's question: ${question}\n\nAnswer now, grounded only in the above.`
     : `There is no company-tier knowledge captured yet.\n\nNew hire's question: ${question}\n\nSay honestly that the company hasn't shared knowledge on this yet, and point them to their manager or Be AI Ready consultant. Do not invent company specifics.`;
