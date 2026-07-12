@@ -694,6 +694,69 @@ router.get('/curriculum', async (req, res) => {
   } catch (err) { console.error('[bair-train/curriculum]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Training report — synthesise the consultant's write-up into on-page quality info ─
+// The uploaded training report (a full write-up: executive summary, what was delivered,
+// exercises, outcomes, follow-up) is otherwise just a PDF download. This distils it into
+// an overview + highlights + next steps for the client's dashboard. Cached (kind=
+// 'report') with the same self-heal as the others; regenerated only when the report changes.
+const REPORT_VERSION = 'v1';
+const REPORT_DOCS_SQL = `
+  SELECT ud.original_name AS name, ud.extracted_text AS text
+    FROM uploaded_documents ud
+   WHERE ud.entity_type = 'training_report_file'
+     AND ud.entity_id IN (SELECT id FROM training_agendas WHERE newsroom_id = $1)
+     AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 200
+   ORDER BY ud.created_at`;
+
+function isEmptyReport(r) { return !r || (!r.overview && !(Array.isArray(r.highlights) && r.highlights.length)); }
+
+async function generateReportSummary(docs) {
+  const body = docs.map((d) => `=== ${d.name} ===\n${d.text || ''}`).join('\n\n').slice(0, 26000);
+  const system =
+    'You are distilling a training consultant\'s post-training REPORT into a short, polished summary shown on the ' +
+    'client\'s own training dashboard — quality info they are proud to read. Keep the report\'s professional, ' +
+    'client-positive tone and ground everything strictly in the report text — invent nothing. Output ONLY JSON ' +
+    '(no markdown): {"overview": string (3-5 sentences: what was delivered and the outcome), "highlights": ' +
+    '[string] (4-6 concrete things the team did, learned, or achieved on the day), "next_steps": [string] ' +
+    '(2-5 follow-up actions / what happens next)}.';
+  const raw = await callClaude({ system, userContent: `The training report:\n\n${body}\n\nReturn the JSON now.`, maxTokens: 1600, temperature: 0.2 });
+  const j = parseJsonObject(raw);
+  const list = (x) => (Array.isArray(x) ? x.filter(Boolean).map((s) => String(s).slice(0, 300)).slice(0, 6) : []);
+  return {
+    overview: typeof j.overview === 'string' ? j.overview.slice(0, 1200) : null,
+    highlights: list(j.highlights),
+    next_steps: list(j.next_steps),
+  };
+}
+
+router.get('/report-summary', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: docs } = await pool.query(REPORT_DOCS_SQL, [newsroomId]);
+    if (!docs.length) return res.json(null);
+    const totalLen = docs.reduce((s, d) => s + (d.text ? d.text.length : 0), 0);
+    const fingerprint = `${REPORT_VERSION}:${docs.length}:${totalLen}`;
+    const { rows: [cached] } = await pool.query(
+      `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'report' AND fingerprint = $2`,
+      [newsroomId, fingerprint]);
+    let r = cached?.analysis;
+    if (isEmptyReport(r)) {   // regenerate on missing/empty; never persist a blank (self-heals)
+      const gen = await generateReportSummary(docs).catch((e) => { console.error('[report gen]', e.message); return {}; });
+      if (!isEmptyReport(gen)) {
+        r = gen;
+        await pool.query(
+          `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+           VALUES ($1,'report',$2,$3::jsonb,NOW())
+           ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+          [newsroomId, fingerprint, JSON.stringify(r)]);
+      } else {
+        r = r || {};
+      }
+    }
+    res.json({ overview: r.overview || null, highlights: r.highlights || [], next_steps: r.next_steps || [] });
+  } catch (err) { console.error('[bair-train/report-summary]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── "Did the training match what the team wanted?" — expectations vs delivery ──────
 // Matches what the team said they wanted (pre-training intake) against what the
 // training actually covered (curriculum) and, WHEN a post-training feedback form is
@@ -867,15 +930,27 @@ async function refreshMatch(newsroomId, curriculum) {
   if (!isEmptyMatch(m)) await upsertAnalysis(newsroomId, 'match', fp, m);   // don't cache a failed (blank) match
   return { ok: !isEmptyMatch(m), has_feedback: feedback.length > 0 };
 }
+async function refreshReport(newsroomId) {
+  const { rows: docs } = await pool.query(REPORT_DOCS_SQL, [newsroomId]);
+  if (!docs.length) return false;
+  const totalLen = docs.reduce((s, d) => s + (d.text ? d.text.length : 0), 0);
+  const fp = `${REPORT_VERSION}:${docs.length}:${totalLen}`;
+  const { rows: [c] } = await pool.query(`SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'report'`, [newsroomId]);
+  if (!isEmptyReport(c?.analysis) && await isFresh(newsroomId, 'report', fp)) return true;
+  const r = await generateReportSummary(docs).catch((e) => { console.error('[refresh report]', e.message); return {}; });
+  if (!isEmptyReport(r)) { await upsertAnalysis(newsroomId, 'report', fp, r); return true; }
+  return false;
+}
 
 router.post('/refresh-analysis', requireRole('admin'), async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    // Team analysis runs in parallel with the curriculum→match chain (match needs the curriculum).
+    // Team analysis + report run in parallel with the curriculum→match chain (match needs the curriculum).
     const taP = refreshTeamAnalysis(newsroomId);
+    const repP = refreshReport(newsroomId);
     const cmP = (async () => { const sessions = await refreshCurriculum(newsroomId); const mt = await refreshMatch(newsroomId, sessions); return { sessions, mt }; })();
-    const [ta, cm] = await Promise.all([taP, cmP]);
-    res.json({ ok: true, team_analysis: ta, curriculum: (cm.sessions || []).length, match: cm.mt.ok, has_feedback: cm.mt.has_feedback });
+    const [ta, rep, cm] = await Promise.all([taP, repP, cmP]);
+    res.json({ ok: true, team_analysis: ta, report: rep, curriculum: (cm.sessions || []).length, match: cm.mt.ok, has_feedback: cm.mt.has_feedback });
   } catch (err) { console.error('[bair-train/refresh-analysis]', err); res.status(500).json({ message: err.message || 'Refresh failed' }); }
 });
 

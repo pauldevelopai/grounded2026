@@ -41,6 +41,7 @@ function TrainingRecord() {
   const [teamAnalysis, setTeamAnalysis] = useState(undefined); // undefined = loading, null = no survey yet
   const [curriculum, setCurriculum] = useState(undefined);     // undefined = loading, null = not indexed yet
   const [match, setMatch] = useState(undefined);               // undefined = loading, null = no survey yet
+  const [report, setReport] = useState(undefined);             // undefined = loading, null = no report uploaded
 
   useEffect(() => {
     apiFetch('/beaiready/trainings').then(setTrainings).catch(() => setTrainings({ upcoming: [], past: [] }));
@@ -49,10 +50,11 @@ function TrainingRecord() {
     apiFetch('/beaiready/training/form-insights').then(setInsights).catch(() => setInsights([]));
     apiFetch('/beaiready/training/feedback-comments').then(setComments).catch(() => setComments(null));
     apiFetch('/beaiready/training/participants').then(setParticipants).catch(() => setParticipants({}));
-    // The team analysis, curriculum + expectations match are AI-generated on first view (then cached).
+    // The team analysis, curriculum, match + report are AI-generated on first view (then cached).
     apiFetch('/beaiready/training/team-analysis').then(setTeamAnalysis).catch(() => setTeamAnalysis(null));
     apiFetch('/beaiready/training/curriculum').then(setCurriculum).catch(() => setCurriculum(null));
     apiFetch('/beaiready/training/expectations-match').then(setMatch).catch(() => setMatch(null));
+    apiFetch('/beaiready/training/report-summary').then(setReport).catch(() => setReport(null));
   }, []);
 
   // Every published material shows somewhere: under its agenda when that agenda is
@@ -76,6 +78,21 @@ function TrainingRecord() {
           <Stat n={docCount} label={docCount === 1 ? 'document' : 'documents'} />
           {surveyTotal > 0 && <Stat n={surveyTotal} label="survey responses" />}
         </section>
+      )}
+
+      {/* Training report — the consultant's write-up, synthesised. The lead overview
+          of the whole engagement; only shown once a report has been uploaded. */}
+      {report !== null && (report === undefined || report.overview || (report.highlights || []).length > 0) && (
+        <>
+          <div className="hub-section-label" style={{ marginTop: 8 }}>Training report</div>
+          <section className="hub-band" style={{ marginBottom: 24 }}>
+            {report === undefined ? (
+              <p style={{ margin: 0, color: '#8a8076' }}>Summarising your training report…</p>
+            ) : (
+              <ReportSummary r={report} />
+            )}
+          </section>
+        </>
       )}
 
       <div className="hub-section-label" style={{ marginTop: 8 }}>Your training sessions</div>
@@ -515,6 +532,35 @@ function Stat({ n, label }) {
     <div style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 12, padding: '12px 18px', minWidth: 108 }}>
       <div style={{ fontSize: 24, fontWeight: 800, color: '#c75b39', lineHeight: 1 }}>{n}</div>
       <div style={{ fontSize: 12, color: '#6b6359', marginTop: 3 }}>{label}</div>
+    </div>
+  );
+}
+
+// The synthesised training report: an overview, key highlights, and what's next.
+function ReportSummary({ r }) {
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      {r.overview && (
+        <div style={{ background: '#fff', borderLeft: '3px solid #c75b39', borderRadius: 8, padding: '12px 16px', fontSize: 14.5, lineHeight: 1.6, color: '#3a342e' }}>
+          {r.overview}
+        </div>
+      )}
+      {(r.highlights || []).length > 0 && (
+        <div>
+          <div style={docLabel}>Highlights</div>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, display: 'grid', gap: 4 }}>
+            {r.highlights.map((h, i) => <li key={i} style={{ fontSize: 13.5, color: '#5b5249', lineHeight: 1.5 }}>{h}</li>)}
+          </ul>
+        </div>
+      )}
+      {(r.next_steps || []).length > 0 && (
+        <div>
+          <div style={docLabel}>What&apos;s next</div>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, display: 'grid', gap: 4 }}>
+            {r.next_steps.map((s, i) => <li key={i} style={{ fontSize: 13.5, color: '#5b5249', lineHeight: 1.5 }}>{s}</li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
