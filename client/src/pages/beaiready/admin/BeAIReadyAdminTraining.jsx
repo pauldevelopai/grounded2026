@@ -200,24 +200,28 @@ function Participants({ people }) {
 // Connect a Google form (a "before" intake survey or an "after" feedback survey),
 // optionally tied to a training via agendaId. Pulls the first responses on connect.
 function FormConnect({ clientId, api, formType, agendaId = null, onDone, setErr }) {
+  const defaultName = formType === 'feedback' ? 'After-training feedback' : 'Before-training survey';
   const [draft, setDraft] = useState({ form_name: '', csv_url: '' });
   const [busy, setBusy] = useState(false);
   const path = formType === 'feedback' ? '/beaiready/training/feedback-forms' : '/beaiready/training/intake-forms';
   const submit = async (e) => {
     e.preventDefault();
-    if (!draft.form_name.trim() || !draft.csv_url.trim()) return;
+    // Only the link is required — the name defaults, so pasting the link + clicking
+    // the button is enough (previously an empty name silently blocked the submit).
+    if (!draft.csv_url.trim()) { setErr('Paste the Google Sheet link first.'); return; }
     setBusy(true); setErr('');
     try {
-      await api(path, { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft, agenda_id: agendaId }) });
+      await api(path, { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, form_name: draft.form_name.trim() || defaultName, csv_url: draft.csv_url.trim(), agenda_id: agendaId }) });
       setDraft({ form_name: '', csv_url: '' }); onDone && onDone();
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
   return (
     <form onSubmit={submit} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      <input value={draft.form_name} onChange={(e) => setDraft({ ...draft, form_name: e.target.value })} placeholder={formType === 'feedback' ? 'After-training feedback' : 'Before-training survey'} style={inp} />
-      <input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Google Sheet link (‘anyone with the link’)" style={{ ...inp, minWidth: 240, flex: 1 }} />
-      <button type="submit" disabled={busy} style={tag}>{busy ? 'Connecting…' : 'Connect'}</button>
+      <input value={draft.form_name} onChange={(e) => setDraft({ ...draft, form_name: e.target.value })} placeholder={`${defaultName} (name — optional)`} style={{ ...inp, width: 210 }} />
+      {/* maxWidth caps the link field so the button always stays on-screen. */}
+      <input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Paste the Google Sheet link (‘anyone with the link’)" style={{ ...inp, flex: '1 1 260px', maxWidth: 440 }} />
+      <button type="submit" disabled={busy} style={btn}>{busy ? 'Processing…' : 'Connect & sync'}</button>
     </form>
   );
 }
