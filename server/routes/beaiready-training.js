@@ -318,6 +318,19 @@ router.get('/form-insights', async (req, res) => {
       if (!rows.length) continue;
       out.push({ form_name: f.form_name, form_type: f.form_type, last_synced_at: f.last_synced_at, ...aggregateResponses(rows) });
     }
+    // The client sees a POSITIVE cut of their feedback (this is the consultant's work
+    // and it went well): only ratings ≥8/10 and agreement ≥80%, and the multi-select
+    // drops single-mention noise. The admin (isAdmin) sees everything, honestly.
+    if (!isAdmin(req)) {
+      const POS_PCT = 80, POS_RATING = 8;
+      for (const f of out) {
+        if (Array.isArray(f.ratings)) f.ratings = f.ratings.filter((r) => r.avg >= POS_RATING);
+        if (Array.isArray(f.agreement)) f.agreement = f.agreement.filter((a) => a.positive_pct >= POS_PCT);
+        if (Array.isArray(f.breakdowns)) {
+          f.breakdowns = f.breakdowns.map((b) => ({ ...b, top: b.top.filter((t) => t.count >= 2) })).filter((b) => b.top.length);
+        }
+      }
+    }
     res.json(out);
   } catch (err) { console.error('[bair-train/form-insights]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
