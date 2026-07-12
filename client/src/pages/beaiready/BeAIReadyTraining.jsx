@@ -235,24 +235,9 @@ function TrainingRecord() {
         <>
           <div className="hub-section-label">Post-training feedback</div>
           <section className="hub-band" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'grid', gap: 18 }}>
+            <div style={{ display: 'grid', gap: 20 }}>
               {(insights || []).filter((f) => f.form_type === 'feedback').map((f) => (
-                <div key={`${f.form_type}:${f.form_name}`}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Post-training feedback
-                    <span style={{ color: '#8a8076', fontWeight: 400 }}> — {f.responses} response{f.responses === 1 ? '' : 's'}</span>
-                  </div>
-                  {f.rating && (
-                    <div style={{ fontSize: 13.5, marginTop: 4 }}>Average {ratingLabel(f.rating.label)}: <strong>{f.rating.avg}</strong>/10</div>
-                  )}
-                  {f.breakdowns.map((b) => (
-                    <div key={b.question} style={{ marginTop: 8 }}>
-                      <div style={docLabel}>{bdLabel(b.question)}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 8px', marginTop: 4 }}>
-                        {b.top.map((t) => <span key={t.value} style={chip}>{t.value}<span style={{ color: '#8a8076', marginLeft: 4 }}>×{t.count}</span></span>)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <FeedbackView key={`${f.form_type}:${f.form_name}`} f={f} />
               ))}
             </div>
           </section>
@@ -372,6 +357,56 @@ function DistBar({ buckets, total }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Post-training feedback: all rating scales, the agreement (Likert) items as
+// positive-share bars, and the multi-select breakdowns. Labels arrive clean from
+// the server, so nothing is truncated mid-word.
+function FeedbackView({ f }) {
+  return (
+    <div>
+      <div style={{ fontSize: 14, fontWeight: 700 }}>Post-training feedback
+        <span style={{ color: '#8a8076', fontWeight: 400 }}> — {f.responses} response{f.responses === 1 ? '' : 's'}</span>
+      </div>
+
+      {(f.ratings || []).length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
+          {f.ratings.map((r) => (
+            <div key={r.label} style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 10, padding: '8px 14px' }}>
+              <div style={{ fontSize: 19, fontWeight: 800, color: '#c75b39', lineHeight: 1 }}>{r.avg}<span style={{ fontSize: 12, color: '#8a8076', fontWeight: 600 }}>/10</span></div>
+              <div style={{ fontSize: 12, color: '#6b6359', marginTop: 3 }}>{r.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(f.agreement || []).length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={docLabel}>How the sessions landed</div>
+          <div style={{ display: 'grid', gap: 6, marginTop: 5 }}>
+            {f.agreement.map((a) => (
+              <div key={a.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' }}>
+                <div style={{ position: 'relative', background: '#f4ece7', borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', inset: 0, width: `${a.positive_pct}%`, background: '#cfe6d3' }} />
+                  <span style={{ position: 'relative', fontSize: 13, padding: '4px 10px', display: 'block', color: '#3a342e' }}>{a.label}</span>
+                </div>
+                <span style={{ fontSize: 12.5, color: '#166534', fontWeight: 700, minWidth: 74, textAlign: 'right' }}>{a.positive_pct}% agree</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(f.breakdowns || []).map((b) => (
+        <div key={b.question} style={{ marginTop: 12 }}>
+          <div style={docLabel}>{b.question}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 8px', marginTop: 4 }}>
+            {b.top.map((t) => <span key={t.value} style={chip}>{t.value}<span style={{ color: '#8a8076', marginLeft: 4 }}>×{t.count}</span></span>)}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

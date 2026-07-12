@@ -239,42 +239,69 @@ const SKIP_ID = /name|email|timestamp|^when$|^age$|address|phone|location/i;
 // Free-text prose columns: they can contain commas (so they'd pass the multi-select
 // test) but tallying sentence fragments is noise — exclude from BREAKDOWNS only.
 const SKIP_PROSE = /elaborate|describe|feelings|change|negative or positive|briefly|what type|important/i;
+// Turn a survey question header into a short, human label. Feedback questions are
+// long sentences ("How would you rate the overall quality of the training session?")
+// and Likert rows carry the real item in brackets ("…content: [My questions were
+// covered]"); pull that out and strip the boilerplate rather than truncate mid-word.
+function cleanLabel(q) {
+  const bracket = String(q).match(/\[([^\]]+)\]/);
+  if (bracket) return bracket[1].trim();
+  let s = String(q).replace(/\?+\s*$/, '').trim();
+  s = s.replace(/^how would you rate (the )?/i, '')
+    .replace(/^please rate[^:]*:\s*/i, '')
+    .replace(/^which /i, '').replace(/^what /i, '')
+    .replace(/ of the training( session)?$/i, '')
+    .replace(/ in explaining the content$/i, '')
+    .replace(/ regarding the (session )?content$/i, '')
+    .replace(/ did you find/i, '').replace(/ with regards to the training$/i, '')
+    .trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : String(q);
+}
+
+const AGREEMENT = { 'strongly agree': 2, agree: 1, neutral: 0, disagree: -1, 'strongly disagree': -2 };
 function aggregateResponses(rows) {
   const responses = rows.map((r) => r.response || {});
   const n = responses.length;
   const cols = [];
   for (const r of responses) for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k);
   const vals = (k) => responses.map((r) => (r[k] ?? '').toString().trim()).filter(Boolean);
-  // Rating columns: (almost) every non-empty value is an int 0–10. A form can have
-  // several (familiarity, sentiment…), so prefer a familiarity/rating-worded header,
-  // else fall back to the first such column — and always show the label so it's honest.
-  const ratingCols = cols.filter((k) => {
-    if (SKIP_ID.test(k)) return false;
-    const vs = vals(k);
-    return vs.length >= Math.max(3, n * 0.5) && vs.every((v) => /^\d{1,2}$/.test(v) && +v <= 10);
-  });
-  const ratingKey = ratingCols.find((k) => /familiar|rating|rate|confiden|comfort|score/i.test(k)) || ratingCols[0] || null;
-  let rating = null;
-  if (ratingKey) {
-    const vs = vals(ratingKey);
-    rating = { label: ratingKey, avg: Math.round((vs.reduce((s, v) => s + +v, 0) / vs.length) * 10) / 10 };
-  }
-  // List-like columns: a fair share of values contain a comma → multi-select. Tally tokens.
-  const breakdowns = [];
+
+  const ratings = [];      // every 0–10 numeric column (a feedback form has several)
+  const agreement = [];    // Likert columns (Strongly Agree … Disagree)
+  const breakdowns = [];   // multi-select columns (comma-separated)
+
   for (const k of cols) {
-    if (SKIP_ID.test(k) || SKIP_PROSE.test(k) || (rating && k === rating.label)) continue;
+    if (SKIP_ID.test(k)) continue;
     const vs = vals(k);
-    if (vs.length < 3) continue;
+    if (vs.length < Math.max(3, n * 0.4)) continue;
+
+    // 0–10 rating scale.
+    if (vs.every((v) => /^\d{1,2}$/.test(v) && +v <= 10)) {
+      ratings.push({ label: cleanLabel(k), avg: Math.round((vs.reduce((s, v) => s + +v, 0) / vs.length) * 10) / 10, count: vs.length });
+      continue;
+    }
+    // Likert agreement — most values are agreement words.
+    const agr = vs.filter((v) => AGREEMENT[v.toLowerCase()] !== undefined);
+    if (agr.length >= vs.length * 0.6) {
+      const pos = agr.filter((v) => AGREEMENT[v.toLowerCase()] > 0).length;
+      const neu = agr.filter((v) => AGREEMENT[v.toLowerCase()] === 0).length;
+      agreement.push({ label: cleanLabel(k), positive_pct: Math.round((pos / agr.length) * 100), agree: pos, neutral: neu, disagree: agr.length - pos - neu, count: agr.length });
+      continue;
+    }
+    // Multi-select — a fair share of values contain a comma.
+    if (SKIP_PROSE.test(k)) continue;
     if (vs.filter((v) => v.includes(',')).length / vs.length < 0.3) continue;
     const tally = new Map();
     for (const v of vs) for (const tok of v.split(',').map((t) => t.trim()).filter(Boolean)) {
       const key = tok.slice(0, 40);
       tally.set(key, (tally.get(key) || 0) + 1);
     }
-    const top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([value, count]) => ({ value, count }));
-    if (top.length) breakdowns.push({ question: k, top });
+    const top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([value, count]) => ({ value, count }));
+    if (top.length) breakdowns.push({ question: cleanLabel(k), top });
   }
-  return { responses: n, rating, breakdowns: breakdowns.slice(0, 3) };
+  // Prefer a "rating"-worded scale as the headline (backward-compat with the cockpit).
+  const primary = ratings.find((r) => /quality|overall|rating|familiar/i.test(r.label)) || ratings[0] || null;
+  return { responses: n, rating: primary, ratings, agreement, breakdowns: breakdowns.slice(0, 3) };
 }
 
 router.get('/form-insights', async (req, res) => {
