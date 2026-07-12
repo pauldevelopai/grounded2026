@@ -9,7 +9,7 @@ import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
 import { callClaude } from '../services/claude.js';
 import { runVisibilityScan } from '../services/visibility-scan.js';
-import { providerStatus, getModelConfig, saveModelConfig, saveProviderSecret, FUNCTIONS, PROVIDERS } from '../lib/models.js';
+import { providerStatus, getModelConfig, saveModelConfig, saveProviderSecret, FUNCTIONS, PROVIDERS, getVantageUrl, saveVantageUrl } from '../lib/models.js';
 import fs from 'node:fs';
 import { upload } from '../middleware/upload.js';
 import { processUpload } from '../services/document-processor.js';
@@ -1537,6 +1537,30 @@ router.put('/admin/settings', requireRole('admin'), async (req, res) => {
     await saveModelConfig({ ...(await getModelConfig()), ...clean }, req.user?.id);
     res.json(await getModelConfig());
   } catch (err) { console.error('[beaiready/admin/settings/put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Admin · Vantage (deployed URL of the standalone security system) ────────
+// URL is not a secret, so it is read back plainly for the launch link.
+router.get('/admin/vantage', requireRole('admin'), async (req, res) => {
+  try {
+    res.json({ url: await getVantageUrl() });
+  } catch (err) { console.error('[beaiready/admin/vantage]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+router.put('/admin/vantage', requireRole('admin'), async (req, res) => {
+  try {
+    const raw = String(req.body?.url || '').trim();
+    // Allow clearing (empty), otherwise require a well-formed http(s) URL.
+    if (raw) {
+      let parsed;
+      try { parsed = new URL(raw); } catch { return res.status(400).json({ message: 'Enter a valid URL, e.g. https://vantage.developai.co.za' }); }
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return res.status(400).json({ message: 'URL must start with http:// or https://' });
+      }
+    }
+    await saveVantageUrl(raw, req.user?.id);
+    res.json({ url: await getVantageUrl() });
+  } catch (err) { console.error('[beaiready/admin/vantage/put]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // Save a provider key / endpoint (write-only — never returned).

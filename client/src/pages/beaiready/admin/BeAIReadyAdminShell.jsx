@@ -25,6 +25,7 @@ const NAV = [
   { to: '/admin/workspace', label: 'Workspace' },
   { to: '/admin/data', label: 'Data' },
   { to: '/admin/models', label: 'Models' },
+  { to: '/admin/vantage', label: 'Vantage' },
 ];
 
 export default function BeAIReadyAdminShell() {
