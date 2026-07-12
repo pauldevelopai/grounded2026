@@ -45,7 +45,10 @@ export async function indexSource(sourceId, newsroomId, plaintext) {
 // Best-matching passages across a newsroom's sources, for grounding an answer.
 // Returns [{ source_id, kind, title, text }]. Falls back to source-level slices when
 // there's no query embedding (model down) or no chunks exist yet.
-export async function retrieveCompanyChunks(newsroomId, question, { limit = 12 } = {}) {
+// Best-matching passages for grounding. Optional `collection` scopes to one bucket
+// (e.g. a single mine) and `roles` restricts source roles (e.g. only reporting+external
+// evidence). Existing callers pass neither → unchanged behaviour.
+export async function retrieveCompanyChunks(newsroomId, question, { limit = 12, collection = null, roles = null } = {}) {
   const emb = await generateEmbedding(question).catch(() => null);
   if (emb) {
     const { rows } = await pool.query(
@@ -54,24 +57,28 @@ export async function retrieveCompanyChunks(newsroomId, question, { limit = 12 }
          JOIN beaiready_company_sources s ON s.id = c.source_id
         WHERE c.newsroom_id = $1 AND c.embedding IS NOT NULL
           AND s.inclusion <> 'exclude' AND s.sensitivity <> 'withdrawn'
+          AND ($4::text IS NULL OR s.collection = $4)
+          AND ($5::text[] IS NULL OR s.role = ANY($5))
         ORDER BY c.embedding <=> $2::vector
-        LIMIT $3`, [newsroomId, toPgVector(emb), limit]).catch(() => ({ rows: [] }));
+        LIMIT $3`, [newsroomId, toPgVector(emb), limit, collection, roles]).catch(() => ({ rows: [] }));
     if (rows.length) {
       return rows
         .map((r) => ({ source_id: r.source_id, kind: r.kind, title: r.title, text: decryptFor(newsroomId, r.text_chunk) || '' }))
         .filter((r) => r.text);
     }
   }
-  return sourceLevelFallback(newsroomId, limit);
+  return sourceLevelFallback(newsroomId, limit, { collection, roles });
 }
 
 // Fallback: first ~2400 chars of each included, non-sensitive source (pre-chunk path).
-async function sourceLevelFallback(newsroomId, limit) {
+async function sourceLevelFallback(newsroomId, limit, { collection = null, roles = null } = {}) {
   const { rows } = await pool.query(
     `SELECT kind, title, extracted_text FROM beaiready_company_sources
       WHERE newsroom_id = $1 AND inclusion <> 'exclude' AND sensitivity <> 'withdrawn'
+        AND ($3::text IS NULL OR collection = $3)
+        AND ($4::text[] IS NULL OR role = ANY($4))
         AND extracted_text IS NOT NULL AND length(extracted_text) > 0
-      ORDER BY created_at DESC LIMIT $2`, [newsroomId, limit]).catch(() => ({ rows: [] }));
+      ORDER BY created_at DESC LIMIT $2`, [newsroomId, limit, collection, roles]).catch(() => ({ rows: [] }));
   const out = [];
   for (const s of rows) {
     const text = (decryptFor(newsroomId, s.extracted_text) || '').slice(0, 2400);
@@ -81,7 +88,7 @@ async function sourceLevelFallback(newsroomId, limit) {
 }
 
 // Explicit search: the single best passage per source, scored, for the search box.
-export async function searchCompanyChunks(newsroomId, q, { limit = 8 } = {}) {
+export async function searchCompanyChunks(newsroomId, q, { limit = 8, collection = null } = {}) {
   const query = String(q || '').trim();
   if (!query) return [];
   const emb = await generateEmbedding(query).catch(() => null);
@@ -93,7 +100,8 @@ export async function searchCompanyChunks(newsroomId, q, { limit = 8 } = {}) {
        JOIN beaiready_company_sources s ON s.id = c.source_id
       WHERE c.newsroom_id = $1 AND c.embedding IS NOT NULL
         AND s.inclusion <> 'exclude' AND s.sensitivity <> 'withdrawn'
-      ORDER BY c.source_id, c.embedding <=> $2::vector`, [newsroomId, toPgVector(emb)]).catch(() => ({ rows: [] }));
+        AND ($3::text IS NULL OR s.collection = $3)
+      ORDER BY c.source_id, c.embedding <=> $2::vector`, [newsroomId, toPgVector(emb), collection]).catch(() => ({ rows: [] }));
   return rows
     .map((r) => ({ source_id: r.source_id, kind: r.kind, title: r.title, score: Number(r.score) || 0, snippet: (decryptFor(newsroomId, r.text_chunk) || '').slice(0, 300) }))
     .filter((r) => r.snippet)

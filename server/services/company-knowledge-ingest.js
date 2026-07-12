@@ -24,11 +24,12 @@ const MIME = {
 export function driveAvailable() { return !!process.env.GOOGLE_API_KEY; }
 
 // Store one source (encrypted) + build its chunks/embeddings. Best-effort index.
-async function storeAndIndex(newsroomId, userId, { kind, title, url = null, text }) {
+// Optional collection/role tag it into a Claims-Verifier mine bucket.
+async function storeAndIndex(newsroomId, userId, { kind, title, url = null, text, collection = null, role = 'reporting' }) {
   const { rows: [src] } = await pool.query(
-    `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [newsroomId, kind, title, url, encryptFor(newsroomId, (text || '').slice(0, 20000)), userId]);
+    `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by, collection, role)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [newsroomId, kind, title, url, encryptFor(newsroomId, (text || '').slice(0, 20000)), userId, collection, role]);
   try { await indexSource(src.id, newsroomId, text || ''); } catch (e) { console.error('[knowhow ingest index]', e.message); }
   return src.id;
 }
@@ -46,7 +47,7 @@ function parseUrls(input) {
 }
 
 // ── Many URLs at once ──
-export async function ingestUrls(newsroomId, userId, input) {
+export async function ingestUrls(newsroomId, userId, input, { collection = null, role = 'reporting' } = {}) {
   const urls = [...new Set(parseUrls(input))].slice(0, MAX_URLS);
   const stats = { total: urls.length, added: 0, failed: 0, errors: [] };
   if (!urls.length) return { ...stats, message: 'Paste one or more page URLs (one per line).' };
@@ -54,7 +55,7 @@ export async function ingestUrls(newsroomId, userId, input) {
     try {
       const s = await scrapeArticle(url);
       if (!s.success || !s.text) { stats.failed++; stats.errors.push({ url, status: s.error || 'no readable text' }); return; }
-      await storeAndIndex(newsroomId, userId, { kind: 'website', title: s.title || url, url, text: s.text });
+      await storeAndIndex(newsroomId, userId, { kind: 'website', title: s.title || url, url, text: s.text, collection, role });
       stats.added++;
     } catch (e) { stats.failed++; stats.errors.push({ url, status: e.message }); }
   });
@@ -62,12 +63,12 @@ export async function ingestUrls(newsroomId, userId, input) {
 }
 
 // ── Sitemap crawl → expand to page URLs → ingestUrls ──
-export async function ingestSitemap(newsroomId, userId, sitemapUrl) {
+export async function ingestSitemap(newsroomId, userId, sitemapUrl, opts = {}) {
   const url = String(sitemapUrl || '').trim();
   if (!/^https?:\/\//i.test(url)) return { total: 0, added: 0, failed: 0, message: 'Enter a full sitemap URL (https://…/sitemap.xml).' };
   const urls = await expandSitemap(url, MAX_URLS);
   if (!urls.length) return { total: 0, added: 0, failed: 0, message: "Couldn't read any URLs from that sitemap. Check it's a sitemap.xml." };
-  return ingestUrls(newsroomId, userId, urls);
+  return ingestUrls(newsroomId, userId, urls, opts);
 }
 
 async function expandSitemap(url, limit, depth = 0) {
@@ -109,7 +110,7 @@ export function folderIdFromUrl(input) {
   return null;
 }
 
-export async function ingestDriveFolder(newsroomId, userId, folderUrl) {
+export async function ingestDriveFolder(newsroomId, userId, folderUrl, { collection = null, role = 'reporting' } = {}) {
   const key = process.env.GOOGLE_API_KEY;
   if (!key) return { error: 'no_drive_key', message: 'Google Drive import needs a Google API key configured on the server. Use file upload or paste URLs instead.' };
   const folderId = folderIdFromUrl(folderUrl);
@@ -126,7 +127,7 @@ export async function ingestDriveFolder(newsroomId, userId, folderUrl) {
     try {
       const text = await driveFileText(f, key);
       if (!text || !text.trim()) { stats.failed++; stats.errors.push({ name: f.name, status: 'empty' }); return; }
-      await storeAndIndex(newsroomId, userId, { kind: 'doc', title: stripExt(f.name), text });
+      await storeAndIndex(newsroomId, userId, { kind: 'doc', title: stripExt(f.name), text, collection, role });
       stats.added++;
     } catch (e) { stats.failed++; stats.errors.push({ name: f.name, status: e.message }); }
   });

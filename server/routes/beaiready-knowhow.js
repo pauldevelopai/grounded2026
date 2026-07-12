@@ -19,6 +19,7 @@ import { getSettings, saveSettings, buildBundle, bundleStats } from '../services
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 import { PRESETS } from '../services/knowhow-presets.js';
+import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport } from '../services/claims-verify.js';
 
 const router = Router();
 
@@ -26,6 +27,13 @@ async function ctx(req) {
   const newsroomId = await resolveNewsroomId(req);
   const { rows: [n] } = await pool.query('SELECT name FROM newsrooms WHERE id = $1', [newsroomId]);
   return { newsroomId, name: n?.name || null };
+}
+
+// Optional Claims-Verifier tagging on a source: which mine (collection) + its role.
+function sourceMeta(body = {}) {
+  const collection = body.collection ? String(body.collection).trim().slice(0, 120) || null : null;
+  const role = ['claim', 'reporting', 'external'].includes(body.role) ? body.role : 'reporting';
+  return { collection, role };
 }
 
 // My own Tier-1 knowledge & workflows — only my rows, only individual tier.
@@ -182,6 +190,7 @@ router.post('/sources/upload', uploadFiles, async (req, res) => {
   try {
     const { newsroomId } = await ctx(req);
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    const { collection, role } = sourceMeta(req.body);
     const files = req.files || [];
     if (!files.length) return res.status(400).json({ message: 'Choose a file to add first.' });
     const added = [];
@@ -193,9 +202,9 @@ router.post('/sources/upload', uploadFiles, async (req, res) => {
       let text = '';
       try { text = await extractText(f.path, f.mimetype); } catch (e) { console.error('[knowhow sources extract]', e.message); }
       const { rows: [src] } = await pool.query(
-        `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by)
-         VALUES ($1,'doc',$2,$3,$4,$5) RETURNING id, kind, title, file_id, created_at`,
-        [newsroomId, f.originalname, doc.id, encryptFor(newsroomId, (text || '').slice(0, 20000)), req.user.id]);
+        `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by, collection, role)
+         VALUES ($1,'doc',$2,$3,$4,$5,$6,$7) RETURNING id, kind, title, file_id, created_at`,
+        [newsroomId, f.originalname, doc.id, encryptFor(newsroomId, (text || '').slice(0, 20000)), req.user.id, collection, role]);
       let ix = { chunks: 0, embedded: 0 };
       try { ix = await indexSource(src.id, newsroomId, text); } catch (e) { console.error('[knowhow index upload]', e.message); }
       added.push({ ...src, has_text: (text || '').length > 0, ...ix });
@@ -211,12 +220,13 @@ router.post('/sources/website', async (req, res) => {
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
     const { url } = req.body || {};
     if (!url || !url.trim()) return res.status(400).json({ message: 'A URL is required.' });
+    const { collection, role } = sourceMeta(req.body);
     const scraped = await scrapeArticle(url.trim());
     if (!scraped.success || !scraped.text) return res.status(400).json({ message: `Couldn't read that page${scraped.error ? `: ${scraped.error}` : ''}` });
     const { rows: [src] } = await pool.query(
-      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by)
-       VALUES ($1,'website',$2,$3,$4,$5) RETURNING id, kind, title, url, created_at`,
-      [newsroomId, scraped.title || url.trim(), url.trim(), encryptFor(newsroomId, scraped.text), req.user.id]);
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by, collection, role)
+       VALUES ($1,'website',$2,$3,$4,$5,$6,$7) RETURNING id, kind, title, url, created_at`,
+      [newsroomId, scraped.title || url.trim(), url.trim(), encryptFor(newsroomId, scraped.text), req.user.id, collection, role]);
     try { await indexSource(src.id, newsroomId, scraped.text); } catch (e) { console.error('[knowhow index website]', e.message); }
     res.status(201).json(src);
   } catch (err) { console.error('[beaiready-knowhow/sources:website]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -229,10 +239,11 @@ router.post('/sources/note', async (req, res) => {
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
     const { title, text } = req.body || {};
     if (!text || !text.trim()) return res.status(400).json({ message: 'Some text is required.' });
+    const { collection, role } = sourceMeta(req.body);
     const { rows: [src] } = await pool.query(
-      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by)
-       VALUES ($1,'note',$2,$3,$4) RETURNING id, kind, title, created_at`,
-      [newsroomId, (title || 'Note').trim(), encryptFor(newsroomId, text.trim()), req.user.id]);
+      `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by, collection, role)
+       VALUES ($1,'note',$2,$3,$4,$5,$6) RETURNING id, kind, title, created_at`,
+      [newsroomId, (title || 'Note').trim(), encryptFor(newsroomId, text.trim()), req.user.id, collection, role]);
     try { await indexSource(src.id, newsroomId, text.trim()); } catch (e) { console.error('[knowhow index note]', e.message); }
     res.status(201).json(src);
   } catch (err) { console.error('[beaiready-knowhow/sources:note]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -248,7 +259,7 @@ router.post('/sources/urls', async (req, res) => {
   try {
     const { newsroomId } = await ctx(req);
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
-    const r = await ingestUrls(newsroomId, req.user.id, req.body?.urls);
+    const r = await ingestUrls(newsroomId, req.user.id, req.body?.urls, sourceMeta(req.body));
     return r.total === 0 ? res.status(400).json({ message: r.message || 'No usable URLs.' }) : res.status(201).json(r);
   } catch (err) { console.error('[beaiready-knowhow/sources:urls]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -258,7 +269,7 @@ router.post('/sources/sitemap', async (req, res) => {
   try {
     const { newsroomId } = await ctx(req);
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
-    const r = await ingestSitemap(newsroomId, req.user.id, req.body?.sitemap);
+    const r = await ingestSitemap(newsroomId, req.user.id, req.body?.sitemap, sourceMeta(req.body));
     return r.total === 0 ? res.status(400).json({ message: r.message || 'No pages found.' }) : res.status(201).json(r);
   } catch (err) { console.error('[beaiready-knowhow/sources:sitemap]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -268,7 +279,7 @@ router.post('/sources/drive', async (req, res) => {
   try {
     const { newsroomId } = await ctx(req);
     if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
-    const r = await ingestDriveFolder(newsroomId, req.user.id, req.body?.folder);
+    const r = await ingestDriveFolder(newsroomId, req.user.id, req.body?.folder, sourceMeta(req.body));
     return r.error ? res.status(400).json({ message: r.message }) : res.status(201).json(r);
   } catch (err) { console.error('[beaiready-knowhow/sources:drive]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
@@ -448,6 +459,35 @@ router.put('/assistant', async (req, res) => {
       [newsroomId, use_case, instructions]);
     res.json({ ok: true, use_case, instructions });
   } catch (err) { console.error('[beaiready-knowhow/assistant:put]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Claims Verifier (bespoke; the UI shows it only when use_case='claims-verification') ──
+// Mines are "collections"; each source carries a role (claim / reporting / external).
+router.get('/claims', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ mines: await listMines(newsroomId) }); }
+  catch (e) { console.error('[knowhow/claims:get]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.get('/claims/report', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json(await claimsReport(newsroomId)); }
+  catch (e) { console.error('[knowhow/claims:report]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.post('/claims', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    res.status(201).json({ mines: await addMine(newsroomId, req.body?.name) }); }
+  catch (e) { console.error('[knowhow/claims:post]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.delete('/claims/:name', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ mines: await removeMine(newsroomId, req.params.name) }); }
+  catch (e) { console.error('[knowhow/claims:del]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.post('/claims/:collection/verify', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    res.json(await verifyClaims(newsroomId, req.params.collection)); }
+  catch (e) { console.error('[knowhow/claims:verify]', e); res.status(500).json({ message: e.message || 'Verify failed' }); }
+});
+router.get('/claims/:collection', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json(await getMine(newsroomId, req.params.collection)); }
+  catch (e) { console.error('[knowhow/claims:mine]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 export default router;

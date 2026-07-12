@@ -25,8 +25,12 @@ export default function BusinessKnowHow() {
   const [tab, setTab] = useState('ask');
   const [err, setErr] = useState('');
   const { user } = useAuth();
-  // Consultants (admins) get an extra "Assistant" tab to set the client's AI persona.
-  const tabs = user?.role === 'admin' ? [...TABS, { key: 'assistant', label: 'Assistant' }] : TABS;
+  const [useCase, setUseCase] = useState('');
+  useEffect(() => { apiFetch('/beaiready/knowhow/assistant').then((d) => setUseCase(d.use_case || '')).catch(() => {}); }, []);
+  // Claims Verifier shows only for tenants on that use case; Assistant only for consultants.
+  let tabs = [...TABS];
+  if (useCase === 'claims-verification') tabs = [...tabs, { key: 'claims', label: 'Claims' }];
+  if (user?.role === 'admin') tabs = [...tabs, { key: 'assistant', label: 'Assistant' }];
 
   return (
     <div className="hub hub-beaiready">
@@ -52,6 +56,7 @@ export default function BusinessKnowHow() {
       {tab === 'manifest' && <ManifestPanel setErr={setErr} />}
       {tab === 'workflows' && <WorkflowsPanel setErr={setErr} />}
       {tab === 'publish' && <PublishPanel setErr={setErr} />}
+      {tab === 'claims' && <ClaimsPanel setErr={setErr} />}
       {tab === 'assistant' && <AssistantPanel setErr={setErr} />}
     </div>
   );
@@ -685,6 +690,257 @@ function SourceChips({ sources }) {
           title={s.title}>{SOURCE_LABEL[s.type] || s.type}{s.title ? ` · ${s.title.slice(0, 28)}` : ''}</span>
       ))}
     </div>
+  );
+}
+
+// ─────────────────────────── Claims Verifier (bespoke: use_case='claims-verification') ───────────────────────────
+const VERDICT_COLORS = { supported: '#166534', contradicted: '#b91c1c', misleading: '#b45309', unverified: '#8a8076', pending: '#c9c2b8' };
+const VERDICT_LABEL = { supported: 'Supported', contradicted: 'Contradicted', misleading: 'Misleading', unverified: 'Unverified', pending: 'Pending' };
+const VERDICT_ORDER = ['supported', 'contradicted', 'misleading', 'unverified', 'pending'];
+const ROLE_LABEL = { claim: "Company claim", reporting: 'EnviroPress reporting', external: 'External source' };
+const ROLE_PILL = { claim: { background: '#fee2e2', color: '#b91c1c' }, reporting: { background: '#dbeafe', color: '#1e40af' }, external: { background: '#dcfce7', color: '#166534' } };
+
+function VerdictBar({ counts }) {
+  const c = counts || {};
+  const total = VERDICT_ORDER.reduce((a, k) => a + (c[k] || 0), 0);
+  if (!total) return <div style={{ ...muted, fontSize: 12, marginTop: 6 }}>No claims tested yet.</div>;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', border: '1px solid #eee5da' }}>
+        {VERDICT_ORDER.map((k) => (c[k] ? <div key={k} title={`${VERDICT_LABEL[k]}: ${c[k]}`} style={{ width: `${(c[k] / total) * 100}%`, background: VERDICT_COLORS[k] }} /> : null))}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 5, fontSize: 11.5, color: '#6b6359' }}>
+        {VERDICT_ORDER.map((k) => (c[k] ? <span key={k}><span style={{ color: VERDICT_COLORS[k] }}>●</span> {VERDICT_LABEL[k]} {c[k]}</span> : null))}
+      </div>
+    </div>
+  );
+}
+
+function ClaimsPanel({ setErr }) {
+  const [mines, setMines] = useState(null);
+  const [view, setView] = useState('mines');          // 'mines' | 'report' | <mine name>
+  const [newMine, setNewMine] = useState('');
+  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims').then((d) => setMines(d.mines || [])).catch((e) => setErr(e.message)), [setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const addMine = async () => {
+    if (!newMine.trim()) return;
+    try { const d = await apiFetch('/beaiready/knowhow/claims', { method: 'POST', body: JSON.stringify({ name: newMine.trim() }) }); setMines(d.mines || []); setNewMine(''); }
+    catch (e) { setErr(e.message); }
+  };
+  const delMine = async (name) => {
+    if (!window.confirm(`Remove "${name}" from the list? Its documents and verdicts stay in your knowledge — this just hides the bucket.`)) return;
+    try { const d = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(name)}`, { method: 'DELETE' }); setMines(d.mines || []); }
+    catch (e) { setErr(e.message); }
+  };
+
+  if (view === 'report') return <ClaimsReport setErr={setErr} back={() => { setView('mines'); load(); }} />;
+  if (view !== 'mines') return <MineView setErr={setErr} mine={view} back={() => { setView('mines'); load(); }} />;
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+        <p style={{ ...muted, maxWidth: '64ch', marginTop: 0 }}>
+          Each <b>mine</b> is a separate bucket. Add the mine's own <b>claims</b>, your <b>reporting</b>, and <b>external</b> sources, then
+          Verify — KnowHow tests each claim against the evidence and tells you what's supported, contradicted or misleading.
+        </p>
+        <button onClick={() => setView('report')} style={btn}>View report →</button>
+      </div>
+      <div style={{ ...card, margin: '4px 0 16px', display: 'flex', gap: 8 }}>
+        <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="Add a mine (e.g. Bikita Minerals)…" style={input} />
+        <button onClick={addMine} disabled={!newMine.trim()} style={btn}>Add mine</button>
+      </div>
+      {mines == null ? <p style={muted}>Loading…</p> : mines.length === 0 ? <p style={muted}>No mines yet — add your first bucket above.</p> : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {mines.map((m) => (
+            <div key={m.name} style={card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+                <button onClick={() => setView(m.name)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 15, fontWeight: 800, color: '#1c1b1a', cursor: 'pointer' }}>{m.name} →</button>
+                <button onClick={() => delMine(m.name)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+              </div>
+              <div style={{ ...muted, fontSize: 12, marginTop: 4 }}>
+                {m.sources.claim} claim{m.sources.claim === 1 ? '' : 's'} · {m.sources.reporting} reporting · {m.sources.external} external · {m.claims} claim{m.claims === 1 ? '' : 's'} tested
+                {m.last_verified ? ` · verified ${new Date(m.last_verified).toLocaleDateString()}` : ''}
+              </div>
+              <VerdictBar counts={m.counts} />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function MineView({ setErr, mine, back }) {
+  const [data, setData] = useState(null);
+  const [role, setRole] = useState('claim');
+  const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState('');
+  const [url, setUrl] = useState('');
+  const [ttl, setTtl] = useState('');
+  const [text, setText] = useState('');
+  const load = useCallback(() => apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}`).then(setData).catch((e) => setErr(e.message)), [mine, setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const meta = () => ({ collection: mine, role });
+  const addNote = async () => {
+    if (!text.trim()) return;
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/sources/note', { method: 'POST', body: JSON.stringify({ title: ttl.trim(), text: text.trim(), ...meta() }) }); setText(''); setTtl(''); load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const addUrl = async () => {
+    if (!url.trim()) return;
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/sources/website', { method: 'POST', body: JSON.stringify({ url: url.trim(), ...meta() }) }); setUrl(''); load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const onFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData();
+      files.forEach((f) => fd.append('files', f, f.name));
+      fd.append('collection', mine); fd.append('role', role);
+      const headers = {}; const nid = getActiveNewsroomId(); if (nid) headers['X-Newsroom-Id'] = nid;
+      const res = await fetch('/api/beaiready/knowhow/sources/upload', { method: 'POST', body: fd, credentials: 'include', headers });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || 'Upload failed'); }
+      load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const verify = async () => {
+    setVerifying('Extracting claims and checking them against your evidence…'); setErr('');
+    try { const r = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}/verify`, { method: 'POST', body: '{}' }); setVerifying(`Done — ${r.verified} claim(s) checked.`); load(); }
+    catch (e) { setErr(e.message); setVerifying(''); }
+  };
+  const delSource = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+
+  if (!data) return <p style={muted}>Loading…</p>;
+  return (
+    <>
+      <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>
+      <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 2px' }}>{mine}</h2>
+      <VerdictBar counts={data.counts} />
+
+      <div style={{ ...card, margin: '14px 0', display: 'grid', gap: 8 }}>
+        <div style={kicker}>Add evidence to this bucket</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ ...muted, fontSize: 13 }}>This is a</span>
+          <select value={role} onChange={(e) => setRole(e.target.value)} style={sel}>
+            <option value="claim">Company's own claim</option>
+            <option value="reporting">EnviroPress reporting</option>
+            <option value="external">External source</option>
+          </select>
+          <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload files<input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="…or paste a web-page URL" style={input} />
+          <button onClick={addUrl} disabled={busy || !url.trim()} style={btn}>Add</button>
+        </div>
+        <input value={ttl} onChange={(e) => setTtl(e.target.value)} placeholder="…or a note title (optional)" style={input} />
+        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="…or paste text — a claim, a finding, a quote" style={{ ...input, minHeight: 56, resize: 'vertical' }} />
+        <div><button onClick={addNote} disabled={busy || !text.trim()} style={btn}>Add note</button></div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0 8px' }}>
+        <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Claims &amp; verdicts</div>
+        <button onClick={verify} style={btn}>Verify claims</button>
+      </div>
+      {verifying && <p style={{ ...muted, fontSize: 12.5, margin: '0 0 8px' }}>{verifying}</p>}
+      {data.claims.length === 0 ? (
+        <p style={muted}>No claims yet. Add the mine's own documents as “Company's own claim”, then hit <b>Verify</b> to extract and test them against your reporting and external sources.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 8 }}>
+          {data.claims.map((cl) => (
+            <div key={cl.id} style={card}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ ...pill, background: `${VERDICT_COLORS[cl.verdict]}22`, color: VERDICT_COLORS[cl.verdict], border: `1px solid ${VERDICT_COLORS[cl.verdict]}` }}>{VERDICT_LABEL[cl.verdict] || cl.verdict}</span>
+                <strong style={{ fontSize: 13.5 }}>{cl.claim_text}</strong>
+              </div>
+              {cl.rationale && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0' }}>{cl.rationale}</p>}
+              {Array.isArray(cl.citations) && cl.citations.length > 0 && (
+                <div style={{ ...muted, fontSize: 11.5, marginTop: 5 }}>Sources: {cl.citations.map((c) => c.title || c.kind).filter(Boolean).join(' · ')}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="hub-section-label" style={{ marginTop: 18 }}>Sources in this bucket</div>
+      {data.sources.length === 0 ? <p style={muted}>None yet.</p> : (
+        <div style={{ display: 'grid', gap: 6 }}>
+          {data.sources.map((s) => (
+            <div key={s.id} style={{ ...card, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <div><span style={{ ...pill, ...(ROLE_PILL[s.role] || {}) }}>{ROLE_LABEL[s.role] || s.role}</span> <span style={{ fontSize: 13 }}>{s.title}</span></div>
+              <button onClick={() => delSource(s.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function TrendChart({ snapshots }) {
+  const list = Array.isArray(snapshots) ? snapshots : [];
+  if (!list.length) return <p style={muted}>No verification runs yet — hit Verify on a mine to start the record.</p>;
+  // Aggregate per run-time across mines: total contradicted+misleading (= false/misleading claims found).
+  const byTime = {};
+  for (const s of list) {
+    const t = new Date(s.taken_at); const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}${t.getMinutes()}`;
+    const c = s.counts || {};
+    byTime[key] = byTime[key] || { t, v: 0 };
+    byTime[key].v += (c.contradicted || 0) + (c.misleading || 0);
+  }
+  const pts = Object.values(byTime).sort((a, b) => a.t - b.t).slice(-20);
+  const max = Math.max(1, ...pts.map((p) => p.v));
+  const W = Math.max(220, pts.length * 44); const H = 96;
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: Math.min(W, 640), height: 96 }} role="img" aria-label="False or misleading claims found over time">
+        <text x={4} y={12} fontSize={10} fill="#8a8076">False / misleading claims found</text>
+        {pts.map((p, i) => {
+          const x = i * 44 + 24; const h = (p.v / max) * (H - 34);
+          return (
+            <g key={i}>
+              <rect x={x - 10} y={H - 18 - h} width={20} height={h} fill="#b91c1c" rx={2} />
+              <text x={x} y={H - 20 - h} fontSize={10} textAnchor="middle" fill="#5b5249">{p.v}</text>
+              <text x={x} y={H - 5} fontSize={8.5} textAnchor="middle" fill="#8a8076">{`${p.t.getDate()}/${p.t.getMonth() + 1}`}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function ClaimsReport({ setErr, back }) {
+  const [d, setD] = useState(null);
+  useEffect(() => { apiFetch('/beaiready/knowhow/claims/report').then(setD).catch((e) => setErr(e.message)); }, [setErr]);
+  if (!d) return <p style={muted}>Loading…</p>;
+  return (
+    <>
+      <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>
+      <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px' }}>Claims verification report</h2>
+      {d.mines.length === 0 ? <p style={muted}>No mines yet.</p> : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {d.mines.map((m) => (
+            <div key={m.name} style={card}>
+              <strong style={{ fontSize: 15 }}>{m.name}</strong>
+              <div style={{ ...muted, fontSize: 11.5 }}>{m.claims} claim{m.claims === 1 ? '' : 's'} tested · {m.sources.claim + m.sources.reporting + m.sources.external} sources</div>
+              <VerdictBar counts={m.counts} />
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="hub-section-label" style={{ marginTop: 20 }}>Over time</div>
+      <TrendChart snapshots={d.snapshots} />
+      <div style={{ marginTop: 16 }}><button onClick={() => window.print()} style={tag}>Print / save as PDF</button></div>
+    </>
   );
 }
 
