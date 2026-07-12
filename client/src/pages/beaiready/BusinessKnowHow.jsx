@@ -837,6 +837,7 @@ function MineView({ setErr, mine, back }) {
           </select>
           <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload files<input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
         </div>
+        <p style={{ ...muted, fontSize: 12, margin: 0 }}>PDF, Word, Excel, CSV or text. For a <b>video or audio</b> claim, upload or paste its <b>transcript</b> — the words are what gets tested.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="…or paste a web-page URL" style={input} />
           <button onClick={addUrl} disabled={busy || !url.trim()} style={btn}>Add</button>
