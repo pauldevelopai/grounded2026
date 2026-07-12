@@ -266,6 +266,42 @@ function participantName(resp) {
   return name;
 }
 
+// Merge the participant rows of one training into distinct people, reconciling the
+// common case where a person wrote their full name on one form and just their first
+// name on the other ("Antonette Claassens" before, "Antonette" after). Rule: a bare
+// first name collapses into a full name ONLY when exactly one full name shares that
+// first name (unambiguous). We never merge on surname alone — that would wrongly fuse
+// two different people who share a last name (e.g. Devika Suresh vs Shanelle Suresh).
+// raw = [{ name, formType }]. Returns [{ name, before, after }] sorted by name.
+const normName = (s) => String(s).toLowerCase().replace(/\s+/g, ' ').trim();
+function mergeParticipants(raw) {
+  // Per first name, the distinct full (multi-word) names seen.
+  const fullsByFirst = new Map();
+  for (const { name } of raw) {
+    const n = normName(name), toks = n.split(' ');
+    if (toks.length < 2) continue;
+    if (!fullsByFirst.has(toks[0])) fullsByFirst.set(toks[0], new Set());
+    fullsByFirst.get(toks[0]).add(n);
+  }
+  const canonical = (name) => {
+    const n = normName(name), toks = n.split(' ');
+    if (toks.length >= 2) return n;                 // a full name is its own identity
+    const fulls = fullsByFirst.get(toks[0]);        // a bare first name…
+    return (fulls && fulls.size === 1) ? [...fulls][0] : toks[0]; // …collapses only if unambiguous
+  };
+  const byId = new Map();
+  for (const { name, formType } of raw) {
+    const id = canonical(name);
+    const e = byId.get(id) || { display: name, before: false, after: false };
+    if (name.length > e.display.length) e.display = name;   // prefer the fuller spelling
+    if (formType === 'feedback') e.after = true; else e.before = true;
+    byId.set(id, e);
+  }
+  return [...byId.values()]
+    .map((e) => ({ name: e.display, before: e.before, after: e.after }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Participants per training — the people on each training, derived from the forms
 // linked to it: who filled the "before" survey and who filled the "after" survey.
 // Keyed by agenda_id (only trainings with a linked form appear). Scoped to the
@@ -276,24 +312,19 @@ router.get('/participants', async (req, res) => {
     const { rows: forms } = await pool.query(
       `SELECT form_name, form_type, agenda_id FROM intake_forms
         WHERE newsroom_id = $1 AND agenda_id IS NOT NULL AND is_enabled = true`, [newsroomId]);
-    const byTraining = {};   // agenda_id -> Map(lowerName -> {name, before, after})
+    const rawByTraining = {};   // agenda_id -> [{ name, formType }]
     for (const f of forms) {
       const { rows } = await pool.query(
         `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_name = $2 AND form_type = $3`,
         [newsroomId, f.form_name, f.form_type]);
-      const bucket = byTraining[f.agenda_id] || (byTraining[f.agenda_id] = new Map());
+      const arr = rawByTraining[f.agenda_id] || (rawByTraining[f.agenda_id] = []);
       for (const r of rows) {
-        const name = participantName(r.response); if (!name) continue;
-        const key = name.toLowerCase();
-        const entry = bucket.get(key) || { name, before: false, after: false };
-        if (f.form_type === 'feedback') entry.after = true; else entry.before = true;
-        bucket.set(key, entry);
+        const name = participantName(r.response);
+        if (name) arr.push({ name, formType: f.form_type });
       }
     }
     const out = {};
-    for (const [aid, map] of Object.entries(byTraining)) {
-      out[aid] = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-    }
+    for (const [aid, raw] of Object.entries(rawByTraining)) out[aid] = mergeParticipants(raw);
     res.json(out);
   } catch (err) { console.error('[bair-train/participants]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
