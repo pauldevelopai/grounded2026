@@ -36,6 +36,7 @@ function TrainingRecord() {
   const [agendas, setAgendas] = useState(null);
   const [myMaterials, setMyMaterials] = useState(null);
   const [insights, setInsights] = useState(null);
+  const [comments, setComments] = useState(undefined); // undefined = loading, null = no feedback form
   const [teamAnalysis, setTeamAnalysis] = useState(undefined); // undefined = loading, null = no survey yet
   const [curriculum, setCurriculum] = useState(undefined);     // undefined = loading, null = not indexed yet
   const [match, setMatch] = useState(undefined);               // undefined = loading, null = no survey yet
@@ -45,6 +46,7 @@ function TrainingRecord() {
     apiFetch('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
     apiFetch('/beaiready/training/form-insights').then(setInsights).catch(() => setInsights([]));
+    apiFetch('/beaiready/training/feedback-comments').then(setComments).catch(() => setComments(null));
     // The team analysis, curriculum + expectations match are AI-generated on first view (then cached).
     apiFetch('/beaiready/training/team-analysis').then(setTeamAnalysis).catch(() => setTeamAnalysis(null));
     apiFetch('/beaiready/training/curriculum').then(setCurriculum).catch(() => setCurriculum(null));
@@ -239,6 +241,7 @@ function TrainingRecord() {
               {(insights || []).filter((f) => f.form_type === 'feedback').map((f) => (
                 <FeedbackView key={`${f.form_type}:${f.form_name}`} f={f} />
               ))}
+              <CommentsSummary c={comments} />
             </div>
           </section>
         </>
@@ -407,6 +410,46 @@ function FeedbackView({ f }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// What attendees WROTE — the free-text answers, summarised into aggregate themes by
+// AI (no verbatim quotes, no names). c: undefined = loading, null = no feedback form,
+// { has_comments:false } = form had no open-text questions, else the themed summary.
+function CommentsSummary({ c }) {
+  if (c === undefined || c === null) return null;                 // loading / no feedback form
+  if (c.has_comments === false) return null;                      // no free-text questions to summarise
+  if (c.unavailable) {
+    return <div style={{ fontSize: 12.5, color: '#8a8076', fontStyle: 'italic' }}>Written comments couldn’t be summarised just now — try again shortly.</div>;
+  }
+  const hasThemes = (c.praise || []).length > 0 || (c.improvements || []).length > 0;
+  if (!c.narrative && !hasThemes) return null;
+  const Theme = ({ items, title, tint }) => (items || []).length === 0 ? null : (
+    <div style={{ minWidth: 220, flex: 1 }}>
+      <div style={docLabel}>{title}</div>
+      <div style={{ display: 'grid', gap: 5, marginTop: 5 }}>
+        {items.map((t) => (
+          <div key={t.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, color: '#3a342e' }}>
+            <span>{t.label}</span>
+            <span style={{ color: tint, fontWeight: 700, whiteSpace: 'nowrap' }}>×{t.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ borderTop: '1px solid #eee5da', paddingTop: 14 }}>
+      <div style={{ fontSize: 14, fontWeight: 700 }}>What attendees said
+        <span style={{ color: '#8a8076', fontWeight: 400, fontSize: 12 }}> — themes from written answers</span>
+      </div>
+      {c.narrative && <p style={{ fontSize: 13.5, color: '#3a342e', margin: '6px 0 0', maxWidth: '70ch' }}>{c.narrative}</p>}
+      {hasThemes && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginTop: 12 }}>
+          <Theme items={c.praise} title="What they valued" tint="#166534" />
+          <Theme items={c.improvements} title="What they'd change" tint="#9a3412" />
+        </div>
+      )}
     </div>
   );
 }

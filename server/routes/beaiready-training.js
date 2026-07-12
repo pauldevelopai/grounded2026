@@ -335,6 +335,86 @@ router.get('/form-insights', async (req, res) => {
   } catch (err) { console.error('[bair-train/form-insights]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Post-training feedback: free-text comments → aggregate AI themes (cached) ──────
+// The numeric/Likert/multi-select columns are handled by aggregateResponses. The
+// OPEN-TEXT answers ("what would you change?", "any other comments?") are the most
+// valuable and were previously dropped. Here we group them into aggregate themes
+// with counts — never verbatim, never names — reusing the team-analysis cache
+// (kind='feedback_comments'), so Claude runs only when the responses change.
+const COMMENTS_VERSION = 'v1';
+
+// Detect the free-text/prose columns: not a rating, not Likert, not a short
+// multi-select token — reasonably sentence-like, OR a header that reads like prose.
+function commentColumns(responses) {
+  const cols = [];
+  for (const r of responses) for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k);
+  const out = [];
+  for (const k of cols) {
+    if (SKIP_ID.test(k)) continue;
+    const vs = responses.map((r) => (r[k] ?? '').toString().trim()).filter(Boolean);
+    if (vs.length < 3) continue;
+    const numericish = vs.filter((v) => /^\d{1,2}$/.test(v)).length / vs.length;
+    const agreementish = vs.filter((v) => AGREEMENT[v.toLowerCase()] !== undefined).length / vs.length;
+    const avgLen = vs.reduce((s, v) => s + v.length, 0) / vs.length;
+    const isProse = SKIP_PROSE.test(k) || (numericish < 0.2 && agreementish < 0.3 && avgLen >= 25);
+    if (isProse) out.push({ question: cleanLabel(k), values: vs });
+  }
+  return out;
+}
+
+async function generateCommentsSummary(cols, n) {
+  const body = cols.map((c) =>
+    `## ${c.question}\n` + c.values.map((v) => `- ${v.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')
+  ).join('\n\n').slice(0, 14000);
+  const system =
+    'You are analysing ANONYMOUS free-text answers from a post-training feedback survey for ONE business. ' +
+    'Produce an AGGREGATE summary only — NEVER quote a person verbatim, NEVER include names or identifying detail, ' +
+    'NEVER invent. Group similar answers into a few clear themes, each with how many of the ' + n + ' respondents ' +
+    'fit it. Output ONLY JSON (no markdown): {"narrative": string (2-4 plain sentences on overall sentiment and ' +
+    'what stood out), "praise": [{"label": string, "count": number}], "improvements": [{"label": string, "count": ' +
+    'number}]}. praise = what people valued; improvements = what they suggested changing. 3-6 items per list, ' +
+    'ordered by count desc. If there is nothing for a list, return it empty.';
+  const userContent = `The anonymous free-text answers:\n\n${body}\n\nReturn the JSON now.`;
+  const raw = await callClaude({ system, userContent, maxTokens: 1200, temperature: 0.3 });
+  const j = parseJsonObject(raw);
+  const list = (x) => (Array.isArray(x) ? x.filter((i) => i && i.label).map((i) => ({ label: String(i.label).slice(0, 90), count: Number(i.count) || 0 })).slice(0, 6) : []);
+  return {
+    narrative: typeof j.narrative === 'string' ? j.narrative.slice(0, 900) : null,
+    praise: list(j.praise),
+    improvements: list(j.improvements),
+  };
+}
+
+router.get('/feedback-comments', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: responses } = await pool.query(
+      `SELECT response, imported_at FROM intake_responses
+        WHERE newsroom_id = $1 AND form_type = 'feedback' ORDER BY imported_at DESC`, [newsroomId]);
+    if (!responses.length) return res.json(null);   // no feedback form connected yet
+    const objs = responses.map((r) => r.response || {});
+    const cols = commentColumns(objs);
+    if (!cols.length) return res.json({ responses: responses.length, has_comments: false, narrative: null, praise: [], improvements: [] });
+
+    const maxImported = responses[0].imported_at ? new Date(responses[0].imported_at).getTime() : 0;
+    const fingerprint = `${COMMENTS_VERSION}:${responses.length}:${maxImported}`;
+    const { rows: [cached] } = await pool.query(
+      `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'feedback_comments' AND fingerprint = $2`,
+      [newsroomId, fingerprint]);
+    let ai = cached?.analysis;
+    if (!ai) {
+      ai = await generateCommentsSummary(cols, responses.length).catch((e) => { console.error('[feedback-comments gen]', e.message); return null; });
+      if (ai) await pool.query(
+        `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+         VALUES ($1,'feedback_comments',$2,$3::jsonb,NOW())
+         ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+        [newsroomId, fingerprint, JSON.stringify(ai)]);
+    }
+    if (!ai) return res.json({ responses: responses.length, has_comments: true, unavailable: true, narrative: null, praise: [], improvements: [] });
+    res.json({ responses: responses.length, has_comments: true, narrative: ai.narrative || null, praise: ai.praise || [], improvements: ai.improvements || [] });
+  } catch (err) { console.error('[bair-train/feedback-comments]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // ── Team AI-readiness analysis (aggregate, AI-themed, cached) ─────────────────────
 // A deeper read of the intake survey for the client's dashboard: a familiarity
 // distribution + top tools (deterministic), plus AI-grouped role/learning/automation
