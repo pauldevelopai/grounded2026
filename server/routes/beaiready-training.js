@@ -642,13 +642,22 @@ router.get('/curriculum', async (req, res) => {
       `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'curriculum' AND fingerprint = $2`,
       [newsroomId, fingerprint]);
     let sessions = cached?.analysis?.sessions;
-    if (!sessions) {
-      sessions = await generateCurriculum(docs).catch((e) => { console.error('[curriculum gen]', e.message); return []; });
-      await pool.query(
-        `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
-         VALUES ($1,'curriculum',$2,$3::jsonb,NOW())
-         ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
-        [newsroomId, fingerprint, JSON.stringify({ sessions })]);
+    if (!sessions || !sessions.length) {
+      // Regenerate when missing OR empty. NEVER persist an empty result — an empty
+      // usually means a transient AI failure (e.g. no API credit), and caching it would
+      // lock the section blank forever; leaving it unsaved lets it self-heal on the next
+      // load once the AI is available again.
+      const gen = await generateCurriculum(docs).catch((e) => { console.error('[curriculum gen]', e.message); return []; });
+      if (gen.length) {
+        sessions = gen;
+        await pool.query(
+          `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+           VALUES ($1,'curriculum',$2,$3::jsonb,NOW())
+           ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+          [newsroomId, fingerprint, JSON.stringify({ sessions })]);
+      } else {
+        sessions = sessions || [];
+      }
     }
     res.json({ sessions });
   } catch (err) { console.error('[bair-train/curriculum]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -661,6 +670,9 @@ router.get('/curriculum', async (req, res) => {
 // the feedback count, so connecting/syncing feedback automatically regenerates it.
 const MATCH_VERSION = 'v2';   // bumped: dual client/admin summaries
 const NEGATIVE_ANSWER = /^(none|nothing|not sure|n\/?a|no|nope|unsure|nothing yet|not really)\.?$/i;
+// A match analysis counts as "empty" (a failed generation) if it has no matches and no
+// summary — used so we regenerate rather than serve/persist a blank.
+const isEmptyMatch = (x) => !x || (!(Array.isArray(x.matches) && x.matches.length) && !x.client_summary && !x.admin_summary);
 
 async function generateExpectationsMatch({ wants, automates, curriculum, feedback }) {
   const hasFeedback = feedback && feedback.length > 0;
@@ -731,13 +743,21 @@ router.get('/expectations-match', async (req, res) => {
       `SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'match' AND fingerprint = $2`,
       [newsroomId, fingerprint]);
     let m = cached?.analysis;
-    if (!m) {
-      m = await generateExpectationsMatch({ wants, automates, curriculum, feedback }).catch((e) => { console.error('[match gen]', e.message); return {}; });
-      await pool.query(
-        `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
-         VALUES ($1,'match',$2,$3::jsonb,NOW())
-         ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
-        [newsroomId, fingerprint, JSON.stringify(m)]);
+    // Empty = no matches AND no summary (a failed generation). Regenerate on empty,
+    // and never persist an empty result, so a transient AI failure doesn't cache-lock
+    // the section blank — it self-heals on the next load.
+    if (isEmptyMatch(m)) {
+      const gen = await generateExpectationsMatch({ wants, automates, curriculum, feedback }).catch((e) => { console.error('[match gen]', e.message); return {}; });
+      if (!isEmptyMatch(gen)) {
+        m = gen;
+        await pool.query(
+          `INSERT INTO beaiready_team_analysis (newsroom_id, kind, fingerprint, analysis, generated_at)
+           VALUES ($1,'match',$2,$3::jsonb,NOW())
+           ON CONFLICT (newsroom_id, kind) DO UPDATE SET fingerprint = EXCLUDED.fingerprint, analysis = EXCLUDED.analysis, generated_at = NOW()`,
+          [newsroomId, fingerprint, JSON.stringify(m)]);
+      } else {
+        m = m || {};
+      }
     }
     // The client sees a positive view (no "gaps", no gap-status rows, encouraging
     // summary). The admin sees the candid version — gaps + the honest summary.
@@ -792,10 +812,11 @@ async function refreshCurriculum(newsroomId) {
   if (!docs.length) return cached();
   const totalLen = docs.reduce((s, d) => s + (d.text ? d.text.length : 0), 0);
   const fp = `${CURRICULUM_VERSION}:${docs.length}:${totalLen}`;
-  if (await isFresh(newsroomId, 'curriculum', fp)) return cached();
+  const existing = await cached();
+  if (existing.length && await isFresh(newsroomId, 'curriculum', fp)) return existing;   // fresh AND non-empty
   const sessions = await generateCurriculum(docs).catch((e) => { console.error('[refresh cur]', e.message); return []; });
-  await upsertAnalysis(newsroomId, 'curriculum', fp, { sessions });
-  return sessions;
+  if (sessions.length) { await upsertAnalysis(newsroomId, 'curriculum', fp, { sessions }); return sessions; }
+  return existing;   // generation failed — keep whatever we had, don't cache a blank
 }
 async function refreshMatch(newsroomId, curriculum) {
   const { rows: resp } = await pool.query(`SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'intake'`, [newsroomId]);
@@ -803,7 +824,8 @@ async function refreshMatch(newsroomId, curriculum) {
   const { rows: fb } = await pool.query(`SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_type = 'feedback'`, [newsroomId]);
   const feedback = fb.map((r) => r.response || {});
   const fp = `${MATCH_VERSION}:${resp.length}:${feedback.length}:${curriculum.length}`;
-  if (await isFresh(newsroomId, 'match', fp)) return { ok: true, has_feedback: feedback.length > 0 };
+  const { rows: [c] } = await pool.query(`SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'match'`, [newsroomId]);
+  if (!isEmptyMatch(c?.analysis) && await isFresh(newsroomId, 'match', fp)) return { ok: true, has_feedback: feedback.length > 0 };
   const objs = resp.map((r) => r.response || {});
   const cols = []; for (const o of objs) for (const k of Object.keys(o)) if (!cols.includes(k)) cols.push(k);
   const learnCol = cols.find((k) => /would like to learn|want to learn|heard about ai/i.test(k));
@@ -811,8 +833,8 @@ async function refreshMatch(newsroomId, curriculum) {
   const collect = (col) => col ? [...new Set(objs.map((o) => String(o[col] ?? '').trim()).filter((v) => v && !NEGATIVE_ANSWER.test(v)))].slice(0, 40) : [];
   const m = await generateExpectationsMatch({ wants: collect(learnCol), automates: collect(autoCol), curriculum, feedback })
     .catch((e) => { console.error('[refresh match]', e.message); return {}; });
-  await upsertAnalysis(newsroomId, 'match', fp, m);
-  return { ok: true, has_feedback: feedback.length > 0 };
+  if (!isEmptyMatch(m)) await upsertAnalysis(newsroomId, 'match', fp, m);   // don't cache a failed (blank) match
+  return { ok: !isEmptyMatch(m), has_feedback: feedback.length > 0 };
 }
 
 router.post('/refresh-analysis', requireRole('admin'), async (req, res) => {
