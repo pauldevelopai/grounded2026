@@ -136,17 +136,33 @@ function TrainingRecord() {
                     </div>
                   );
                 })()}
-                {/* Who was on this training (from its before/after forms). */}
-                {(participants[a.id] || []).length > 0 && (
-                  <div style={{ marginTop: 10, borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076', marginBottom: 4 }}>
-                      Participants · {participants[a.id].length}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                      {participants[a.id].map((p) => <span key={p.name} style={chip}>{p.name}</span>)}
-                    </div>
-                  </div>
-                )}
+                {/* Who was on this training — a one-line summary (with pre-survey /
+                    feedback counts); the full name list is tucked behind a toggle so it
+                    isn't a wall of chips. */}
+                {(participants[a.id] || []).length > 0 && (() => {
+                  const ps = participants[a.id];
+                  const nBefore = ps.filter((p) => p.before).length;
+                  const nAfter = ps.filter((p) => p.after).length;
+                  const parts = [];
+                  if (nBefore) parts.push(`${nBefore} did the pre-survey`);
+                  if (nAfter) parts.push(`${nAfter} gave feedback`);
+                  return (
+                    <details style={{ marginTop: 10, borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 13, color: '#5b5249' }}>
+                        <strong>{ps.length} participants</strong>
+                        {parts.length > 0 && <span style={{ color: '#8a8076' }}> · {parts.join(' · ')}</span>}
+                      </summary>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                        {ps.map((p) => (
+                          <span key={p.name} style={chip}
+                            title={[p.before && 'pre-survey', p.after && 'feedback'].filter(Boolean).join(' + ') || undefined}>
+                            {p.name}
+                          </span>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })()}
                 {/* Feedback for THIS training only — never another session's. */}
                 {(insights || []).filter((fb) => fb.form_type === 'feedback' && fb.agenda_id === a.id).map((fb) => (
                   <div key={`${fb.form_name}`} style={{ marginTop: 10, borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
