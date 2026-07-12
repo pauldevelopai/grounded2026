@@ -50,11 +50,10 @@ export function TrainingSections({ clientId, setErr }) {
     <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'minmax(0, 1fr)' }}>
       <DashboardRefresh clientId={clientId} setErr={setErr} />
       <HarvestSection clientId={clientId} setErr={setErr} />
-      <IntakeSection clientId={clientId} setErr={setErr} />
       <CompanyKnowledgeSection clientId={clientId} setErr={setErr} />
-      <AgendaSection clientId={clientId} setErr={setErr} />
-      <MaterialsSection clientId={clientId} setErr={setErr} />
-      <FeedbackSection clientId={clientId} setErr={setErr} />
+      {/* Everything about each training in one card: participants, materials, feedback,
+          report — instead of separate flat lists that mix the sessions together. */}
+      <TrainingsHub clientId={clientId} setErr={setErr} />
       <ExpectationsMatchSection clientId={clientId} setErr={setErr} />
       <RecommendationsSection clientId={clientId} setErr={setErr} pillars={['training']} />
     </div>
@@ -165,81 +164,94 @@ function HarvestSection({ clientId, setErr }) {
   );
 }
 
-// ── Intake (Google form) ─────────────────────────────────────────────────────────
-function IntakeSection({ clientId, setErr }) {
-  const api = useApi(clientId);
-  const [forms, setForms] = useState(null);
-  const [responses, setResponses] = useState(null);
+// ── Shared building blocks for the per-training grouping ─────────────────────────
+// A labelled sub-section inside a training card.
+function SubBlock({ label, children }) {
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 800, color: '#5b5249', marginBottom: 6 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+// The people on a training — from the before/after forms linked to it. `before`/`after`
+// badges show which survey each filled. Honest empty state when no form is linked yet.
+function Participants({ people }) {
+  if (people == null) return <p style={{ ...muted, margin: 0 }}>Loading…</p>;
+  if (!people.length) return <p style={{ ...muted, margin: 0 }}>No participants yet — they appear once a before- or after-training form is linked to this training and synced.</p>;
+  const dot = { fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.3 };
+  return (
+    <div>
+      <div style={{ ...muted, marginBottom: 6 }}>{people.length} {people.length === 1 ? 'person' : 'people'}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {people.map((p) => (
+          <span key={p.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, background: '#faf8f5', border: '1px solid #eee5da', borderRadius: 999, padding: '3px 9px', color: '#3a342e' }}>
+            {p.name}
+            {p.before && <span title="did the before-training survey" style={{ ...dot, background: '#e7eefb', color: '#2f4b8a' }}>before</span>}
+            {p.after && <span title="did the after-training feedback" style={{ ...dot, background: '#dcfce7', color: '#166534' }}>after</span>}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Connect a Google form (a "before" intake survey or an "after" feedback survey),
+// optionally tied to a training via agendaId. Pulls the first responses on connect.
+function FormConnect({ clientId, api, formType, agendaId = null, onDone, setErr }) {
   const [draft, setDraft] = useState({ form_name: '', csv_url: '' });
-  const [busy, setBusy] = useState('');
-  const [note, setNote] = useState(null);   // { kind: 'ok'|'warn', text }
-
-  const load = useCallback(() => {
-    api('/beaiready/intake').then(setForms).catch((e) => setErr(e.message));
-    api('/beaiready/training/intake-responses').then(setResponses).catch(() => setResponses([]));
-  }, [api, setErr]);
-  useEffect(() => { setForms(null); setResponses(null); setNote(null); load(); }, [load]);
-
-  // Turn a sync result into one honest line the admin can read.
-  const describe = (r) => r.error
-    ? `${r.form}: ${r.error}`
-    : `${r.form}: ${r.inserted} new · ${r.total} total response${r.total === 1 ? '' : 's'}`;
-
-  const register = async (e) => {
+  const [busy, setBusy] = useState(false);
+  const path = formType === 'feedback' ? '/beaiready/training/feedback-forms' : '/beaiready/training/intake-forms';
+  const submit = async (e) => {
     e.preventDefault();
     if (!draft.form_name.trim() || !draft.csv_url.trim()) return;
-    setBusy('register'); setErr(''); setNote(null);
+    setBusy(true); setErr('');
     try {
-      const r = await api('/beaiready/training/intake-forms', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) });
-      setDraft({ form_name: '', csv_url: '' });
-      if (r?.sync) setNote({ kind: r.sync.error ? 'warn' : 'ok', text: describe(r.sync) });
-      load();
+      await api(path, { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft, agenda_id: agendaId }) });
+      setDraft({ form_name: '', csv_url: '' }); onDone && onDone();
     } catch (e) { setErr(e.message); }
-    setBusy('');
+    setBusy(false);
   };
-  const sync = async () => {
-    setBusy('sync'); setErr(''); setNote(null);
-    try {
-      const r = await api('/beaiready/training/intake-forms/sync', { method: 'POST' });
-      const results = r?.results || [];
-      if (results.length === 0) setNote({ kind: 'warn', text: 'No form connected to sync yet.' });
-      else setNote({ kind: results.some((x) => x.error) ? 'warn' : 'ok', text: results.map(describe).join(' · ') });
-      load();
-    } catch (e) { setErr(e.message); }
-    setBusy('');
-  };
-
   return (
-    <Section title="Intake" hint="Import what the client told you via their Google form">
-      <form onSubmit={register} style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 6 }}>
-        <Field label="Form name"><input value={draft.form_name} onChange={(e) => setDraft({ ...draft, form_name: e.target.value })} placeholder="AI readiness intake" style={inp} /></Field>
-        <Field label="Response sheet link"><input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Paste the responses Google Sheet link" style={{ ...inp, minWidth: 280 }} /></Field>
-        <button type="submit" disabled={busy === 'register'} style={btn}>{busy === 'register' ? 'Connecting…' : 'Connect form'}</button>
-        <button type="button" onClick={sync} disabled={busy === 'sync'} style={btnGhost}>{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>
-      </form>
-      <p style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-        Paste the response Sheet's normal link (set it to “anyone with the link can view”), or use File → Share → Publish to web → CSV. Responses pull in automatically on connect, and hourly after that.
-      </p>
-      {note && (
-        <div style={{ ...card, padding: '8px 12px', marginBottom: 10, fontSize: 13,
-          background: note.kind === 'ok' ? '#f0fdf4' : '#fffbeb',
-          borderColor: note.kind === 'ok' ? '#bbf7d0' : '#fde68a',
-          color: note.kind === 'ok' ? '#166534' : '#92400e' }}>
-          {note.text}
-        </div>
-      )}
-      {forms == null ? <p style={muted}>Loading…</p> : forms.length === 0 ? <p style={muted}>No form connected yet.</p> : (
-        <ul style={list}>
-          {forms.map((f) => (
-            <li key={f.form_name} style={{ fontSize: 13.5 }}>
-              <strong>{f.form_name}</strong> — {f.response_count} response{f.response_count === 1 ? '' : 's'}
-              {f.last_synced_at && <span style={muted}> · synced {new Date(f.last_synced_at).toLocaleString()}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {responses && responses.length > 0 && <IntakeResponses responses={responses} />}
-    </Section>
+    <form onSubmit={submit} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      <input value={draft.form_name} onChange={(e) => setDraft({ ...draft, form_name: e.target.value })} placeholder={formType === 'feedback' ? 'After-training feedback' : 'Before-training survey'} style={inp} />
+      <input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Google Sheet link (‘anyone with the link’)" style={{ ...inp, minWidth: 240, flex: 1 }} />
+      <button type="submit" disabled={busy} style={tag}>{busy ? 'Connecting…' : 'Connect'}</button>
+    </form>
+  );
+}
+
+// One training's before- or after-form: the linked form + its own responses, or a
+// connect box when none is linked. Responses are filtered to THIS form only, so one
+// training's feedback never shows another's.
+function TrainingForm({ form, formType, agendaId, responses, api, clientId, onChanged, setErr }) {
+  const [busy, setBusy] = useState('');
+  const mine = form ? (responses || []).filter((r) => r.form_name === form.form_name) : [];
+  const unlink = async () => { setErr(''); setBusy('unlink'); try { await api(`/beaiready/training/intake-forms/${form.id}`, { method: 'PUT', body: JSON.stringify({ agenda_id: '' }) }); onChanged(); } catch (e) { setErr(e.message); } setBusy(''); };
+  const sync = async () => {
+    setErr(''); setBusy('sync');
+    const path = formType === 'feedback' ? '/beaiready/training/feedback-forms/sync' : '/beaiready/training/intake-forms/sync';
+    try { await api(path, { method: 'POST' }); onChanged(); } catch (e) { setErr(e.message); } setBusy('');
+  };
+  if (!form) {
+    return (
+      <div style={{ display: 'grid', gap: 6 }}>
+        <p style={{ ...muted, margin: 0 }}>No {formType === 'feedback' ? 'after-training feedback' : 'before-training'} form linked to this training.</p>
+        <FormConnect clientId={clientId} api={api} formType={formType} agendaId={agendaId} onDone={onChanged} setErr={setErr} />
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      <div style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <strong>{form.form_name}</strong>
+        <span style={muted}>— {form.response_count} response{form.response_count === 1 ? '' : 's'}{form.last_synced_at ? ` · synced ${new Date(form.last_synced_at).toLocaleString()}` : ''}</span>
+        <button onClick={sync} disabled={busy === 'sync'} style={tag}>{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>
+        <button onClick={unlink} disabled={busy === 'unlink'} style={{ ...tag, color: '#b91c1c' }}>Unlink</button>
+      </div>
+      {mine.length > 0 && <IntakeResponses responses={mine} />}
+    </div>
   );
 }
 
@@ -307,83 +319,59 @@ function IntakeResponses({ responses }) {
   );
 }
 
-// ── Training feedback (Google form) — the post-training survey ───────────────────
-// Same machinery as Intake (connect a response Sheet → sync now + hourly), but for
-// the feedback attendees fill in AFTER a training. Kept separate so the pre-training
-// intake survey and the post-training feedback never mix.
-function FeedbackSection({ clientId, setErr }) {
-  const api = useApi(clientId);
-  const [forms, setForms] = useState(null);
-  const [responses, setResponses] = useState(null);
-  const [draft, setDraft] = useState({ form_name: '', csv_url: '' });
-  const [busy, setBusy] = useState('');
-  const [note, setNote] = useState(null);   // { kind: 'ok'|'warn', text }
-
-  const load = useCallback(() => {
-    api('/beaiready/training/feedback-forms').then(setForms).catch((e) => setErr(e.message));
-    api('/beaiready/training/feedback-responses').then(setResponses).catch(() => setResponses([]));
-  }, [api, setErr]);
-  useEffect(() => { setForms(null); setResponses(null); setNote(null); load(); }, [load]);
-
-  const describe = (r) => r.error
-    ? `${r.form}: ${r.error}`
-    : `${r.form}: ${r.inserted} new · ${r.total} total response${r.total === 1 ? '' : 's'}`;
-
-  const register = async (e) => {
-    e.preventDefault();
-    if (!draft.form_name.trim() || !draft.csv_url.trim()) return;
-    setBusy('register'); setErr(''); setNote(null);
-    try {
-      const r = await api('/beaiready/training/feedback-forms', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) });
-      setDraft({ form_name: '', csv_url: '' });
-      if (r?.sync) setNote({ kind: r.sync.error ? 'warn' : 'ok', text: describe(r.sync) });
-      load();
-    } catch (e) { setErr(e.message); }
-    setBusy('');
-  };
-  const sync = async () => {
-    setBusy('sync'); setErr(''); setNote(null);
-    try {
-      const r = await api('/beaiready/training/feedback-forms/sync', { method: 'POST' });
-      const results = r?.results || [];
-      if (results.length === 0) setNote({ kind: 'warn', text: 'No feedback form connected to sync yet.' });
-      else setNote({ kind: results.some((x) => x.error) ? 'warn' : 'ok', text: results.map(describe).join(' · ') });
-      load();
-    } catch (e) { setErr(e.message); }
-    setBusy('');
-  };
-
+// ── Materials for ONE training — the linked materials + an inline "add" form ──────
+function TrainingMaterials({ agendaId, mats, api, clientId, agendas, onChanged, setErr }) {
+  const [adding, setAdding] = useState(false);
   return (
-    <Section title="Training feedback" hint="Import the Google form attendees filled in after a training">
-      <form onSubmit={register} style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 6 }}>
-        <Field label="Form name"><input value={draft.form_name} onChange={(e) => setDraft({ ...draft, form_name: e.target.value })} placeholder="Post-training feedback" style={inp} /></Field>
-        <Field label="Response sheet link"><input value={draft.csv_url} onChange={(e) => setDraft({ ...draft, csv_url: e.target.value })} placeholder="Paste the responses Google Sheet link" style={{ ...inp, minWidth: 280 }} /></Field>
-        <button type="submit" disabled={busy === 'register'} style={btn}>{busy === 'register' ? 'Connecting…' : 'Connect form'}</button>
-        <button type="button" onClick={sync} disabled={busy === 'sync'} style={btnGhost}>{busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>
-      </form>
-      <p style={{ ...muted, fontSize: 12, marginBottom: 10 }}>
-        Paste the feedback response Sheet's normal link (set it to “anyone with the link can view”), or use File → Share → Publish to web → CSV. Responses pull in on connect, and hourly after that.
-      </p>
-      {note && (
-        <div style={{ ...card, padding: '8px 12px', marginBottom: 10, fontSize: 13,
-          background: note.kind === 'ok' ? '#f0fdf4' : '#fffbeb',
-          borderColor: note.kind === 'ok' ? '#bbf7d0' : '#fde68a',
-          color: note.kind === 'ok' ? '#166534' : '#92400e' }}>
-          {note.text}
-        </div>
-      )}
-      {forms == null ? <p style={muted}>Loading…</p> : forms.length === 0 ? <p style={muted}>No feedback form connected yet.</p> : (
-        <ul style={list}>
-          {forms.map((f) => (
-            <li key={f.form_name} style={{ fontSize: 13.5 }}>
-              <strong>{f.form_name}</strong> — {f.response_count} response{f.response_count === 1 ? '' : 's'}
-              {f.last_synced_at && <span style={muted}> · synced {new Date(f.last_synced_at).toLocaleString()}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {responses && responses.length > 0 && <IntakeResponses responses={responses} />}
-    </Section>
+    <div style={{ display: 'grid', gap: 8 }}>
+      {mats.length === 0 ? <p style={{ ...muted, margin: 0 }}>No materials linked to this training yet.</p> :
+        mats.map((m) => <MaterialCard key={m.id} m={m} api={api} clientId={clientId} agendas={agendas} onChanged={onChanged} setErr={setErr} />)}
+      {adding
+        ? <NewMaterialForm agendaId={agendaId} api={api} clientId={clientId} onDone={() => { setAdding(false); onChanged(); }} setErr={setErr} />
+        : <button type="button" onClick={() => setAdding(true)} style={{ ...tag, justifySelf: 'start' }}>+ Add material to this training</button>}
+    </div>
+  );
+}
+
+// Create a material already linked to a training (agendaId fixed). Attaches any PDFs.
+function NewMaterialForm({ agendaId, api, clientId, onDone, setErr }) {
+  const [draft, setDraft] = useState({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true });
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const create = async (e) => {
+    e.preventDefault(); if (!draft.title.trim()) return; setErr(''); setBusy(true);
+    let m;
+    try { m = await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft, agenda_id: agendaId }) }); }
+    catch (e) { setErr(`Couldn't add the material: ${e.message}`); setBusy(false); return; }
+    try {
+      for (const file of pendingFiles) {
+        const fd = new FormData(); fd.append('entity_type', 'training_material_file'); fd.append('entity_id', m.id); fd.append('file', file);
+        const res = await fetch('/api/beaiready/training/files', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
+        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || `upload failed (HTTP ${res.status})`); }
+      }
+    } catch (fileErr) { setErr(`Material added — but a PDF didn't upload: ${fileErr.message}. Add it on the material below.`); }
+    setBusy(false); onDone();
+  };
+  return (
+    <form onSubmit={create} style={{ ...card, display: 'grid', gap: 8, background: '#fbf7f4' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Title (e.g. Session 1 — slides)" style={{ ...inp, flex: 1 }} />
+        <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })} style={inp}>{KINDS.map((k) => <option key={k}>{k}</option>)}</select>
+        <input value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} placeholder="Link (optional)" style={inp} />
+      </div>
+      <input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Short description" style={inp} />
+      <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} placeholder="Body / notes (what the knowledge base learns from)" style={{ ...inp, minHeight: 56 }} />
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <label style={{ ...tag, cursor: 'pointer' }}>
+          {pendingFiles.length ? `${pendingFiles.length} PDF${pendingFiles.length === 1 ? '' : 's'} — add more` : '+ Attach PDF(s)'}
+          <input type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" multiple style={{ display: 'none' }}
+            onChange={(e) => { setPendingFiles((p) => [...p, ...Array.from(e.target.files || [])]); e.target.value = ''; }} />
+        </label>
+        {pendingFiles.length > 0 && <span style={{ fontSize: 12, color: '#6b6359' }}>{pendingFiles.map((f) => f.name).join(', ')}</span>}
+        <label style={chk}><input type="checkbox" checked={draft.rag_shareable} onChange={(e) => setDraft({ ...draft, rag_shareable: e.target.checked })} /> Feed this client's private AI</label>
+      </div>
+      <button type="submit" disabled={busy} style={{ ...btn, justifySelf: 'start' }}>{busy ? 'Adding…' : 'Add material'}</button>
+    </form>
   );
 }
 
@@ -508,25 +496,43 @@ function textToItems(text) {
   }).filter((i) => i.topic);
 }
 
-function AgendaSection({ clientId, setErr }) {
+// ── Trainings hub — one card per training, everything about it grouped together ───
+// Loads agendas, materials, forms, participants and the survey responses once, then
+// renders a card per training composing: header + report (AgendaCard), participants,
+// materials, and the before/after feedback forms — each scoped to that training so the
+// sessions never blur together. An "unassigned" area links stray forms/materials to a
+// training, and the create form adds a new one.
+function TrainingsHub({ clientId, setErr }) {
   const api = useApi(clientId);
   const [agendas, setAgendas] = useState(null);
+  const [materials, setMaterials] = useState([]);
+  const [forms, setForms] = useState([]);
+  const [participants, setParticipants] = useState({});
+  const [intakeResp, setIntakeResp] = useState([]);
+  const [feedbackResp, setFeedbackResp] = useState([]);
   const [draft, setDraft] = useState({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' });
   const [pendingFiles, setPendingFiles] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);   // feedback shown AT the form — the page is long, a top banner is easy to miss
-  const load = useCallback(() => { api('/beaiready/training/agendas').then(setAgendas).catch((e) => setNote({ ok: false, text: `Couldn't load agendas: ${e.message}` })); }, [api]);
+  const [note, setNote] = useState(null);
+
+  const load = useCallback(() => {
+    api('/beaiready/training/agendas').then(setAgendas).catch((e) => setNote({ ok: false, text: `Couldn't load trainings: ${e.message}` }));
+    api('/beaiready/training/materials').then(setMaterials).catch(() => setMaterials([]));
+    api('/beaiready/training/forms').then(setForms).catch(() => setForms([]));
+    api('/beaiready/training/participants').then(setParticipants).catch(() => setParticipants({}));
+    api('/beaiready/training/intake-responses').then(setIntakeResp).catch(() => setIntakeResp([]));
+    api('/beaiready/training/feedback-responses').then(setFeedbackResp).catch(() => setFeedbackResp([]));
+  }, [api]);
   useEffect(() => { setAgendas(null); load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault();
-    if (!draft.title.trim()) { setNote({ ok: false, text: 'Enter an agenda title first.' }); return; }
+    if (!draft.title.trim()) { setNote({ ok: false, text: 'Enter a training title first.' }); return; }
     setNote({ ok: true, text: 'Adding…' }); setBusy(true);
     let a;
     try {
       a = await api('/beaiready/training/agendas', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, title: draft.title, scheduled_for: draft.scheduled_for || null, location: draft.location || null, items: textToItems(draft.items) }) });
-    } catch (e) { setNote({ ok: false, text: `Couldn't create the agenda: ${e.message}` }); setBusy(false); return; }
-    // The agenda exists now — capture the documents, clear the form, SHOW it immediately.
+    } catch (e) { setNote({ ok: false, text: `Couldn't create the training: ${e.message}` }); setBusy(false); return; }
     const files = pendingFiles;
     const gdoc = draft.gdocUrl.trim();
     setDraft({ title: '', scheduled_for: '', location: '', items: '', gdocUrl: '' });
@@ -545,30 +551,46 @@ function AgendaSection({ clientId, setErr }) {
       } catch (e) { problems.push(`${file.name}: ${e.message}`); }
     }
     setNote(problems.length
-      ? { ok: false, text: `Agenda “${a.title}” added — but some documents didn't attach: ${problems.join('; ')}. Add them under “Documents” on the agenda above.` }
-      : { ok: true, text: `Agenda “${a.title}” added ✓` });
+      ? { ok: false, text: `Training “${a.title}” added — but some documents didn't attach: ${problems.join('; ')}. Add them on the training above.` }
+      : { ok: true, text: `Training “${a.title}” added ✓` });
     load();
     setBusy(false);
   };
 
+  const unlinkedMats = (materials || []).filter((m) => !m.agenda_id);
+  const unlinkedForms = (forms || []).filter((f) => !f.agenda_id);
+
   return (
-    <Section title="Training agenda" hint="Items show in the client's portal when published">
-      <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-        {agendas == null ? <p style={muted}>Loading…</p> : agendas.length === 0 ? <p style={muted}>No agenda yet.</p> :
-          agendas.map((a) => <AgendaCard key={a.id} agenda={a} api={api} clientId={clientId} onChanged={load} setErr={setErr} />)}
+    <Section title="Trainings" hint="Each training in one place — its participants, materials, feedback and report">
+      <div style={{ display: 'grid', gap: 16, marginBottom: 14 }}>
+        {agendas == null ? <p style={muted}>Loading…</p> : agendas.length === 0 ? <p style={muted}>No trainings yet — add one below.</p> :
+          agendas.map((a) => (
+            <TrainingCard key={a.id} agenda={a} api={api} clientId={clientId} agendas={agendas}
+              mats={(materials || []).filter((m) => m.agenda_id === a.id)} forms={forms || []}
+              people={participants[a.id] ?? []} intakeResp={intakeResp} feedbackResp={feedbackResp}
+              onChanged={load} setErr={setErr} />
+          ))}
       </div>
+
+      {(unlinkedForms.length > 0 || unlinkedMats.length > 0) && (
+        <div style={{ ...card, background: '#fbf7f4', borderColor: '#eaddd3', display: 'grid', gap: 10, marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, fontSize: 13 }}>Not linked to a training</div>
+          <p style={{ ...muted, margin: 0 }}>Assign these to a training so they show under the right session.</p>
+          {unlinkedForms.map((f) => <LinkFormRow key={f.id} form={f} agendas={agendas || []} api={api} onChanged={load} setErr={setErr} />)}
+          {unlinkedMats.map((m) => <MaterialCard key={m.id} m={m} api={api} clientId={clientId} agendas={agendas || []} onChanged={load} setErr={setErr} />)}
+        </div>
+      )}
+
       <form onSubmit={create} style={{ ...card, display: 'grid', gap: 8 }}>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>New agenda</div>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>New training</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Title (e.g. AI Day 1)" style={{ ...inp, flex: 1 }} />
           <input type="date" value={draft.scheduled_for} onChange={(e) => setDraft({ ...draft, scheduled_for: e.target.value })} style={inp} />
           <input value={draft.location} onChange={(e) => setDraft({ ...draft, location: e.target.value })} placeholder="Location" style={inp} />
         </div>
         <textarea value={draft.items} onChange={(e) => setDraft({ ...draft, items: e.target.value })} placeholder={'One item per line:  09:00 | Topic | detail (optional if you attach a doc)'} style={{ ...inp, minHeight: 64 }} />
-        {/* Documents (optional) — the agenda PDF, a training report, handouts. Add as
-            many as you like; a Google Doc link can go here too. All show in the portal. */}
         <div style={{ borderTop: '1px solid #f0ebe3', paddingTop: 8, display: 'grid', gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>Agenda document(s) (optional) — the agenda PDF + handouts. (The training report is added on the agenda once it’s created.)</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#5b6b63' }}>Agenda document(s) (optional) — the agenda PDF + handouts. (The training report is added on the training once it’s created.)</div>
           <input value={draft.gdocUrl} onChange={(e) => setDraft({ ...draft, gdocUrl: e.target.value })} placeholder="Google Doc link (set to ‘anyone with the link’) — optional" style={inp} />
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ ...tag, cursor: 'pointer' }}>
@@ -578,15 +600,53 @@ function AgendaSection({ clientId, setErr }) {
             </label>
             {pendingFiles.length > 0 && (
               <span style={{ fontSize: 12, color: '#6b6359' }}>{pendingFiles.map((f) => f.name).join(', ')}
-                {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button>
-                <span style={{ display: 'block', color: '#8a8076', marginTop: 2 }}>These upload when you click “Add agenda” below.</span></span>
+                {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button></span>
             )}
           </div>
         </div>
         {note && <div style={{ fontSize: 13, padding: '8px 12px', borderRadius: 8, background: note.ok ? '#f0fdf4' : '#FEF2F2', color: note.ok ? '#166534' : '#B91C1C', border: `1px solid ${note.ok ? '#bbf7d0' : '#fecaca'}` }}>{note.text}</div>}
-        <button type="submit" disabled={busy} style={{ ...btn, justifySelf: 'start' }}>{busy ? 'Adding…' : 'Add agenda'}</button>
+        <button type="submit" disabled={busy} style={{ ...btn, justifySelf: 'start' }}>{busy ? 'Adding…' : 'Add training'}</button>
       </form>
     </Section>
+  );
+}
+
+// One training, everything grouped: header + report (AgendaCard), then participants,
+// materials, and the after/before survey forms — each scoped to this training.
+function TrainingCard({ agenda, api, clientId, agendas, mats, forms, people, intakeResp, feedbackResp, onChanged, setErr }) {
+  const afterForm = forms.find((f) => f.form_type === 'feedback' && f.agenda_id === agenda.id);
+  const beforeForm = forms.find((f) => f.form_type === 'intake' && f.agenda_id === agenda.id);
+  return (
+    <div style={{ border: '1px solid #e4dcd2', borderRadius: 14, padding: 4, background: '#fcfaf7' }}>
+      <AgendaCard agenda={agenda} api={api} clientId={clientId} onChanged={onChanged} setErr={setErr} />
+      <div style={{ padding: '12px 14px 6px', display: 'grid', gap: 16 }}>
+        <SubBlock label="👥 Participants"><Participants people={people} /></SubBlock>
+        <SubBlock label="📚 Materials">
+          <TrainingMaterials agendaId={agenda.id} mats={mats} api={api} clientId={clientId} agendas={agendas} onChanged={onChanged} setErr={setErr} />
+        </SubBlock>
+        <SubBlock label="📝 After-training feedback">
+          <TrainingForm form={afterForm} formType="feedback" agendaId={agenda.id} responses={feedbackResp} api={api} clientId={clientId} onChanged={onChanged} setErr={setErr} />
+        </SubBlock>
+        <SubBlock label="🗒️ Before-training survey">
+          <TrainingForm form={beforeForm} formType="intake" agendaId={agenda.id} responses={intakeResp} api={api} clientId={clientId} onChanged={onChanged} setErr={setErr} />
+        </SubBlock>
+      </div>
+    </div>
+  );
+}
+
+// A stray form (before/after) with a picker to link it to a training.
+function LinkFormRow({ form, agendas, api, onChanged, setErr }) {
+  const link = async (aid) => { if (!aid) return; setErr(''); try { await api(`/beaiready/training/intake-forms/${form.id}`, { method: 'PUT', body: JSON.stringify({ agenda_id: aid }) }); onChanged(); } catch (e) { setErr(e.message); } };
+  const after = form.form_type === 'feedback';
+  return (
+    <div style={{ ...card, display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+      <div style={{ fontSize: 13 }}>
+        <span style={{ ...pill, background: after ? '#dcfce7' : '#e7eefb', color: after ? '#166534' : '#2f4b8a' }}>{after ? 'After' : 'Before'}</span>
+        <strong style={{ marginLeft: 6 }}>{form.form_name}</strong> <span style={muted}>— {form.response_count} response{form.response_count === 1 ? '' : 's'}</span>
+      </div>
+      <AgendaSelect agendas={agendas} value="" onChange={link} />
+    </div>
   );
 }
 
@@ -694,71 +754,8 @@ function AgendaCard({ agenda, api, clientId, onChanged, setErr }) {
   );
 }
 
-// ── Materials (RAG-ingested) ────────────────────────────────────────────────────
+// ── Materials (RAG-ingested) — created inline per training via NewMaterialForm ────
 const KINDS = ['doc', 'slide', 'video', 'link', 'exercise'];
-function MaterialsSection({ clientId, setErr }) {
-  const api = useApi(clientId);
-  const [rows, setRows] = useState(null);
-  const [agendas, setAgendas] = useState([]);
-  const [draft, setDraft] = useState({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' });
-  const [pendingFiles, setPendingFiles] = useState([]);
-  const load = useCallback(() => {
-    api('/beaiready/training/materials').then(setRows).catch((e) => setErr(e.message));
-    api('/beaiready/training/agendas').then(setAgendas).catch(() => setAgendas([]));
-  }, [api, setErr]);
-  useEffect(() => { setRows(null); load(); }, [load]);
-  const create = async (e) => {
-    e.preventDefault(); if (!draft.title.trim()) return; setErr('');
-    let m;
-    try { m = await api('/beaiready/training/materials', { method: 'POST', body: JSON.stringify({ newsroom_id: clientId, ...draft }) }); }
-    catch (e) { setErr(`Couldn't add the material: ${e.message}`); return; }
-    try {
-      for (const file of pendingFiles) {
-        const fd = new FormData(); fd.append('entity_type', 'training_material_file'); fd.append('entity_id', m.id); fd.append('file', file);
-        const res = await fetch('/api/beaiready/training/files', { method: 'POST', credentials: 'include', headers: { 'X-Newsroom-Id': clientId }, body: fd });
-        if (!res.ok) { const er = await res.json().catch(() => ({})); throw new Error(er.message || `upload failed (HTTP ${res.status})`); }
-      }
-    } catch (fileErr) {
-      setErr(`Material added — but a PDF didn't upload: ${fileErr.message}. Add it on the material below.`);
-    }
-    setDraft({ title: '', kind: 'doc', url: '', description: '', content: '', rag_shareable: true, agenda_id: '' }); setPendingFiles([]); load();
-  };
-
-  return (
-    <Section title="Training materials" hint="Published materials appear in the client's portal — attach the PDFs for each session and link each to its training">
-      <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-        {rows == null ? <p style={muted}>Loading…</p> : rows.length === 0 ? <p style={muted}>No materials yet.</p> :
-          rows.map((m) => <MaterialCard key={m.id} m={m} api={api} clientId={clientId} agendas={agendas} onChanged={load} setErr={setErr} />)}
-      </div>
-      <form onSubmit={create} style={{ ...card, display: 'grid', gap: 8 }}>
-        <div style={{ fontWeight: 700, fontSize: 13 }}>New material</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Title" style={{ ...inp, flex: 1 }} />
-          <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })} style={inp}>{KINDS.map((k) => <option key={k}>{k}</option>)}</select>
-          <input value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} placeholder="Link (optional)" style={inp} />
-        </div>
-        <input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Short description" style={inp} />
-        <textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} placeholder="Body / notes (this is what the knowledge base learns from)" style={{ ...inp, minHeight: 64 }} />
-        {/* Attach the session's PDFs (slides, handouts) — as many as you like. */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ ...tag, cursor: 'pointer' }}>
-            {pendingFiles.length ? `${pendingFiles.length} PDF${pendingFiles.length === 1 ? '' : 's'} to attach — add more` : '+ Attach PDF(s)'}
-            <input type="file" accept=".pdf,.docx,.xlsx,.csv,.txt" multiple style={{ display: 'none' }}
-              onChange={(e) => { setPendingFiles((p) => [...p, ...Array.from(e.target.files || [])]); e.target.value = ''; }} />
-          </label>
-          {pendingFiles.length > 0 && (
-            <span style={{ fontSize: 12, color: '#6b6359' }}>{pendingFiles.map((f) => f.name).join(', ')}
-              {' '}<button type="button" onClick={() => setPendingFiles([])} style={{ ...tag, padding: '1px 8px' }}>clear</button>
-              <span style={{ display: 'block', color: '#8a8076', marginTop: 2 }}>These upload when you click “Add material” below.</span></span>
-          )}
-        </div>
-        <AgendaSelect agendas={agendas} value={draft.agenda_id} onChange={(v) => setDraft({ ...draft, agenda_id: v })} />
-        <label style={chk}><input type="checkbox" checked={draft.rag_shareable} onChange={(e) => setDraft({ ...draft, rag_shareable: e.target.checked })} /> Feed this client's private AI knowledge (used only for them)</label>
-        <button type="submit" style={{ ...btn, justifySelf: 'start' }}>Add material</button>
-      </form>
-    </Section>
-  );
-}
 
 function MaterialCard({ m, api, clientId, agendas, onChanged, setErr }) {
   const [edit, setEdit] = useState(false);

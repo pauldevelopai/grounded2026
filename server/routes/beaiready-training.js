@@ -129,12 +129,13 @@ async function syncMaterialToRag(materialId, tenant) {
 // ── Intake (Google form) — reuse intake_forms/responses + the hourly sync ───────
 router.post('/intake-forms', requireRole('admin'), async (req, res) => {
   try {
-    const { newsroom_id, form_name, csv_url } = req.body || {};
+    const { newsroom_id, form_name, csv_url, agenda_id } = req.body || {};
     if (!newsroom_id || !form_name || !csv_url) return res.status(400).json({ message: 'newsroom_id, form_name, csv_url required' });
     // Store the link as-is (toCsvUrl normalises at fetch time, keeping the original visible).
+    // agenda_id (optional) ties this "before" survey to one training.
     const { rows } = await pool.query(
-      `INSERT INTO intake_forms (newsroom_id, form_name, csv_url) VALUES ($1,$2,$3) RETURNING *`,
-      [newsroom_id, form_name, csv_url]);
+      `INSERT INTO intake_forms (newsroom_id, form_name, csv_url, agenda_id) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [newsroom_id, form_name, csv_url, agenda_id || null]);
     // Pull responses immediately so "0 responses" never lingers when the sheet is fine.
     let sync = null;
     try { sync = await syncOneForm(rows[0].id); }
@@ -145,11 +146,18 @@ router.post('/intake-forms', requireRole('admin'), async (req, res) => {
 
 router.put('/intake-forms/:id', requireRole('admin'), async (req, res) => {
   try {
-    const { form_name, csv_url, is_enabled } = req.body || {};
+    const b = req.body || {};
+    const { form_name, csv_url, is_enabled, agenda_id } = b;
+    // agenda_id is presence-aware: sending it (incl. "" → null) links or unlinks the
+    // form from a training; omitting it leaves the link untouched. Used for both the
+    // "before" (intake) and "after" (feedback) surveys.
+    const hasAgenda = Object.prototype.hasOwnProperty.call(b, 'agenda_id');
     const { rows } = await pool.query(
       `UPDATE intake_forms SET form_name = COALESCE($1, form_name), csv_url = COALESCE($2, csv_url),
-         is_enabled = COALESCE($3, is_enabled) WHERE id = $4 RETURNING *`,
-      [form_name || null, csv_url || null, typeof is_enabled === 'boolean' ? is_enabled : null, req.params.id]);
+         is_enabled = COALESCE($3, is_enabled),
+         agenda_id = CASE WHEN $4 THEN $5 ELSE agenda_id END WHERE id = $6 RETURNING *`,
+      [form_name || null, csv_url || null, typeof is_enabled === 'boolean' ? is_enabled : null,
+       hasAgenda, agenda_id || null, req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Form not found' });
     res.json(rows[0]);
   } catch (err) { console.error('[bair-train/intake-forms:put]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -185,7 +193,7 @@ router.get('/feedback-forms', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
     const { rows } = await pool.query(
-      `SELECT f.form_name, f.last_synced_at,
+      `SELECT f.id, f.form_name, f.agenda_id, f.last_synced_at,
               (SELECT COUNT(*)::int FROM intake_responses r
                 WHERE r.newsroom_id = f.newsroom_id AND r.form_name = f.form_name AND r.form_type = 'feedback') AS response_count
          FROM intake_forms f WHERE f.newsroom_id = $1 AND f.form_type = 'feedback' AND f.is_enabled = true
@@ -196,11 +204,11 @@ router.get('/feedback-forms', async (req, res) => {
 
 router.post('/feedback-forms', requireRole('admin'), async (req, res) => {
   try {
-    const { newsroom_id, form_name, csv_url } = req.body || {};
+    const { newsroom_id, form_name, csv_url, agenda_id } = req.body || {};
     if (!newsroom_id || !form_name || !csv_url) return res.status(400).json({ message: 'newsroom_id, form_name, csv_url required' });
     const { rows } = await pool.query(
-      `INSERT INTO intake_forms (newsroom_id, form_name, csv_url, form_type) VALUES ($1,$2,$3,'feedback') RETURNING *`,
-      [newsroom_id, form_name, csv_url]);
+      `INSERT INTO intake_forms (newsroom_id, form_name, csv_url, form_type, agenda_id) VALUES ($1,$2,$3,'feedback',$4) RETURNING *`,
+      [newsroom_id, form_name, csv_url, agenda_id || null]);
     // Pull responses immediately so "0 responses" never lingers when the sheet is fine.
     let sync = null;
     try { sync = await syncOneForm(rows[0].id); }
@@ -226,6 +234,68 @@ router.get('/feedback-responses', async (req, res) => {
         WHERE newsroom_id = $1 AND form_type = 'feedback' ORDER BY submitted_at DESC NULLS LAST, imported_at DESC LIMIT 500`, [newsroomId]);
     res.json(rows);
   } catch (err) { console.error('[bair-train/feedback-responses]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// ── Forms + participants, grouped by training ────────────────────────────────────
+// Every connected form (the "before" intake survey and the "after" feedback survey),
+// with which training (agenda_id) it belongs to. The admin uses this to link a form
+// to a training so its responses/participants group under that session — and so one
+// training's feedback never bleeds into another (a training with no linked form shows
+// none). Returns id, form_type, agenda_id + a response count.
+router.get('/forms', requireRole('admin'), async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows } = await pool.query(
+      `SELECT f.id, f.form_name, f.form_type, f.agenda_id, f.last_synced_at,
+              (SELECT COUNT(*)::int FROM intake_responses r
+                 WHERE r.newsroom_id = f.newsroom_id AND r.form_name = f.form_name AND r.form_type = f.form_type) AS response_count
+         FROM intake_forms f WHERE f.newsroom_id = $1 AND f.is_enabled = true
+        ORDER BY f.form_type, f.form_name`, [newsroomId]);
+    res.json(rows);
+  } catch (err) { console.error('[bair-train/forms:get]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// The name column of a survey response ("Name", "What is your name?", "Full name"…);
+// falls back to email so a nameless row still counts as one distinct person.
+const NAME_KEY = /(^|[^a-z])name([^a-z]|$)/i;
+function participantName(resp) {
+  const keys = Object.keys(resp || {});
+  const nameKey = keys.find((k) => NAME_KEY.test(k) && !/form/i.test(k));
+  let name = nameKey ? String(resp[nameKey] ?? '').trim() : '';
+  if (!name) { const ek = keys.find((k) => /email/i.test(k)); name = ek ? String(resp[ek] ?? '').trim() : ''; }
+  return name;
+}
+
+// Participants per training — the people on each training, derived from the forms
+// linked to it: who filled the "before" survey and who filled the "after" survey.
+// Keyed by agenda_id (only trainings with a linked form appear). Scoped to the
+// caller's tenant, so a member sees only their own team's names.
+router.get('/participants', async (req, res) => {
+  try {
+    const { newsroomId } = await tenantContext(req);
+    const { rows: forms } = await pool.query(
+      `SELECT form_name, form_type, agenda_id FROM intake_forms
+        WHERE newsroom_id = $1 AND agenda_id IS NOT NULL AND is_enabled = true`, [newsroomId]);
+    const byTraining = {};   // agenda_id -> Map(lowerName -> {name, before, after})
+    for (const f of forms) {
+      const { rows } = await pool.query(
+        `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_name = $2 AND form_type = $3`,
+        [newsroomId, f.form_name, f.form_type]);
+      const bucket = byTraining[f.agenda_id] || (byTraining[f.agenda_id] = new Map());
+      for (const r of rows) {
+        const name = participantName(r.response); if (!name) continue;
+        const key = name.toLowerCase();
+        const entry = bucket.get(key) || { name, before: false, after: false };
+        if (f.form_type === 'feedback') entry.after = true; else entry.before = true;
+        bucket.set(key, entry);
+      }
+    }
+    const out = {};
+    for (const [aid, map] of Object.entries(byTraining)) {
+      out[aid] = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    res.json(out);
+  } catch (err) { console.error('[bair-train/participants]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── Form insights (member-safe AGGREGATES only) ──────────────────────────────────
@@ -308,7 +378,7 @@ router.get('/form-insights', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
     const { rows: forms } = await pool.query(
-      `SELECT form_name, form_type, last_synced_at FROM intake_forms
+      `SELECT form_name, form_type, agenda_id, last_synced_at FROM intake_forms
         WHERE newsroom_id = $1 AND is_enabled = true ORDER BY form_type, form_name`, [newsroomId]);
     const out = [];
     for (const f of forms) {
@@ -316,7 +386,9 @@ router.get('/form-insights', async (req, res) => {
         `SELECT response FROM intake_responses WHERE newsroom_id = $1 AND form_name = $2 AND form_type = $3`,
         [newsroomId, f.form_name, f.form_type]);
       if (!rows.length) continue;
-      out.push({ form_name: f.form_name, form_type: f.form_type, last_synced_at: f.last_synced_at, ...aggregateResponses(rows) });
+      // agenda_id lets the client place each survey under its training — and keeps one
+      // training's feedback from ever showing under another (no cross-training fallback).
+      out.push({ form_name: f.form_name, form_type: f.form_type, agenda_id: f.agenda_id, last_synced_at: f.last_synced_at, ...aggregateResponses(rows) });
     }
     // The client sees a POSITIVE cut of their feedback (this is the consultant's work
     // and it went well): only ratings ≥8/10 and agreement ≥80%, and the multi-select
@@ -521,7 +593,24 @@ router.get('/team-analysis', async (req, res) => {
 // decks) and turns each into a short title + key-topic bullets, so the dashboard
 // shows what was actually taught — not just a list of PDFs. Cached in the same
 // table under kind='curriculum'. Needs the decks harvested first (Harvest now).
-const CURRICULUM_VERSION = 'v1';
+const CURRICULUM_VERSION = 'v2';   // bumped: training reports now feed the summary too
+
+// The documents the "what was covered" summary reads: the session slide-decks AND the
+// post-training reports (the write-up of what actually happened + recommendations),
+// so the client's summary reflects the report, not just the decks. Tenant-scoped.
+const CURRICULUM_DOCS_SQL = `
+  SELECT ud.id, ud.original_name AS name, ud.extracted_text AS text, 0 AS ord
+    FROM uploaded_documents ud
+   WHERE ud.entity_type = 'training_material_file'
+     AND ud.entity_id IN (SELECT id FROM training_materials WHERE newsroom_id = $1)
+     AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 60
+  UNION ALL
+  SELECT ud.id, ud.original_name AS name, ud.extracted_text AS text, 1 AS ord
+    FROM uploaded_documents ud
+   WHERE ud.entity_type = 'training_report_file'
+     AND ud.entity_id IN (SELECT id FROM training_agendas WHERE newsroom_id = $1)
+     AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 60
+  ORDER BY ord, name`;
 
 async function generateCurriculum(docs) {
   const body = docs.map((d) => `=== ${d.name} ===\n${(d.text || '').slice(0, 4500)}`).join('\n\n').slice(0, 42000);
@@ -545,13 +634,7 @@ async function generateCurriculum(docs) {
 router.get('/curriculum', async (req, res) => {
   try {
     const { newsroomId } = await tenantContext(req);
-    const { rows: docs } = await pool.query(
-      `SELECT ud.id, ud.original_name AS name, ud.extracted_text AS text
-         FROM uploaded_documents ud
-        WHERE ud.entity_type = 'training_material_file'
-          AND ud.entity_id IN (SELECT id FROM training_materials WHERE newsroom_id = $1)
-          AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 60
-        ORDER BY ud.original_name`, [newsroomId]);
+    const { rows: docs } = await pool.query(CURRICULUM_DOCS_SQL, [newsroomId]);
     if (!docs.length) return res.json(null);
     const totalLen = docs.reduce((s, d) => s + (d.text ? d.text.length : 0), 0);
     const fingerprint = `${CURRICULUM_VERSION}:${docs.length}:${totalLen}`;
@@ -701,11 +784,7 @@ async function refreshTeamAnalysis(newsroomId) {
   return true;
 }
 async function refreshCurriculum(newsroomId) {
-  const { rows: docs } = await pool.query(
-    `SELECT ud.id, ud.original_name AS name, ud.extracted_text AS text FROM uploaded_documents ud
-      WHERE ud.entity_type = 'training_material_file'
-        AND ud.entity_id IN (SELECT id FROM training_materials WHERE newsroom_id = $1)
-        AND ud.extracted_text IS NOT NULL AND length(ud.extracted_text) > 60 ORDER BY ud.original_name`, [newsroomId]);
+  const { rows: docs } = await pool.query(CURRICULUM_DOCS_SQL, [newsroomId]);
   const cached = async () => {
     const { rows: [c] } = await pool.query(`SELECT analysis FROM beaiready_team_analysis WHERE newsroom_id = $1 AND kind = 'curriculum'`, [newsroomId]);
     return (c && c.analysis && Array.isArray(c.analysis.sessions)) ? c.analysis.sessions : [];

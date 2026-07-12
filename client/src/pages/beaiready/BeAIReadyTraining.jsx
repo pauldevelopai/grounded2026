@@ -37,6 +37,7 @@ function TrainingRecord() {
   const [myMaterials, setMyMaterials] = useState(null);
   const [insights, setInsights] = useState(null);
   const [comments, setComments] = useState(undefined); // undefined = loading, null = no feedback form
+  const [participants, setParticipants] = useState({});         // { agendaId: [{name, before, after}] }
   const [teamAnalysis, setTeamAnalysis] = useState(undefined); // undefined = loading, null = no survey yet
   const [curriculum, setCurriculum] = useState(undefined);     // undefined = loading, null = not indexed yet
   const [match, setMatch] = useState(undefined);               // undefined = loading, null = no survey yet
@@ -47,6 +48,7 @@ function TrainingRecord() {
     apiFetch('/beaiready/training/materials').then(setMyMaterials).catch(() => setMyMaterials([]));
     apiFetch('/beaiready/training/form-insights').then(setInsights).catch(() => setInsights([]));
     apiFetch('/beaiready/training/feedback-comments').then(setComments).catch(() => setComments(null));
+    apiFetch('/beaiready/training/participants').then(setParticipants).catch(() => setParticipants({}));
     // The team analysis, curriculum + expectations match are AI-generated on first view (then cached).
     apiFetch('/beaiready/training/team-analysis').then(setTeamAnalysis).catch(() => setTeamAnalysis(null));
     apiFetch('/beaiready/training/curriculum').then(setCurriculum).catch(() => setCurriculum(null));
@@ -134,6 +136,23 @@ function TrainingRecord() {
                     </div>
                   );
                 })()}
+                {/* Who was on this training (from its before/after forms). */}
+                {(participants[a.id] || []).length > 0 && (
+                  <div style={{ marginTop: 10, borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8a8076', marginBottom: 4 }}>
+                      Participants · {participants[a.id].length}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                      {participants[a.id].map((p) => <span key={p.name} style={chip}>{p.name}</span>)}
+                    </div>
+                  </div>
+                )}
+                {/* Feedback for THIS training only — never another session's. */}
+                {(insights || []).filter((fb) => fb.form_type === 'feedback' && fb.agenda_id === a.id).map((fb) => (
+                  <div key={`${fb.form_name}`} style={{ marginTop: 10, borderTop: '1px solid #efe7dd', paddingTop: 8 }}>
+                    <FeedbackView f={fb} />
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -232,13 +251,14 @@ function TrainingRecord() {
         </>
       )}
 
-      {/* Post-training feedback (its own Google form) — shown only once one is connected. */}
-      {(insights || []).some((f) => f.form_type === 'feedback') && (
+      {/* Feedback NOT tied to a specific training (assigned feedback shows under its
+          training above). Only shown when such a form exists. */}
+      {(insights || []).some((f) => f.form_type === 'feedback' && !f.agenda_id) && (
         <>
           <div className="hub-section-label">Post-training feedback</div>
           <section className="hub-band" style={{ marginBottom: 24 }}>
             <div style={{ display: 'grid', gap: 20 }}>
-              {(insights || []).filter((f) => f.form_type === 'feedback').map((f) => (
+              {(insights || []).filter((f) => f.form_type === 'feedback' && !f.agenda_id).map((f) => (
                 <FeedbackView key={`${f.form_type}:${f.form_name}`} f={f} />
               ))}
               <CommentsSummary c={comments} />
