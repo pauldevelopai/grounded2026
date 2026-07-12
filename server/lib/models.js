@@ -45,6 +45,18 @@ export async function getOllamaUrl() {
   return process.env.OLLAMA_URL || (await getSetting('secret.ollama_url')) || 'http://localhost:11434';
 }
 
+// Vantage app URL — the deployed address of the standalone Vantage security
+// system, surfaced as a launch link in the BE AI READY admin. NOT a secret
+// (it's a plain URL), so it is stored under a non-`secret.` key and read back
+// verbatim. env VANTAGE_URL wins if set.
+export async function getVantageUrl() {
+  const saved = await getSetting('vantage_url');
+  return process.env.VANTAGE_URL || (typeof saved === 'string' ? saved : '') || '';
+}
+export async function saveVantageUrl(url, userId) {
+  await putSetting('vantage_url', String(url || '').trim(), userId);
+}
+
 // Status for the admin page — booleans + source only, NO secret values.
 export async function providerStatus() {
   const out = [];
