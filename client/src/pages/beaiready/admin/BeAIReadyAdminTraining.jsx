@@ -563,6 +563,12 @@ function TrainingsHub({ clientId, setErr }) {
 
   const unlinkedMats = (materials || []).filter((m) => !m.agenda_id);
   const unlinkedForms = (forms || []).filter((f) => !f.agenda_id);
+  // One-click link an orphaned material to a training (no need to open Edit).
+  const linkMaterial = async (id, aid) => {
+    if (!aid) return; setErr('');
+    try { await api(`/beaiready/training/materials/${id}`, { method: 'PUT', body: JSON.stringify({ agenda_id: aid }) }); load(); }
+    catch (e) { setErr(e.message); }
+  };
 
   return (
     <Section title="Trainings" hint="Each training in one place — its participants, materials, feedback and report">
@@ -581,7 +587,15 @@ function TrainingsHub({ clientId, setErr }) {
           <div style={{ fontWeight: 800, fontSize: 13 }}>Not linked to a training</div>
           <p style={{ ...muted, margin: 0 }}>Assign these to a training so they show under the right session.</p>
           {unlinkedForms.map((f) => <LinkFormRow key={f.id} form={f} agendas={agendas || []} api={api} onChanged={load} setErr={setErr} />)}
-          {unlinkedMats.map((m) => <MaterialCard key={m.id} m={m} api={api} clientId={clientId} agendas={agendas || []} onChanged={load} setErr={setErr} />)}
+          {unlinkedMats.map((m) => (
+            <div key={m.id} style={{ display: 'grid', gap: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: '#b45309', flexWrap: 'wrap' }}>
+                <span>📚 {m.title} — pick its training:</span>
+                <AgendaSelect agendas={agendas || []} value="" onChange={(aid) => linkMaterial(m.id, aid)} />
+              </label>
+              <MaterialCard m={m} api={api} clientId={clientId} agendas={agendas || []} onChanged={load} setErr={setErr} />
+            </div>
+          ))}
         </div>
       )}
 
