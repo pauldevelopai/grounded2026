@@ -19,7 +19,7 @@ import { getSettings, saveSettings, buildBundle, bundleStats } from '../services
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 import { PRESETS } from '../services/knowhow-presets.js';
-import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport } from '../services/claims-verify.js';
+import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims } from '../services/claims-verify.js';
 
 const router = Router();
 
@@ -476,6 +476,25 @@ router.post('/claims', async (req, res) => {
     res.status(201).json({ mines: await addMine(newsroomId, req.body?.name) }); }
   catch (e) { console.error('[knowhow/claims:post]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
+// Editorial (Phase 3). Literal paths registered BEFORE the :name/:collection params so they
+// aren't captured. Edit a claim (override verdict/lock, status, notes); add/remove counterclaims.
+router.patch('/claims/claim/:id', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); const ok = await updateClaim(newsroomId, req.params.id, req.body || {}); res.json({ ok: !!ok }); }
+  catch (e) { console.error('[knowhow/claims:patch]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.post('/claims/claim/:id/counter', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); await addCounterclaim(newsroomId, req.params.id, req.body?.text, req.body?.attribution, req.user.id); res.status(201).json({ ok: true }); }
+  catch (e) { console.error('[knowhow/claims:counter]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.delete('/claims/evidence/:id', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); await deleteManualEvidence(newsroomId, req.params.id); res.json({ ok: true }); }
+  catch (e) { console.error('[knowhow/claims:evdel]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.post('/claims/:collection/claim', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    await addManualClaim(newsroomId, req.params.collection, req.body?.text); res.status(201).json(await getMine(newsroomId, req.params.collection)); }
+  catch (e) { console.error('[knowhow/claims:addclaim]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
 router.delete('/claims/:name', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json({ mines: await removeMine(newsroomId, req.params.name) }); }
   catch (e) { console.error('[knowhow/claims:del]', e); res.status(500).json({ message: 'Internal server error' }); }
@@ -484,6 +503,25 @@ router.post('/claims/:collection/verify', async (req, res) => {
   try { const { newsroomId } = await ctx(req); if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
     res.json(await verifyClaims(newsroomId, req.params.collection)); }
   catch (e) { console.error('[knowhow/claims:verify]', e); res.status(500).json({ message: e.message || 'Verify failed' }); }
+});
+// Cross-mine database (Phase 4). Literal /claims/db* + /claims/export before the :collection param.
+router.get('/claims/db/search', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ claims: await searchClaims(newsroomId, req.query || {}) }); }
+  catch (e) { console.error('[knowhow/claims:search]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.get('/claims/db/themes', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ themes: await listThemes(newsroomId) }); }
+  catch (e) { console.error('[knowhow/claims:themes]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.get('/claims/export', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    const format = req.query?.format === 'json' ? 'json' : 'csv';
+    const { type, body } = await exportClaims(newsroomId, format);
+    res.setHeader('Content-Type', type);
+    res.setHeader('Content-Disposition', `attachment; filename="claims-database.${format === 'json' ? 'json' : 'csv'}"`);
+    res.send(body);
+  } catch (e) { console.error('[knowhow/claims:export]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 router.get('/claims/:collection', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json(await getMine(newsroomId, req.params.collection)); }

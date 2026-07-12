@@ -699,8 +699,11 @@ const VERDICT_LABEL = { supported: 'Supported', contradicted: 'Contradicted', mi
 const VERDICT_ORDER = ['supported', 'contradicted', 'misleading', 'unverified', 'pending'];
 const ROLE_LABEL = { claim: "Company claim", reporting: 'EnviroPress reporting', external: 'External source' };
 const ROLE_PILL = { claim: { background: '#fee2e2', color: '#b91c1c' }, reporting: { background: '#dbeafe', color: '#1e40af' }, external: { background: '#dcfce7', color: '#166534' } };
-const STANCE_COLOR = { supports: '#166534', contradicts: '#b91c1c', context: '#8a8076' };
-const STANCE_LABEL = { supports: 'Supports', contradicts: 'Contradicts', context: 'Context' };
+const STANCE_COLOR = { supports: '#166534', contradicts: '#b91c1c', context: '#8a8076', counterclaim: '#b45309' };
+const STANCE_LABEL = { supports: 'Supports', contradicts: 'Contradicts', context: 'Context', counterclaim: 'Counterclaim' };
+const CLAIM_STATUSES = ['open', 'needs_reporting', 'disputed', 'resolved'];
+const STATUS_LABEL = { open: 'Open', needs_reporting: 'Needs reporting', disputed: 'Disputed', resolved: 'Resolved' };
+const VERDICT_CHOICES = ['pending', 'supported', 'contradicted', 'misleading', 'unverified'];
 
 function VerdictBar({ counts }) {
   const c = counts || {};
@@ -737,6 +740,7 @@ function ClaimsPanel({ setErr }) {
   };
 
   if (view === 'report') return <ClaimsReport setErr={setErr} back={() => { setView('mines'); load(); }} />;
+  if (view === 'database') return <ClaimsDatabase setErr={setErr} back={() => setView('mines')} open={(m) => setView(m)} />;
   if (view !== 'mines') return <MineView setErr={setErr} mine={view} back={() => { setView('mines'); load(); }} />;
 
   return (
@@ -746,7 +750,10 @@ function ClaimsPanel({ setErr }) {
           Each <b>mine</b> is a separate bucket. Add the mine's own <b>claims</b>, your <b>reporting</b>, and <b>external</b> sources, then
           Verify — KnowHow tests each claim against the evidence and tells you what's supported, contradicted or misleading.
         </p>
-        <button onClick={() => setView('report')} style={btn}>View report →</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setView('database')} style={tag}>Search database</button>
+          <button onClick={() => setView('report')} style={btn}>View report →</button>
+        </div>
       </div>
       <div style={{ ...card, margin: '4px 0 16px', display: 'flex', gap: 8 }}>
         <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="Add a mine (e.g. Bikita Minerals)…" style={input} />
@@ -781,9 +788,16 @@ function MineView({ setErr, mine, back }) {
   const [url, setUrl] = useState('');
   const [ttl, setTtl] = useState('');
   const [text, setText] = useState('');
+  const [mc, setMc] = useState('');
   const load = useCallback(() => apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}`).then(setData).catch((e) => setErr(e.message)), [mine, setErr]);
   useEffect(() => { load(); }, [load]);
 
+  const addClaim = async () => {
+    if (!mc.trim()) return;
+    setErr('');
+    try { const d = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}/claim`, { method: 'POST', body: JSON.stringify({ text: mc.trim() }) }); setData(d); setMc(''); }
+    catch (e) { setErr(e.message); }
+  };
   const meta = () => ({ collection: mine, role });
   const addNote = async () => {
     if (!text.trim()) return;
@@ -853,41 +867,17 @@ function MineView({ setErr, mine, back }) {
         <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Claims &amp; verdicts</div>
         <button onClick={verify} style={btn}>Verify claims</button>
       </div>
+      <p style={{ ...muted, fontSize: 12, margin: '0 0 8px' }}>Verify extracts claims from the company's own documents and tests them. Verdicts also refresh automatically each night as you add evidence. You can also log a claim by hand:</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input value={mc} onChange={(e) => setMc(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addClaim()} placeholder="Add a claim to test by hand…" style={input} />
+        <button onClick={addClaim} disabled={!mc.trim()} style={tag}>Add claim</button>
+      </div>
       {verifying && <p style={{ ...muted, fontSize: 12.5, margin: '0 0 8px' }}>{verifying}</p>}
       {data.claims.length === 0 ? (
         <p style={muted}>No claims yet. Add the mine's own documents as “Company's own claim”, then hit <b>Verify</b> to extract and test them against your reporting and external sources.</p>
       ) : (
         <div style={{ display: 'grid', gap: 8 }}>
-          {data.claims.map((cl) => (
-            <div key={cl.id} style={card}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                <span style={{ ...pill, background: `${VERDICT_COLORS[cl.verdict]}22`, color: VERDICT_COLORS[cl.verdict], border: `1px solid ${VERDICT_COLORS[cl.verdict]}` }}>{VERDICT_LABEL[cl.verdict] || cl.verdict}</span>
-                <strong style={{ fontSize: 13.5 }}>{cl.claim_text}</strong>
-              </div>
-              {cl.rationale && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0' }}>{cl.rationale}</p>}
-              {Array.isArray(cl.evidence) && cl.evidence.length > 0 ? (
-                <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
-                  {cl.evidence.map((e, i) => (
-                    <div key={i} style={{ borderLeft: `3px solid ${STANCE_COLOR[e.stance] || '#e4dcd2'}`, padding: '1px 0 1px 8px' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: STANCE_COLOR[e.stance] || '#8a8076' }}>
-                        {STANCE_LABEL[e.stance] || e.stance}{e.title ? ` · ${e.title}` : ''}{e.role ? ` · ${ROLE_LABEL[e.role] || e.role}` : ''}
-                      </div>
-                      {e.quote && <div style={{ fontSize: 12, color: '#5b5249', fontStyle: 'italic' }}>“{e.quote}”</div>}
-                    </div>
-                  ))}
-                </div>
-              ) : (Array.isArray(cl.citations) && cl.citations.length > 0 && (
-                <div style={{ ...muted, fontSize: 11.5, marginTop: 5 }}>Sources: {cl.citations.map((c) => c.title || c.kind).filter(Boolean).join(' · ')}</div>
-              ))}
-              {Array.isArray(cl.events) && cl.events.filter((e) => e.event_type === 'verdict_changed').length > 0 && (
-                <div style={{ ...muted, fontSize: 11, marginTop: 7 }}>
-                  History: {cl.events.filter((e) => e.event_type === 'verdict_changed').slice(0, 4).reverse().map((e, i) => (
-                    <span key={i}>{i > 0 ? ' → ' : ''}{VERDICT_LABEL[e.new_verdict] || e.new_verdict} <span style={{ opacity: 0.65 }}>{new Date(e.created_at).toLocaleDateString()}</span></span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {data.claims.map((cl) => <ClaimCard key={cl.id} cl={cl} onChange={load} setErr={setErr} />)}
         </div>
       )}
 
@@ -900,6 +890,154 @@ function MineView({ setErr, mine, back }) {
               <button onClick={() => delSource(s.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
             </div>
           ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// A claim with full editorial controls: evidence + counterclaims, history, and an edit
+// panel to override/lock the verdict, set status, and add reporter notes.
+function ClaimCard({ cl, onChange, setErr }) {
+  const [editing, setEditing] = useState(false);
+  const [showCc, setShowCc] = useState(false);
+  const [form, setForm] = useState({ verdict: cl.verdict, status: cl.status || 'open', locked: !!cl.locked, notes: cl.notes || '' });
+  const [cc, setCc] = useState({ text: '', attribution: '' });
+  const save = async () => {
+    setErr('');
+    try { await apiFetch(`/beaiready/knowhow/claims/claim/${cl.id}`, { method: 'PATCH', body: JSON.stringify(form) }); setEditing(false); onChange(); }
+    catch (e) { setErr(e.message); }
+  };
+  const addCounter = async () => {
+    if (!cc.text.trim()) return;
+    setErr('');
+    try { await apiFetch(`/beaiready/knowhow/claims/claim/${cl.id}/counter`, { method: 'POST', body: JSON.stringify(cc) }); setCc({ text: '', attribution: '' }); setShowCc(false); onChange(); }
+    catch (e) { setErr(e.message); }
+  };
+  const delEvidence = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/claims/evidence/${id}`, { method: 'DELETE' }); onChange(); } catch (e) { setErr(e.message); } };
+  const events = Array.isArray(cl.events) ? cl.events.filter((e) => e.event_type === 'verdict_changed' || e.event_type === 'verdict_overridden') : [];
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+        <span style={{ ...pill, background: `${VERDICT_COLORS[cl.verdict]}22`, color: VERDICT_COLORS[cl.verdict], border: `1px solid ${VERDICT_COLORS[cl.verdict]}` }}>{VERDICT_LABEL[cl.verdict] || cl.verdict}</span>
+        {cl.locked && <span title="Verdict locked by an editor — the AI won't change it" style={{ fontSize: 11 }}>🔒</span>}
+        {typeof cl.confidence === 'number' && <span style={{ ...muted, fontSize: 11 }}>{Math.round(cl.confidence * 100)}% conf.</span>}
+        {cl.status && cl.status !== 'open' && <span style={{ ...pill, background: '#f1f0ec', color: '#6b6359' }}>{STATUS_LABEL[cl.status] || cl.status}</span>}
+        <strong style={{ fontSize: 13.5, flexBasis: '100%' }}>{cl.claim_text}</strong>
+      </div>
+      {Array.isArray(cl.themes) && cl.themes.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 5 }}>
+          {cl.themes.map((t, i) => <span key={i} style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 999, background: '#eef2ff', color: '#3730a3' }}>{t}</span>)}
+        </div>
+      )}
+      {cl.rationale && <p style={{ fontSize: 13, color: '#5b5249', margin: '6px 0 0' }}>{cl.rationale}</p>}
+      {Array.isArray(cl.evidence) && cl.evidence.length > 0 && (
+        <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
+          {cl.evidence.map((e) => (
+            <div key={e.id || `${e.stance}${e.title}`} style={{ borderLeft: `3px solid ${STANCE_COLOR[e.stance] || '#e4dcd2'}`, padding: '1px 0 1px 8px', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: STANCE_COLOR[e.stance] || '#8a8076' }}>
+                  {STANCE_LABEL[e.stance] || e.stance}{e.title ? ` · ${e.title}` : ''}{e.role ? ` · ${ROLE_LABEL[e.role] || e.role}` : ''}
+                </div>
+                {e.quote && <div style={{ fontSize: 12, color: '#5b5249', fontStyle: 'italic' }}>“{e.quote}”</div>}
+              </div>
+              {e.manual && <button onClick={() => delEvidence(e.id)} title="Remove" style={{ ...tag, fontSize: 10, padding: '2px 6px', alignSelf: 'start' }}>✕</button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {events.length > 0 && (
+        <div style={{ ...muted, fontSize: 11, marginTop: 7 }}>
+          History: {events.slice(0, 5).reverse().map((e, i) => (
+            <span key={i}>{i > 0 ? ' → ' : ''}{VERDICT_LABEL[e.new_verdict] || e.new_verdict}{e.event_type === 'verdict_overridden' ? ' ✎' : ''} <span style={{ opacity: 0.65 }}>{new Date(e.created_at).toLocaleDateString()}</span></span>
+          ))}
+        </div>
+      )}
+      {cl.notes && !editing && <div style={{ fontSize: 12, color: '#6b6359', marginTop: 6, borderLeft: '3px solid #e4dcd2', paddingLeft: 8 }}>📝 {cl.notes}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button onClick={() => setEditing(!editing)} style={{ ...tag, fontSize: 11 }}>{editing ? 'Cancel' : 'Edit verdict / status'}</button>
+        <button onClick={() => setShowCc(!showCc)} style={{ ...tag, fontSize: 11 }}>Add counterclaim</button>
+      </div>
+      {editing && (
+        <div style={{ ...card, marginTop: 8, display: 'grid', gap: 8, background: '#faf8f5' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <label style={{ fontSize: 12 }}>Verdict <select value={form.verdict} onChange={(e) => setForm({ ...form, verdict: e.target.value })} style={sel}>{VERDICT_CHOICES.map((v) => <option key={v} value={v}>{VERDICT_LABEL[v] || v}</option>)}</select></label>
+            <label style={{ fontSize: 12 }}>Status <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} style={sel}>{CLAIM_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></label>
+            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><input type="checkbox" checked={form.locked} onChange={(e) => setForm({ ...form, locked: e.target.checked })} /> Lock (AI won't change it)</label>
+          </div>
+          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Reporter notes…" style={{ ...input, minHeight: 44, resize: 'vertical' }} />
+          <div><button onClick={save} style={btn}>Save</button></div>
+        </div>
+      )}
+      {showCc && (
+        <div style={{ ...card, marginTop: 8, display: 'grid', gap: 8, background: '#faf8f5' }}>
+          <textarea value={cc.text} onChange={(e) => setCc({ ...cc, text: e.target.value })} placeholder="The counterclaim — an opposing statement…" style={{ ...input, minHeight: 44, resize: 'vertical' }} />
+          <input value={cc.attribution} onChange={(e) => setCc({ ...cc, attribution: e.target.value })} placeholder="Who says it (attribution, optional)" style={input} />
+          <div><button onClick={addCounter} disabled={!cc.text.trim()} style={btn}>Add counterclaim</button></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The cross-mine claims database: search + filters + export.
+function ClaimsDatabase({ setErr, back, open }) {
+  const [f, setF] = useState({ q: '', mine: '', verdict: '', theme: '', status: '' });
+  const [rows, setRows] = useState(null);
+  const [mines, setMines] = useState([]);
+  const [themes, setThemes] = useState([]);
+  const run = useCallback(() => {
+    const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v)).toString();
+    apiFetch(`/beaiready/knowhow/claims/db/search${qs ? `?${qs}` : ''}`).then((d) => setRows(d.claims || [])).catch((e) => setErr(e.message));
+  }, [f, setErr]);
+  useEffect(() => { run(); }, [run]);
+  useEffect(() => {
+    apiFetch('/beaiready/knowhow/claims').then((d) => setMines((d.mines || []).map((m) => m.name))).catch(() => {});
+    apiFetch('/beaiready/knowhow/claims/db/themes').then((d) => setThemes(d.themes || [])).catch(() => {});
+  }, []);
+  const exp = async (fmt) => {
+    setErr('');
+    try {
+      const headers = {}; const nid = getActiveNewsroomId(); if (nid) headers['X-Newsroom-Id'] = nid;
+      const res = await fetch(`/api/beaiready/knowhow/claims/export?format=${fmt}`, { credentials: 'include', headers });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `claims-database.${fmt === 'json' ? 'json' : 'csv'}`; a.click(); URL.revokeObjectURL(a.href);
+    } catch (e) { setErr(e.message); }
+  };
+  return (
+    <>
+      <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Claims database</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => exp('csv')} style={tag}>Export CSV</button>
+          <button onClick={() => exp('json')} style={tag}>Export JSON</button>
+        </div>
+      </div>
+      <div style={{ ...card, margin: '10px 0', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="Search claim text…" style={{ ...input, flex: '1 1 200px' }} />
+        <select value={f.mine} onChange={(e) => setF({ ...f, mine: e.target.value })} style={sel}><option value="">All mines</option>{mines.map((m) => <option key={m} value={m}>{m}</option>)}</select>
+        <select value={f.verdict} onChange={(e) => setF({ ...f, verdict: e.target.value })} style={sel}><option value="">Any verdict</option>{VERDICT_CHOICES.map((v) => <option key={v} value={v}>{VERDICT_LABEL[v]}</option>)}</select>
+        <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} style={sel}><option value="">Any status</option>{CLAIM_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select>
+        <select value={f.theme} onChange={(e) => setF({ ...f, theme: e.target.value })} style={sel}><option value="">Any theme</option>{themes.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+      </div>
+      {rows == null ? <p style={muted}>Loading…</p> : rows.length === 0 ? <p style={muted}>No claims match.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead><tr style={{ color: '#8a8076' }}><th style={th}>Mine</th><th style={th}>Claim</th><th style={th}>Verdict</th><th style={th}>Status</th><th style={th}>Themes</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} style={{ borderTop: '1px solid #eee5da' }}>
+                  <td style={td}><button onClick={() => open(r.collection)} style={{ background: 'none', border: 'none', padding: 0, color: '#c75b39', cursor: 'pointer', fontSize: 13 }}>{r.collection}</button></td>
+                  <td style={{ ...td, maxWidth: 360 }}>{r.claim_text}</td>
+                  <td style={td}><span style={{ color: VERDICT_COLORS[r.verdict], fontWeight: 700 }}>{VERDICT_LABEL[r.verdict] || r.verdict}</span></td>
+                  <td style={td}>{STATUS_LABEL[r.status] || r.status}</td>
+                  <td style={td}>{(r.themes || []).join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </>

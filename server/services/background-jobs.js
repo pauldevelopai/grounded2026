@@ -11,6 +11,13 @@ import { generateRegulationToday } from './regulation-today.js';
 import { generateAINewsToday } from './ai-news-today.js';
 import { gmailAiFilter, isAboutAI } from './newsletter-filter.js';
 import { harvestTechieray } from './legal-ingest/techieray.js';
+import { reverifyStaleMines } from './claims-verify.js';
+
+// Nightly: keep every claims-verification tenant's mine verdicts current, incrementally.
+export async function runClaimsReverify() {
+  const { minesRun, claimsVerified } = await reverifyStaleMines();
+  return { result: `Claims re-verify: ${claimsVerified} claim(s) across ${minesRun} mine(s) with new evidence`, itemsProcessed: claimsVerified };
+}
 
 // Regenerate the "AI Law" digest (lawsuits only) from the curated tracker.
 export async function runGovernanceTodayDigest() {
@@ -1025,6 +1032,7 @@ export const JOB_REGISTRY = {
   regulation_today_digest:    runRegulationTodayDigest,
   ai_news_today_digest:       runAINewsTodayDigest,
   techieray_harvest:          runTechierayHarvest,
+  claims_reverify:            runClaimsReverify,
 };
 
 // ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──
