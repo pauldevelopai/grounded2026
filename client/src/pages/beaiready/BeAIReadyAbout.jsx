@@ -299,8 +299,10 @@ export default function BeAIReadyAbout() {
       <Section kicker="Community" title="Join the conversation">
         <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-            <img src="/developai/community.webp" alt="Develop AI community"
-              style={{ width: '100%', height: '100%', minHeight: 230, objectFit: 'cover', display: 'block' }} />
+            {/* Cover background (not <img>) so it fills its half and stretches to the
+                text height without ever inflating to the image's intrinsic size. */}
+            <div role="img" aria-label="Develop AI community"
+              style={{ backgroundImage: 'url(/developai/community.webp)', backgroundSize: 'cover', backgroundPosition: 'center', minHeight: 240 }} />
             <div style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'center' }}>
               <p style={{ ...lede, margin: 0 }}>
                 Join our <strong>free WhatsApp community</strong> — a vibrant space to trade perspectives on how AI
