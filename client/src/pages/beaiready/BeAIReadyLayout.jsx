@@ -64,6 +64,7 @@ export default function BeAIReadyLayout() {
             {VISIBLE_PILLARS.map((p) => (
               <Link key={p.key} to={`/pillar/${p.key}`} style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>{p.nav}</Link>
             ))}
+            <Link to="/about" style={{ ...linkStyle, padding: '8px 8px', fontSize: 13.5 }}>About</Link>
             {/* A clear gap, then the sign-in / account box. */}
             <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginLeft: 22 }}>
               {user ? (
