@@ -198,14 +198,15 @@ export default function BeAIReadyAbout() {
       </Section>
 
       {/* Mission */}
-      <Section kicker="Why we exist" title="AI that strengthens journalism, justice and accountability">
+      <Section kicker="Why we exist" title="AI that works for your business — responsibly">
         <div style={{ ...card, borderLeft: `3px solid ${TERRACOTTA}` }}>
           <p style={{ ...lede, margin: 0 }}>
-            Alongside our business work, we exist to ensure that artificial intelligence <strong>strengthens,
-            rather than undermines, journalism, justice, and public accountability</strong> — especially where
-            institutions are fragile and resources are limited. That means building ethical, low-bandwidth and
-            context-aware AI systems that support journalists and civil society, with a priority on the people
-            most often left out: women journalists and early-career reporters in under-resourced environments.
+            We exist to make sure artificial intelligence <strong>strengthens businesses rather than disrupting
+            them</strong> — especially the organisations that don’t have a big tech team or budget to spare. We
+            help you adopt AI responsibly and on your own terms: a strategy that fits your goals, tools your
+            people can trust, your data kept safe, and a policy you own. That same commitment carries into our
+            work with newsrooms and civil society — making sure AI supports, rather than undermines, journalism,
+            justice and public accountability, especially where institutions are fragile and resources are limited.
           </p>
         </div>
       </Section>
@@ -279,8 +280,7 @@ export default function BeAIReadyAbout() {
             style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 10 }} />
           <p style={{ ...lede, margin: 0 }}>
             Develop AI runs a free WhatsApp community where members trade perspectives on how AI is reshaping
-            work, media, education, health, justice and more. A sister venture, <strong>Develop Audio</strong>,
-            produces investigative podcasts on wrongful convictions, assassinations and disinformation.
+            work, media, education, health, justice and more.
           </p>
         </div>
       </Section>
