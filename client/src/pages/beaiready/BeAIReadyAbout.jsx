@@ -23,16 +23,38 @@ function Section({ kicker, title, children, style }) {
   );
 }
 
-// A compact year → items timeline (training history, conferences, press).
+// A year → items timeline rendered as a card grid: each year gets a bold marker + a
+// rule, and each entry is a small card. Where an entry starts with "Month — …", the
+// month is lifted out into a terracotta chip; other entries render whole.
+const MONTHS = new Set(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']);
+function splitMonth(s) {
+  const idx = s.indexOf(' — ');
+  if (idx > 0) {
+    const head = s.slice(0, idx).trim();
+    if (MONTHS.has(head)) return [head, s.slice(idx + 3).trim()];
+  }
+  return [null, s];
+}
 function Timeline({ groups }) {
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
+    <div style={{ display: 'grid', gap: 26 }}>
       {groups.map((g) => (
-        <div key={g.year} style={{ display: 'grid', gridTemplateColumns: '64px 1fr', gap: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: TERRACOTTA }}>{g.year}</div>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
-            {g.items.map((it, i) => <li key={i} style={{ fontSize: 13.5, color: '#4a453f', lineHeight: 1.5 }}>{it}</li>)}
-          </ul>
+        <div key={g.year}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: TERRACOTTA, lineHeight: 1 }}>{g.year}</span>
+            <span style={{ flex: 1, height: 1, background: '#eee5da' }} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(264px, 1fr))', gap: 10 }}>
+            {g.items.map((it, i) => {
+              const [m, rest] = splitMonth(it);
+              return (
+                <div key={i} style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 10, padding: '12px 14px' }}>
+                  {m && <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: TERRACOTTA, marginBottom: 5 }}>{m}</div>}
+                  <div style={{ fontSize: 13, color: '#4a453f', lineHeight: 1.55 }}>{rest}</div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ))}
     </div>
@@ -234,13 +256,13 @@ export default function BeAIReadyAbout() {
       </Section>
 
       {/* Training history — the full record */}
-      <Section kicker="Where we’ve worked" title="Every training, workshop and coaching engagement">
+      <Section kicker="Where we’ve worked" title="Training, workshops & coaching">
         <img src="/developai/training.jpg" alt="Develop AI training workshop" loading="lazy"
           style={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 14, border: '1px solid #eee5da', marginBottom: 18 }} />
         <p style={{ ...lede, maxWidth: '72ch', marginBottom: 18 }}>
           We’ve trained hundreds of people across a dozen-plus countries, partnering with DW Akademie, the U.S.
           Agency for Global Media, the Thomson Reuters Foundation, the Public Media Alliance and International
-          Media Support. The full record:
+          Media Support. A selection of recent work:
         </p>
         <Timeline groups={TRAINING} />
       </Section>
