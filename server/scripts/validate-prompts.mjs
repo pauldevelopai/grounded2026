@@ -138,11 +138,16 @@ async function upsertValidation(promptId, modelKey, { status, rating = null, evi
 }
 
 async function main() {
-  const status = await providerStatus();
+  // providerStatus() returns an ARRAY of { id, configured, ... } — index it by id, not as a map.
+  const status = Object.fromEntries((await providerStatus()).map((s) => [s.id, s]));
   const configured = Object.fromEntries(Object.entries(MODEL_PROVIDER).map(([m, p]) => [m, !!(p && status[p]?.configured)]));
   const pfOk = promptfooAvailable();
-  // The judge for the native path — prefer Claude (usually the always-on key on the box).
-  const judgeProvider = status.anthropic?.configured ? 'anthropic' : null;
+  // The judge for the native path — prefer Claude, else any other configured provider
+  // (e.g. OpenAI), else self-grade with the model under test.
+  const judgeProvider = status.anthropic?.configured ? 'anthropic'
+    : status.openai?.configured ? 'openai'
+    : status.gemini?.configured ? 'gemini'
+    : null;
   const { dir: fxDir, sample } = await pickFixtures();
 
   console.log('validate-prompts:');
