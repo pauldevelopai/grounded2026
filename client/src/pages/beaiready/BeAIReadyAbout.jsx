@@ -297,13 +297,26 @@ export default function BeAIReadyAbout() {
 
       {/* Community */}
       <Section kicker="Community" title="Join the conversation">
-        <div style={{ ...card, display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 12 }}>
-          <img src="/developai/community.webp" alt="Develop AI community" loading="lazy"
-            style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 10 }} />
-          <p style={{ ...lede, margin: 0 }}>
-            Develop AI runs a free WhatsApp community where members trade perspectives on how AI is reshaping
-            work, media, education, health, justice and more.
-          </p>
+        <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+            <img src="/developai/community.webp" alt="Develop AI community" loading="lazy"
+              style={{ width: '100%', height: '100%', minHeight: 230, objectFit: 'cover', display: 'block' }} />
+            <div style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'center' }}>
+              <p style={{ ...lede, margin: 0 }}>
+                Join our <strong>free WhatsApp community</strong> — a vibrant space to trade perspectives on how AI
+                is reshaping the world, with people asking the same questions across the Global South and beyond.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {['Employment', 'Media', 'Education', 'Health', 'Justice', 'Mining'].map((t) => (
+                  <span key={t} style={{ fontSize: 12, fontWeight: 600, color: '#7a4636', background: '#f7ece7', padding: '4px 11px', borderRadius: 999 }}>{t}</span>
+                ))}
+              </div>
+              <a href="https://chat.whatsapp.com/Ctmp2x2H3PyCfzCWakok0E" target="_blank" rel="noreferrer"
+                style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, background: '#25D366', color: '#fff', fontWeight: 700, fontSize: 14, padding: '11px 20px', borderRadius: 10, textDecoration: 'none' }}>
+                Join on WhatsApp ↗
+              </a>
+            </div>
+          </div>
         </div>
       </Section>
 
