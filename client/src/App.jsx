@@ -86,6 +86,7 @@ import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
 import BeAIReadyLayout from './pages/beaiready/BeAIReadyLayout.jsx';
+import BeAIReadyAbout from './pages/beaiready/BeAIReadyAbout.jsx';
 import BeAIReadyHome from './pages/beaiready/BeAIReadyHome.jsx';
 import BeAIReadyRedirect from './pages/beaiready/BeAIReadyRedirect.jsx';
 import BusinessDashboard from './pages/beaiready/BusinessDashboard.jsx';
@@ -240,6 +241,8 @@ export default function App() {
               <Route path="/tracker" element={<BeAIReadyTracker />} />
               {/* Nodes storefront — public: open to everyone, no login wall (Paul's call, 2026-07-07). */}
               <Route path="/nodes" element={<BeAIReadyNodes />} />
+              {/* About Develop AI — public, assembled from developai.co.za. */}
+              <Route path="/about" element={<BeAIReadyAbout />} />
               <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
             </Route>
           )}

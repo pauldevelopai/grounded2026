@@ -111,6 +111,8 @@ export default function BeAIReadyLayout() {
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', fontSize: 12 }}>
           <span>© Be AI Ready · by Develop&nbsp;AI</span>
           <span>
+            <Link to="/about" style={{ color: TERRACOTTA }}>About Develop&nbsp;AI</Link>
+            &nbsp;·&nbsp;
             <a href="mailto:paul@developai.co.za" style={{ color: TERRACOTTA }}>paul@developai.co.za</a>
             &nbsp;·&nbsp;
             <a href="https://developai.substack.com" target="_blank" rel="noreferrer" style={{ color: TERRACOTTA }}>Newsletter</a>
