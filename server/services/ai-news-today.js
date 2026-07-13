@@ -11,6 +11,7 @@ import pool from '../db/pool.js';
 import { callClaude, callClaudeWithWebSearch } from './claude.js';
 import { sourceHeroImage } from './briefing-image.js';
 import { getBriefingSettings } from './briefing-settings.js';
+import { recentBriefings, coveredKeys, coveredTitles, isCovered, recentlyCoveredBlock } from './briefing-history.js';
 
 const KEY = 'ai_news_today';
 
@@ -76,7 +77,7 @@ const OFFICIAL_BLOG_DOMAINS = [
   'anthropic.com', 'openai.com', 'blog.google', 'deepmind.google', 'microsoft.com', 'ai.meta.com', 'mistral.ai', 'nvidia.com', 'huggingface.co',
 ];
 
-async function researchTopAINews(focus) {
+async function researchTopAINews(focus, avoidTitles = []) {
   const what = focus || 'major model/product releases, big company moves, funding, notable launches, and real-world adoption';
   const researchSystem =
     'You are a careful research assistant for an "AI news" briefing. Use web search to find the most significant ' +
@@ -85,9 +86,13 @@ async function researchTopAINews(focus) {
     'results, each tied to a specific cited source URL. Do NOT include rumours, speculation, or any pricing/' +
     'shutdown/launch claim you cannot directly attribute to a cited reputable article. If you cannot confirm an ' +
     'item, leave it out. Never invent, embellish or guess.';
+  const avoidBlock = avoidTitles.length
+    ? '\n\nThese were already covered in the last few days — do NOT return them again unless there is a genuinely ' +
+      'new development. Prefer different, fresher stories:\n' + avoidTitles.map((t) => `- ${t}`).join('\n')
+    : '';
   const researchUser =
     'List the 3–6 most important, CONFIRMED AI-industry developments from the last ~5 days. For each: one factual ' +
-    'line (what, who, when) and the source URL. Bullet list, facts only — nothing you cannot cite.';
+    'line (what, who, when) and the source URL. Bullet list, facts only — nothing you cannot cite.' + avoidBlock;
   const call = (allowedDomains) => callClaudeWithWebSearch({ system: researchSystem, userContent: researchUser, maxTokens: 1200, maxUses: 6, allowedDomains });
   let r;
   try {
@@ -112,19 +117,29 @@ export async function generateAINewsToday() {
   // never web-searches; 'websearch' skips newsletters entirely.
   const items = cfg.source === 'websearch' ? [] : await recentItems(cfg.days);
 
+  // Close the repeat loop: what have we already led with in the last few days?
+  const history = await recentBriefings('ai_news_today_history').catch(() => []);
+  const covered = coveredKeys(history);
+
   let sourceList, headlines, sourceNote, source;
   if (items.length) {
-    sourceList = items.map((it) => {
+    // Order items we HAVEN'T recently briefed first, so the lead is something fresh.
+    const fresh = [], stale = [];
+    for (const it of items) {
+      (isCovered(covered, { url: it.source_url, title: it.subject || it.sender }) ? stale : fresh).push(it);
+    }
+    const ordered = [...fresh, ...stale];
+    sourceList = ordered.map((it) => {
       const line = (it.summary || it.subject || '').replace(/\s+/g, ' ').trim().slice(0, 280);
       return `- ${line}${it.source_url ? ` (${it.source_url})` : ''}`;
     }).join('\n');
-    headlines = dedupeCitations(items.map((it) => ({ title: it.subject || it.sender, url: it.source_url }))).slice(0, 6);
+    headlines = dedupeCitations(ordered.map((it) => ({ title: it.subject || it.sender, url: it.source_url }))).slice(0, 6);
     sourceNote = 'from your curated newsletters';
     source = 'newsletters';
   } else if (cfg.source === 'newsletters') {
     return null;   // newsletters-only and none ingested — honest empty (no web fallback)
   } else {
-    const research = await researchTopAINews(cfg.web_focus);
+    const research = await researchTopAINews(cfg.web_focus, coveredTitles(history));
     if (!research.findings) return null;   // truly nothing to report — honest empty
     sourceList = research.findings;
     headlines = dedupeCitations(research.citations).slice(0, 6);
@@ -142,7 +157,7 @@ export async function generateAINewsToday() {
     'each practically means for a business. Use ONLY the developments named in the source — do not add, ' +
     'rename or invent any product, company or model. Do NOT restate these instructions, do NOT write a ' +
     'preamble or heading, do NOT use markdown or bullets, and do NOT produce more than one version.';
-  const writeUser = `Today's AI-news items (${sourceNote}):\n\n${sourceList}\n\nWrite the briefing now.`;
+  const writeUser = `Today's AI-news items (${sourceNote}):\n\n${sourceList}${recentlyCoveredBlock(history)}\n\nWrite the briefing now.`;
   const text = await callClaude({ system: writeSystem, userContent: writeUser, maxTokens: 320, temperature: 0.4 });
 
   const value = {

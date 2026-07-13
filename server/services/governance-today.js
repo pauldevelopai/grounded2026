@@ -10,6 +10,7 @@ import pool from '../db/pool.js';
 import { callClaude } from './claude.js';
 import { getBriefingSettings } from './briefing-settings.js';
 import { sourceHeroImage } from './briefing-image.js';
+import { recentBriefings, coveredKeys, isCovered, recentlyCoveredBlock } from './briefing-history.js';
 
 const KEY = 'governance_today';
 
@@ -53,10 +54,23 @@ function buildHeadlines(items) {
 
 export async function generateGovernanceToday() {
   const settings = await getBriefingSettings();
-  const items = await recentTrackerItems(settings.ai_law.item_count || 10);
+  const want = settings.ai_law.item_count || 10;
+  // Pull a wider pool than we'll feature, so that when nothing has updated recently
+  // there are still un-repeated items to lead with instead of the same top case.
+  const items = await recentTrackerItems(want + 10);
   if (!items.length) return null;   // nothing tracked yet — honest empty (no invention)
 
-  const sourceList = items.map((it) => {
+  // Close the repeat loop: order items we HAVEN'T recently briefed first, and tell
+  // the model what it already led with so it picks something fresh.
+  const history = await recentBriefings('governance_today_history').catch(() => []);
+  const covered = coveredKeys(history);
+  const fresh = [], stale = [];
+  for (const it of items) {
+    (isCovered(covered, { url: it.source_url || it.case_url, title: it.name }) ? stale : fresh).push(it);
+  }
+  const ordered = [...fresh, ...stale].slice(0, want);
+
+  const sourceList = ordered.map((it) => {
     const meta = [it.jurisdiction, it.status].filter(Boolean).join(', ');
     const sum = (it.summary || '').replace(/\s+/g, ' ').trim().slice(0, 220);
     return `- [${it.kind}] ${it.name}${meta ? ` (${meta})` : ''}${sum ? `: ${sum}` : ''}`;
@@ -73,12 +87,12 @@ export async function generateGovernanceToday() {
     'or invent any law, case, company, product or model, and do not pull in anything from outside this list. ' +
     'Do NOT restate these instructions, write a preamble or heading, use markdown or bullets, or produce more ' +
     'than one version.';
-  const writeUser = `From our AI lawsuit tracker (most recently updated, newest first):\n\n${sourceList}\n\nWrite the briefing now.`;
+  const writeUser = `From our AI lawsuit tracker (most recently updated, newest first):\n\n${sourceList}${recentlyCoveredBlock(history)}\n\nWrite the briefing now.`;
   const text = await callClaude({ system: writeSystem, userContent: writeUser, maxTokens: 320, temperature: 0.4 });
 
   const value = {
     summary: sanitizeSummary(text),
-    headlines: buildHeadlines(items),
+    headlines: buildHeadlines(ordered),
     source: 'tracker',
     generated_at: new Date().toISOString(),
   };
