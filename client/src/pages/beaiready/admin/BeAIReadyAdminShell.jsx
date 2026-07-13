@@ -11,6 +11,7 @@ const TERRACOTTA = '#c75b39';
 const NAV = [
   { to: '/admin', label: 'Today', end: true },
   { to: '/admin/client', label: 'Client' },
+  { to: '/admin/mediamap', label: 'MediaMap' },
   { to: '/admin/tools', label: 'Toolbox' },
   { to: '/admin/nodes', label: 'Nodes' },
   { to: '/admin/tracker', label: 'Tracker review' },

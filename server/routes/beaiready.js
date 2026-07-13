@@ -1367,6 +1367,46 @@ router.get('/admin/clients', requireRole('admin'), async (req, res) => {
   } catch (err) { console.error('[beaiready/admin/clients]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
+// ── Admin · MediaMap — the whole portfolio of client businesses + their real AI
+// progress, one card per newsroom. A read-only aggregate over the existing tables;
+// every field is a real count/value or NULL (an honest empty state) — never a
+// fabricated number, and no derived "stage" (raw signals only, Paul 2026-07-13).
+// bair.audits + engagements are keyed by organisation_id, so they join via
+// newsrooms.organisation_id (NOT newsrooms.id) like the rest of BAIR.
+router.get('/admin/mediamap', requireRole('admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT n.id, n.name, n.slug, n.is_active, n.created_at, o.website, o.country, s.name AS sector,
+              n.shares_anonymised_insights,
+              (SELECT COUNT(*)::int FROM team_members t WHERE t.newsroom_id = n.id) AS user_count,
+              EXISTS (SELECT 1 FROM ai_policies p WHERE p.newsroom_id = n.id) AS has_policy,
+              (SELECT COUNT(*)::int FROM ai_tool_inventory i WHERE i.newsroom_id = n.id) AS tools_logged,
+              (SELECT COUNT(*)::int FROM recommendations r WHERE r.newsroom_id = n.id) AS recommendations,
+              (SELECT COUNT(*)::int FROM intake_responses ir WHERE ir.newsroom_id = n.id AND ir.form_type = 'intake') AS survey_responses,
+              (SELECT COUNT(*)::int FROM training_agendas a WHERE a.newsroom_id = n.id) AS trainings,
+              (SELECT COUNT(*)::int FROM training_agendas a WHERE a.newsroom_id = n.id AND a.status = 'published') AS trainings_live,
+              (SELECT COUNT(*)::int FROM training_outcomes to2 WHERE to2.newsroom_id = n.id AND to2.status = 'final') AS outcomes_final,
+              (SELECT COUNT(*)::int FROM beaiready_client_tools ct WHERE ct.newsroom_id = n.id) AS tools_assigned,
+              (SELECT COUNT(*)::int FROM beaiready_newsroom_nodes nn WHERE nn.newsroom_id = n.id) AS nodes_entitled,
+              (SELECT a.readiness_score FROM bair.audits a
+                 WHERE a.organisation_id = n.organisation_id AND a.readiness_score IS NOT NULL
+                 ORDER BY a.delivered_at DESC NULLS LAST, a.created_at DESC LIMIT 1) AS readiness_score,
+              (SELECT a.status FROM bair.audits a
+                 WHERE a.organisation_id = n.organisation_id
+                 ORDER BY a.delivered_at DESC NULLS LAST, a.created_at DESC LIMIT 1) AS audit_status,
+              (SELECT MAX(es.session_date) FROM engagement_sessions es
+                 JOIN service_engagements se ON se.id = es.engagement_id
+                WHERE se.organisation_id = n.organisation_id) AS last_engagement_at
+         FROM newsrooms n
+         LEFT JOIN organisations o ON o.id = n.organisation_id
+         LEFT JOIN sectors s ON s.id = o.sector_id
+        WHERE n.kind = 'business'
+        ORDER BY n.created_at`
+    );
+    res.json(rows);
+  } catch (err) { console.error('[beaiready/admin/mediamap]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
 // Set / rotate / clear a company's self-registration access code (stored hashed).
 // Members of this company use it (with their own password) to register. Empty/null
 // clears it → the company is no longer open for self-registration.
