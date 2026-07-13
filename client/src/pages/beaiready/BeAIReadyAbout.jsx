@@ -73,7 +73,7 @@ function Stat({ n, label: l }) {
 function Person({ img, name, role, children }) {
   return (
     <div style={{ ...card, display: 'grid', gridTemplateColumns: img ? '120px 1fr' : '1fr', gap: 18, alignItems: 'start' }}>
-      {img && <img src={img} alt={name} loading="lazy" style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: 12, border: '1px solid #eee5da' }} />}
+      {img && <img src={img} alt={name} style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: 12, border: '1px solid #eee5da' }} />}
       <div>
         <div style={{ fontSize: 17, fontWeight: 800, color: CHARCOAL }}>{name}</div>
         <div style={{ ...label, color: '#8a8076', marginBottom: 8 }}>{role}</div>
@@ -257,7 +257,7 @@ export default function BeAIReadyAbout() {
 
       {/* Training history — the full record */}
       <Section kicker="Where we’ve worked" title="Training, workshops & coaching">
-        <img src="/developai/training.jpg" alt="Develop AI training workshop" loading="lazy"
+        <img src="/developai/training.jpg" alt="Develop AI training workshop"
           style={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 14, border: '1px solid #eee5da', marginBottom: 18 }} />
         <p style={{ ...lede, maxWidth: '72ch', marginBottom: 18 }}>
           We’ve trained hundreds of people across a dozen-plus countries, partnering with DW Akademie, the U.S.
@@ -299,7 +299,7 @@ export default function BeAIReadyAbout() {
       <Section kicker="Community" title="Join the conversation">
         <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-            <img src="/developai/community.webp" alt="Develop AI community" loading="lazy"
+            <img src="/developai/community.webp" alt="Develop AI community"
               style={{ width: '100%', height: '100%', minHeight: 230, objectFit: 'cover', display: 'block' }} />
             <div style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'center' }}>
               <p style={{ ...lede, margin: 0 }}>
