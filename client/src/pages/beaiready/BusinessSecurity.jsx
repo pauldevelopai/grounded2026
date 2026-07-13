@@ -100,7 +100,7 @@ export default function BusinessSecurity() {
 
   return (
     <div className="hub hub-beaiready">
-      <div className="hub-eyebrow">Governance · your dashboard</div>
+      <div className="hub-eyebrow">AI Data Security · your dashboard</div>
       <h1 style={{ fontSize: 26, fontWeight: 800, margin: '4px 0 6px' }}>AI System Register &amp; Risk</h1>
       <p style={{ color: '#6b6359', maxWidth: '66ch', marginBottom: 14 }}>
         A living register of every AI system your business uses — what it's for, who owns it, what data it

@@ -21,14 +21,15 @@ const METRICS = [
 
 // The client-facing pillars, each with the tool it opens — the six-part Be AI Ready
 // model (Paul, 2026-06-24): Knowledge (the foundation, holds the visibility scan +
-// KnowHow), Training, Governance (holds the data-security tools log + acceptable
-// use), Tools, Strategy, Measurement (the productivity metrics + goals).
+// KnowHow), Training, Governance, AI Data Security (its own pillar now — the AI
+// system register + acceptable use), Tools, Strategy, Measurement.
 // `absorbs` lists legacy recommendation pillar keys this card should also show, so
 // recs authored before the re-map still surface under their new home.
 const PILLARS = [
   { key: 'knowledge', label: 'Knowledge', to: '/dashboard/visibility', cta: 'How AI sees your business', absorbs: ['visibility'] },
   { key: 'training', label: 'Training', to: '/training', cta: 'Agenda & materials' },
-  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Policy, tools log & acceptable use', absorbs: ['data-security'] },
+  { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Policy & law tracker' },
+  { key: 'data-security', label: 'AI Data Security', to: '/dashboard/security', cta: 'AI system register & acceptable use', absorbs: ['data-security'] },
   { key: 'productivity', label: 'Tools', to: '/toolbox', cta: 'Toolbox, prompts & Nodes' },
   { key: 'strategy', label: 'Strategy', to: '/dashboard/strategy', cta: 'Goals & automation roadmap' },
   { key: 'measurement', label: 'Measurement', to: '/dashboard/productivity', cta: 'Goals & productivity' },

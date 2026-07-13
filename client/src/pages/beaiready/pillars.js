@@ -80,8 +80,8 @@ export const PILLARS = [
   },
   {
     key: 'data-security',
-    nav: 'Data Security',
-    label: 'Data Security',
+    nav: 'AI Data Security',
+    label: 'AI Data Security',
     tagline: 'Know every tool. Plug every leak.',
     intro:
       'Every interaction with AI is a data decision. Log the AI tools your company actually uses, see what ' +
@@ -141,6 +141,10 @@ export const PILLARS = [
     features: [
       { name: 'Goals, workflow & automation roadmap', status: 'partial', dash: '/dashboard/strategy', slug: 'strategy-roadmap',
         what: 'A clear map of how your business runs — every step and hand-off — and which parts AI should take on first, sized by effort and payoff: your practical automation roadmap, built with your team.' },
+      // Measurement lives here as a card (Paul, 2026-07-13) rather than its own top-nav
+      // tab — links to the Measurement pillar page (/pillar/measurement), still intact.
+      { name: 'Measurement — goals & results', status: 'live', to: '/pillar/measurement',
+        what: 'Agree clear goals at the start — time saved, cost cut, capability gained — then measure the results against them, so the value of the work is something you can see, not just claim.' },
       // Defined here for continuity, but re-homed to Training by the block below.
       { name: 'Staff AI Needs', status: 'partial', dash: '/dashboard/staff-needs', slug: 'staff-needs',
         what: 'A read on where your team stands and what they need, drawn from the competency forms they complete — so your AI strategy targets the real gaps.' },
@@ -204,7 +208,6 @@ export const PILLARS = [
   };
   const training = byKey('training');
   const knowledge = byKey('knowledge');
-  const governance = byKey('governance');
   const measurement = byKey('measurement');
 
   // Knowledge = KnowHow (the one tool: ask + your documents + capture) + the AI-visibility scan.
@@ -217,24 +220,21 @@ export const PILLARS = [
   const staffNeeds = pull('strategy', 'staff-needs');
   if (staffNeeds) training.features = [...training.features, staffNeeds];
 
-  // Governance absorbs Data Security — surfaced as dashboard panels (dashPanels),
-  // not on the pillar page.
-  governance.dashPanels = [
-    ...(governance.dashPanels || []),
-    pull('data-security', 'ai-tools-log'),
-    pull('data-security', 'acceptable-use'),
-  ].filter(Boolean);
+  // AI Data Security is now its OWN top-level pillar (Paul, 2026-07-13) — no longer
+  // folded into Governance. It keeps its two features (register + acceptable use), so
+  // the /pillar/data-security page renders them directly.
 
   // Measurement takes productivity tracking (ahead of the Goals & results stub).
   const productivity = pull('productivity', 'productivity-tracking');
   if (productivity) measurement.features = [productivity, ...measurement.features];
 })();
 
-// Pillars shown in the nav + on the home page, in the Be AI Ready order (Paul,
-// 2026-06-24): Knowledge leads (the inside-out foundation), then Training,
-// Governance, Tools, Strategy, Measurement. The array order here is the displayed
-// order — flip 'knowledge'/'training' to lead with Training instead.
-const VISIBLE_KEYS = ['knowledge', 'training', 'governance', 'productivity', 'strategy', 'measurement'];
+// Pillars shown in the nav + on the home page (Paul, 2026-07-13): Knowledge leads
+// (the inside-out foundation), then Training, Governance, AI Data Security, Tools,
+// Strategy. Measurement is no longer a top-level tab — it's surfaced as a card on the
+// Strategy page (its /pillar/measurement page still exists). The array order here is
+// the displayed order.
+const VISIBLE_KEYS = ['knowledge', 'training', 'governance', 'data-security', 'productivity', 'strategy'];
 export const VISIBLE_PILLARS = VISIBLE_KEYS.map((k) => PILLARS.find((p) => p.key === k)).filter(Boolean);
 
 export function findPillar(key) {
