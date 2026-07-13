@@ -1,7 +1,8 @@
 // BeAIReadyAbout — /about on the BE AI READY site. The story of Develop AI, the
 // company behind Be AI Ready and Grounded, assembled from developai.co.za (their own
-// site): who they are, what they do, where they've worked, the team, talks and press.
-// Public (no sign-in). All real content — nothing invented.
+// site): who they are, how they help businesses, what they do, the full training
+// history, the team, conferences, press and the newsletter. Public (no sign-in).
+// All real content — nothing invented.
 import { Link } from 'react-router-dom';
 
 const TERRACOTTA = '#c75b39';
@@ -22,12 +23,12 @@ function Section({ kicker, title, children, style }) {
   );
 }
 
-// A compact year → items timeline (training history, conferences).
+// A compact year → items timeline (training history, conferences, press).
 function Timeline({ groups }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {groups.map((g) => (
-        <div key={g.year} style={{ display: 'grid', gridTemplateColumns: '56px 1fr', gap: 14 }}>
+        <div key={g.year} style={{ display: 'grid', gridTemplateColumns: '64px 1fr', gap: 14 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: TERRACOTTA }}>{g.year}</div>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
             {g.items.map((it, i) => <li key={i} style={{ fontSize: 13.5, color: '#4a453f', lineHeight: 1.5 }}>{it}</li>)}
@@ -60,109 +61,126 @@ function Person({ img, name, role, children }) {
   );
 }
 
+// How we help a business get AI-ready (the consulting services, business-framed).
 const SERVICES = [
-  ['AI strategy', 'Build a practical AI strategy for a business or newsroom.'],
-  ['Workflows & structure', 'Restructure staff and optimise workflows around AI.'],
-  ['Training workshops', 'Hands-on AI training, in person and online.'],
-  ['Prototypes', 'Consult on AI implementation and build working prototypes.'],
-  ['AI ethics & policy', 'Integrate an AI-ethics policy the organisation owns.'],
-  ['Data-security audits', 'Audit the data security of the AI systems in use.'],
+  ['AI strategy', 'A practical AI strategy for your business — where AI genuinely saves time and money, and what to do first.'],
+  ['Workflows & structure', 'Redesign workflows and restructure teams around AI, so it fits how you actually work.'],
+  ['Team training', 'Hands-on AI training for your staff, in person and online — changing what they do on Monday.'],
+  ['Prototypes', 'Build working AI prototypes for the tasks that matter most to your business.'],
+  ['AI policy & ethics', 'An AI-use policy your business owns — acceptable use, data rules and regulatory alignment.'],
+  ['Data-security audits', 'Audit the data security of every AI tool in use, and get a clear ruling on what is safe.'],
 ];
 
 const TRAINING = [
   { year: '2026', items: [
-    'Online AI training for the DNTF newsroom cohort',
-    'Closing workshop with the Thomson Reuters Foundation for exiled media (6-month coaching programme)',
-    'In-person training in Kenya and Tanzania',
-    'Zambia & Zimbabwe newsroom training in Lusaka',
-    'Online AI & Podcasting course with DW Akademie (hundreds of podcasters)',
+    'April — AI training for the DNTF newsroom cohort (online)',
+    'March — Closing workshop with the Thomson Reuters Foundation for exiled media: five newsrooms completed six months of AI prototype and policy coaching',
+    'February — In-person AI-implementation training with three newsrooms from Kenya and Tanzania',
+    'February — Training in Lusaka for five newsrooms from Zambia and Zimbabwe',
+    'January — Online “AI & Podcasting” course with DW Akademie (hundreds of podcasters engaged)',
   ] },
   { year: '2025', items: [
-    'Afghanistan newsroom implementation training',
-    'Five-day in-person workshop in Namibia with NBC',
-    'Three-day online workshop with Radio Television of Serbia',
-    'AI-journalism training with the Moldova School of Journalism',
-    'Pacific-region workshops with the Public Media Alliance',
-    'Six-week Africa-wide newsroom training with DW Akademie',
+    'December — AI and podcasting workshop, 100+ participants (online)',
+    'December — AI-implementation training for a newsroom in Afghanistan',
+    'November — Five-day in-person workshop in Namibia with the Namibian Broadcasting Corporation (NBC)',
+    'November — Three-day online workshop for Radio Television of Serbia',
+    'October — AI-and-journalism training with DW Akademie and the Moldova School of Journalism',
+    'September — Three-day workshop for Thomson Reuters Foundation exiled media',
+    'July — AI workshops across the Pacific region with the Public Media Alliance',
+    'June — Webinar series for International Media Support on newsroom AI',
+    'February — Six-week AI training across African newsrooms with DW Akademie',
   ] },
-  { year: '2024 & earlier', items: [
-    'Workshops across Serbia, Ethiopia, Malaysia, Kenya, Ghana and Egypt',
-    'Partnerships with nation media groups and public broadcasters',
+  { year: '2024', items: [
+    '“AI in Action” workshop at Innovation Days, Serbia',
+    'Trained dozens of trainers in responsible AI in Ethiopia',
+    '“Leveraging AI & Podcasting” workshop at Radiodays Asia, Malaysia',
+    'July — Two AI workshops for Nation Media Group and Royal Media Services in Kenya (with Futuremedia Lab; hosted by the U.S. Agency for Global Media)',
+    'June — Responsible-AI workshop for public media with the Public Media Alliance, hosted by SABC — participants from Ghana, Lesotho, Namibia and Seychelles',
+    'June — Six sessions over three weeks with the Moldova School of Journalism and DW Akademie: AI tools, ethics and newsroom AI policy',
+    'Taught “Data Verification, Fact-Checking and AI” and “Data Visualisation and AI” at the British University in Egypt',
+  ] },
+  { year: '2023', items: [
+    'October — Facilitated Innovation Lab 2023 in Namibia',
   ] },
 ];
 
 const CONFERENCES = [
   { year: '2026', items: [
     'International Journalism Festival, Perugia — panel, supported by the Thomson Reuters Foundation',
-    'Africa Editors Congress 2026, Kenya — AI in African newsrooms',
+    'Africa Editors Congress 2026, Kenya — “AI in the newsrooms of Africa”',
   ] },
   { year: '2025', items: [
     'Copenhagen Conference on Information Integrity — “AI and the future of media”',
-    'PodFest, Moldova — AI and podcasting futures',
-    'M20 Summit, Johannesburg — regulation and AI in media',
-    'Global Media Forum, Bonn — DW Freedom workshop on AI',
+    'PodFest, Moldova (October) — “the future of AI and podcasting”',
+    'M20 Summit, Johannesburg — “regulation and AI in the media”',
+    'Global Media Forum, Bonn (July) — DW Freedom workshop on AI',
   ] },
-  { year: '2023–24', items: [
-    'Radiodays Asia, Malaysia — “Leveraging AI for Podcasting”',
-    'Africa Media Perspectives, South Africa — AI’s impact on journalism',
-    'Egypt Media Forum · Brave New Media Forum, Serbia · Radio Days Ethiopia',
-    'Africa Business Media Innovators · Media Freedom Festival · Jamfest, Johannesburg',
+  { year: '2024', items: [
+    'Radiodays Asia, Malaysia (September) — “Leveraging AI For Podcasting”',
+    'Africa Media Perspectives, South Africa (June 22) — panel on AI’s impact on journalism, with Paul McNally, Dr Clare Cook, Mungo Soggot and Mallick Mnela',
+  ] },
+  { year: '2023', items: [
+    'Egypt Media Forum (November 26) — journalist learning in the AI era',
+    'Brave New Media Forum & Innovation Days, Serbia (November 17) — “AI in Podcasting”',
+    'Radio Days Ethiopia (November) — AI and podcasting',
+    'Africa Business Media Innovators 2023 (November) — “Building a Data-Driven and Technology Focused Newsroom”',
+    'Media Freedom Festival (October 18–20) — “AI Unleashed: Empowering Minds in the Age of Artificial Intelligence”',
+    'Jamfest, Johannesburg (October 17) — “AI Journalism in Africa”',
   ] },
 ];
 
 const PRESS = [
-  '“Survive and Thrive: The Media Viability Podcast” — AI, the end of the web, and new media business models',
-  'John Maytham, CapeTalk Afternoon Drive — AI and self-driving cars',
-  'BBC World Service — AI’s technical issues with race and sentience',
-  'PodCircle / DW Akademie — AI and podcasting',
-  'Power FM — AI news presenters',
-  'Podnews & The Podcast Sessions — the podcast-creation app',
-  'Judge, WAN-IFRA “Best Use of AI in the Newsroom” (2024)',
+  { year: '2025', items: [
+    '“Survive and Thrive: The Media Viability Podcast” — Paul McNally on AI, the end of the web, and new media business models',
+  ] },
+  { year: '2024', items: [
+    'CapeTalk, John Maytham’s Afternoon Drive — AI and self-driving cars',
+    'PodCircle by DW Akademie (March) — Paul McNally on AI and podcasting',
+    'BBC World Service — AI’s technical problems with race and sentience',
+    'DW Akademie, Kyle James — “The Good, The Bad and The Ugly” of AI and podcasting (also featured by Podnews)',
+    'Judge, WAN-IFRA “Best Use of AI in the Newsroom”',
+  ] },
+  { year: '2023', items: [
+    'Power FM (October 20) — AI news presenters',
+    'Podnews (October 17) — Develop AI’s podcast-creation app',
+    'The Podcast Sessions (October 2023 issue) — the podcast-creation app',
+    'African Journalism Educators’ Network (October) — “we need to make sure AI doesn’t leave African media behind”',
+  ] },
 ];
 
 export default function BeAIReadyAbout() {
   return (
     <div className="hub hub-beaiready">
-      {/* Hero */}
+      {/* Hero — business-forward */}
       <section style={{ marginBottom: 40 }}>
-        <div style={label}>About</div>
+        <div style={label}>About · for organisations of every size, public or private</div>
         <h1 style={{ fontSize: 30, fontWeight: 800, margin: '6px 0 12px', color: CHARCOAL, letterSpacing: '-0.01em' }}>
-          Develop&nbsp;AI — the company behind Be&nbsp;AI&nbsp;Ready
+          Develop&nbsp;AI — getting your business ready for an AI-first world
         </h1>
         <p style={{ ...lede, maxWidth: '70ch', fontSize: 16.5 }}>
-          Develop&nbsp;AI is dedicated to using AI to help people, newsrooms and businesses in the Global South
-          and Eastern Europe solve problems and fulfil their potential. An AI consultancy and training company,
-          it helps newsrooms and businesses adopt artificial intelligence responsibly — through AI policies,
-          working prototypes and hands-on staff training.
+          Develop&nbsp;AI is an AI consultancy and training company that helps businesses and newsrooms adopt
+          artificial intelligence responsibly — and use it to their advantage. <strong>Be&nbsp;AI&nbsp;Ready</strong> is
+          our structured programme for organisations of every size: capture what your business already knows,
+          train your team, keep your AI safe and legal, put the right tools in people’s hands, and prove the
+          results. It’s the same work that has helped businesses and 100+ newsrooms across the Global South and
+          Eastern Europe stop worrying about AI and start using it.
         </p>
       </section>
 
       {/* Stats */}
       <section style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 40 }}>
-        <Stat n="100+" label="newsrooms helped to implement or build AI, aligned with editorial values" />
+        <Stat n="100+" label="newsrooms & businesses helped to implement or build AI" />
         <Stat n="12+" label="countries where we’ve trained people to use AI" />
         <Stat n="5" label="regions — Africa, Europe, MENA, Asia & the Pacific" />
         <Stat n="2023" label="founded — a South African company and nonprofit foundation" />
       </section>
 
-      {/* Mission */}
-      <Section kicker="Why we exist" title="AI that strengthens journalism, justice and accountability">
-        <div style={{ ...card, borderLeft: `3px solid ${TERRACOTTA}` }}>
-          <p style={{ ...lede, margin: 0 }}>
-            We work to ensure that artificial intelligence <strong>strengthens, rather than undermines,
-            journalism, justice, and public accountability</strong> — especially where institutions are fragile
-            and resources are limited. That means building ethical, low-bandwidth and context-aware AI systems
-            that support journalists and civil society, with a priority on the people most often left out:
-            women journalists and early-career reporters in under-resourced environments.
-          </p>
-        </div>
-      </Section>
-
-      {/* What we do */}
-      <Section kicker="What we do" title="Consulting, training and AI projects">
-        <p style={{ ...lede, maxWidth: '70ch', marginBottom: 16 }}>
-          We help organisations navigate AI without being left behind by it — from strategy and workflow design
-          to policy, prototypes and data-security audits.
+      {/* Helping businesses — the emphasis */}
+      <Section kicker="For your business" title="How we help you get AI-ready">
+        <p style={{ ...lede, maxWidth: '72ch', marginBottom: 16 }}>
+          AI is reshaping every industry, and millions of roles with it. We make sure it works <em>for</em> your
+          business, not against it — giving you the strategy, skills and safeguards to adopt AI with confidence,
+          whatever your size or sector.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
           {SERVICES.map(([t, d]) => (
@@ -171,6 +189,24 @@ export default function BeAIReadyAbout() {
               <div style={{ fontSize: 13, color: '#6b6359', lineHeight: 1.5 }}>{d}</div>
             </div>
           ))}
+        </div>
+        <p style={{ ...lede, marginTop: 16 }}>
+          <Link to="/training" style={{ color: TERRACOTTA, fontWeight: 600 }}>Book a training →</Link>
+          &nbsp;&nbsp;·&nbsp;&nbsp;
+          <a href="mailto:paul@developai.co.za?subject=Be%20AI%20Ready%20consultation" style={{ color: TERRACOTTA, fontWeight: 600 }}>Ask for a consultation →</a>
+        </p>
+      </Section>
+
+      {/* Mission */}
+      <Section kicker="Why we exist" title="AI that strengthens journalism, justice and accountability">
+        <div style={{ ...card, borderLeft: `3px solid ${TERRACOTTA}` }}>
+          <p style={{ ...lede, margin: 0 }}>
+            Alongside our business work, we exist to ensure that artificial intelligence <strong>strengthens,
+            rather than undermines, journalism, justice, and public accountability</strong> — especially where
+            institutions are fragile and resources are limited. That means building ethical, low-bandwidth and
+            context-aware AI systems that support journalists and civil society, with a priority on the people
+            most often left out: women journalists and early-career reporters in under-resourced environments.
+          </p>
         </div>
       </Section>
 
@@ -181,8 +217,8 @@ export default function BeAIReadyAbout() {
             <div style={{ fontWeight: 800, fontSize: 16, color: CHARCOAL }}>GROUNDED</div>
             <p style={{ fontSize: 13.5, lineHeight: 1.6, color: '#4a453f', margin: '6px 0 0' }}>
               Fully open-source, shared AI infrastructure for African newsrooms — a set of AI agents and tools
-              that newsroom builders combine into workflows, deploy locally on their own hardware, and share
-              across the network.
+              that builders combine into workflows, deploy locally on their own hardware, and share across the
+              network.
             </p>
           </div>
           <div style={card}>
@@ -196,13 +232,14 @@ export default function BeAIReadyAbout() {
         </div>
       </Section>
 
-      {/* Training history */}
-      <Section kicker="Where we’ve worked" title="Training across a dozen-plus countries">
+      {/* Training history — the full record */}
+      <Section kicker="Where we’ve worked" title="Every training, workshop and coaching engagement">
         <img src="/developai/training.jpg" alt="Develop AI training workshop" loading="lazy"
           style={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 14, border: '1px solid #eee5da', marginBottom: 18 }} />
-        <p style={{ ...lede, maxWidth: '70ch', marginBottom: 18 }}>
-          We’ve trained hundreds of people to use AI efficiently, partnering with DW Akademie, USAGM, the Public
-          Media Alliance, the Thomson Reuters Foundation and International Media Support. A recent snapshot:
+        <p style={{ ...lede, maxWidth: '72ch', marginBottom: 18 }}>
+          We’ve trained hundreds of people across a dozen-plus countries, partnering with DW Akademie, the U.S.
+          Agency for Global Media, the Thomson Reuters Foundation, the Public Media Alliance and International
+          Media Support. The full record:
         </p>
         <Timeline groups={TRAINING} />
       </Section>
@@ -225,22 +262,14 @@ export default function BeAIReadyAbout() {
         </div>
       </Section>
 
-      {/* Conferences */}
+      {/* Conferences — full list */}
       <Section kicker="On stage" title="Conference appearances">
         <Timeline groups={CONFERENCES} />
       </Section>
 
-      {/* Press */}
-      <Section kicker="In the press" title="Selected coverage & interviews">
-        <div style={card}>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-            {PRESS.map((p, i) => (
-              <li key={i} style={{ fontSize: 13.5, color: '#4a453f', lineHeight: 1.5, paddingLeft: 16, position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 0, color: TERRACOTTA }}>›</span>{p}
-              </li>
-            ))}
-          </ul>
-        </div>
+      {/* Press / news — full list */}
+      <Section kicker="In the press" title="News, coverage & interviews">
+        <Timeline groups={PRESS} />
       </Section>
 
       {/* Community */}
@@ -256,18 +285,38 @@ export default function BeAIReadyAbout() {
         </div>
       </Section>
 
+      {/* Newsletter — prominent, both platforms */}
+      <Section kicker="Newsletter" title="The Develop AI Newsletter">
+        <div style={{ ...card, display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <p style={{ ...lede, margin: 0, flex: '1 1 320px' }}>
+            Our regular newsletter on AI and its impact on the world — practical, and written for people doing
+            real work. Read it wherever you already are:
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a href="https://developai.substack.com/" target="_blank" rel="noreferrer"
+              style={{ background: TERRACOTTA, color: '#fff', fontWeight: 700, fontSize: 14, padding: '10px 18px', borderRadius: 8, textDecoration: 'none' }}>
+              Subscribe on Substack ↗
+            </a>
+            <a href="https://www.linkedin.com/newsletters/develop-ai-daily-7352955707991777282/" target="_blank" rel="noreferrer"
+              style={{ background: '#fff', color: TERRACOTTA, fontWeight: 700, fontSize: 14, padding: '10px 18px', borderRadius: 8, textDecoration: 'none', border: `1px solid ${TERRACOTTA}` }}>
+              Follow on LinkedIn ↗
+            </a>
+          </div>
+        </div>
+      </Section>
+
       {/* Contact */}
       <section style={{ background: CHARCOAL, color: '#f2ede7', borderRadius: 16, padding: '28px 26px', marginBottom: 8 }}>
         <div style={{ ...label, color: TERRACOTTA }}>Get in touch</div>
         <h2 style={{ ...h2, color: '#fff', marginTop: 6 }}>Talk to us about your AI strategy</h2>
         <p style={{ fontSize: 14.5, lineHeight: 1.6, color: '#cfc7bd', maxWidth: '62ch', marginBottom: 16 }}>
-          Whether you’re a newsroom or a business, we can help you adopt AI in a way that fits your values,
+          Whether you’re a business or a newsroom, we can help you adopt AI in a way that fits your values,
           your workflows and your budget.
         </p>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center', fontSize: 14 }}>
           <a href="mailto:paul@developai.co.za" style={{ color: '#fff', fontWeight: 700 }}>paul@developai.co.za</a>
           <a href="https://developai.co.za" target="_blank" rel="noreferrer" style={{ color: TERRACOTTA }}>developai.co.za ↗</a>
-          <a href="https://developai.substack.com" target="_blank" rel="noreferrer" style={{ color: TERRACOTTA }}>Newsletter ↗</a>
+          <a href="https://developai.substack.com/" target="_blank" rel="noreferrer" style={{ color: TERRACOTTA }}>Newsletter ↗</a>
           <Link to="/training" style={{ color: TERRACOTTA }}>Book a training →</Link>
         </div>
       </section>
