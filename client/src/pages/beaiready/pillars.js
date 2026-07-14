@@ -80,12 +80,14 @@ export const PILLARS = [
   },
   {
     key: 'data-security',
-    nav: 'AI Data Security',
-    label: 'AI Data Security',
-    tagline: 'Know every tool. Plug every leak.',
+    nav: 'Cyber Security',
+    label: 'Cyber Security',
+    tagline: 'Defend your data from AI-fuelled attacks.',
     intro:
-      'Every interaction with AI is a data decision. Log the AI tools your company actually uses, see what ' +
-      'each one collects, and get a clear ruling on what is acceptable — and what to stop.',
+      'AI has changed the threat. Autonomous agents now probe, phish and exploit at machine speed — and every ' +
+      'AI tool your team adopts is another door to defend. This is where you take control: map every AI system ' +
+      'in your business, get a clear ruling on what is safe to use and what to shut down, and close the gaps ' +
+      'attackers reach for first — so your data stays yours.',
     features: [
       { name: 'AI System Register & Risk', status: 'live', dash: '/dashboard/security', slug: 'ai-tools-log',
         what: 'A living register of every AI system — purpose, owner, data, paid/free, lifecycle — with an EU AI Act risk tier for each, classified against live governance sources and cited.' },
@@ -220,7 +222,7 @@ export const PILLARS = [
   const staffNeeds = pull('strategy', 'staff-needs');
   if (staffNeeds) training.features = [...training.features, staffNeeds];
 
-  // AI Data Security is now its OWN top-level pillar (Paul, 2026-07-13) — no longer
+  // Cyber Security is now its OWN top-level pillar (Paul, 2026-07-13) — no longer
   // folded into Governance. It keeps its two features (register + acceptable use), so
   // the /pillar/data-security page renders them directly.
 
@@ -230,7 +232,7 @@ export const PILLARS = [
 })();
 
 // Pillars shown in the nav + on the home page (Paul, 2026-07-13): Knowledge leads
-// (the inside-out foundation), then Training, Governance, AI Data Security, Tools,
+// (the inside-out foundation), then Training, Governance, Cyber Security, Tools,
 // Strategy. Measurement is no longer a top-level tab — it's surfaced as a card on the
 // Strategy page (its /pillar/measurement page still exists). The array order here is
 // the displayed order.
