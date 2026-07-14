@@ -27,6 +27,34 @@ export default function BeAIReadyTrainingBook() {
         </div>
       </section>
 
+      <div className="hub-section-label">What we teach</div>
+      <section className="hub-grid">
+        <div className="hub-card">
+          <div className="hub-card-kicker">AI Governance</div>
+          <p>Use AI without landing your business in trouble. Policy, risk, legal exposure, and the
+            guardrails that let your team move fast — safely.</p>
+        </div>
+        <div className="hub-card">
+          <div className="hub-card-kicker">Cyber Security</div>
+          <p>Where AI and security meet. Protecting your data, spotting AI-enabled threats, and keeping
+            staff from leaking what matters.</p>
+        </div>
+        <div className="hub-card">
+          <div className="hub-card-kicker">Understanding AI</div>
+          <p>The one that demystifies it. What these tools actually are, what they can and can’t do, and
+            how your people put them to work day to day.</p>
+        </div>
+      </section>
+
+      <section className="hub-band">
+        <h2>Every engagement starts with a deep needs assessment.</h2>
+        <p>
+          Before we teach anything, we learn your business, your tools and the work your team does every
+          day. Then we tailor the session to fit — one course, or a blend of all three — so the day maps
+          to what your people actually need, not an off-the-shelf syllabus.
+        </p>
+      </section>
+
       <section className="hub-band">
         <h2>One-day training + three mentoring sessions — R35k</h2>
         <p>
