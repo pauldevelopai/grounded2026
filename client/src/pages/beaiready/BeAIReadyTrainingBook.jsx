@@ -40,12 +40,12 @@ const ICONS = {
 };
 
 const COURSES = [
-  { key: 'governance', name: 'AI Governance',
+  { key: 'understanding', name: 'Using AI to Improve Your Business',
+    desc: 'Practical, hands-on ways to put AI to work across your business — the tasks it speeds up, the tools worth using, and how your team actually gets more done.' },
+  { key: 'governance', name: 'AI Governance at Work',
     desc: 'Use AI without landing your business in trouble. Policy, risk, legal exposure, and the guardrails that let your team move fast — safely.' },
-  { key: 'cyber', name: 'Cyber Security',
-    desc: 'Where AI and security meet. Protecting your data, spotting AI-enabled threats, and keeping staff from leaking what matters.' },
-  { key: 'understanding', name: 'Understanding AI',
-    desc: 'The one that demystifies it. What these tools actually are, what they can and can’t do, and how your people put them to work day to day.' },
+  { key: 'cyber', name: 'AI Cyber Security', sub: 'Protecting your business and data from AI threats',
+    desc: 'Where AI and security meet — spotting AI-enabled threats, locking down sensitive data, and stopping staff from leaking what matters.' },
 ];
 
 function CourseIcon({ name }) {
@@ -103,9 +103,14 @@ export default function BeAIReadyTrainingBook() {
             display: 'flex', flexDirection: 'column', gap: 14,
           }}>
             <CourseIcon name={c.key} />
-            <h3 style={{ margin: 0, fontSize: 19, fontWeight: 750, color: CHARCOAL, letterSpacing: '-0.01em' }}>
-              {c.name}
-            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <h3 style={{ margin: 0, fontSize: 19, fontWeight: 750, color: CHARCOAL, letterSpacing: '-0.01em' }}>
+                {c.name}
+              </h3>
+              {c.sub && (
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: TERRACOTTA, lineHeight: 1.35 }}>{c.sub}</div>
+              )}
+            </div>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: BODY }}>{c.desc}</p>
           </article>
         ))}
