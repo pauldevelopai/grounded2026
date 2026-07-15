@@ -7,7 +7,7 @@
 import pool from '../db/pool.js';
 import { decryptFor, encryptFor } from './crypto.js';
 import { callClaude } from './claude.js';
-import { retrieveCompanyChunks } from './company-knowledge-index.js';
+import { retrieveCompanyChunks, retrieveCriteriaChunks } from './company-knowledge-index.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
 import { assistantInstructionsFor } from './knowhow-presets.js';
 
@@ -96,13 +96,19 @@ export async function verifyClaims(newsroomId, collection, { incremental = false
     let verdict = 'unverified', rationale = 'No independent evidence has been added yet to test this claim.', citations = [], used = [], confidence = null, themes = [];
     if (evidence.length) {
       const ctx = evidence.map((e, i) => `[${i + 1}] (${e.kind}) ${e.title || ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 1200)}`).join('\n\n');
+      const criteria = await retrieveCriteriaChunks(newsroomId, cl.claim_text, collection, 4);
+      const criteriaBlock = criteria.length
+        ? '\n\nJUDGING CRITERIA — apply these standards when deciding (the newsroom’s own yardstick):\n'
+          + criteria.map((c) => `- ${c.title ? c.title + ': ' : ''}${c.text.replace(/\s+/g, ' ').slice(0, 600)}`).join('\n')
+        : '';
       const system = (persona ? persona + '\n\n' : '')
         + 'You are testing a single claim a mining company made about itself, using ONLY the numbered EVIDENCE below '
         + '(the newsroom’s own reporting and independent sources). Decide a verdict and cite the evidence you used. '
         + 'Return STRICT JSON: {"verdict":"supported"|"contradicted"|"misleading"|"unverified","rationale":string(<=400 chars, cite [n]),"citations":number[],"confidence":number 0..1,"themes":string[]}. '
         + 'supported = evidence backs it; contradicted = evidence shows it false; misleading = technically true but creates a false '
         + 'impression; unverified = the evidence does not settle it. confidence = how strongly the evidence settles it. '
-        + 'themes = 1–3 short lowercase topic tags (e.g. "rehabilitation","water pollution","employment"). Go strictly on the evidence — never assume.';
+        + 'themes = 1–3 short lowercase topic tags (e.g. "rehabilitation","water pollution","employment"). Go strictly on the evidence — never assume.'
+        + criteriaBlock;
       try {
         const p = safeJson(await callClaude({ system, userContent: `CLAIM: ${cl.claim_text}\n\nEVIDENCE:\n${ctx}\n\nReturn the JSON.`, maxTokens: 500, temperature: 0.1 }));
         if (p && VERDICTS.includes(p.verdict)) {
@@ -304,6 +310,14 @@ export async function searchClaims(newsroomId, { q = '', verdict = '', theme = '
   const { rows } = await pool.query(
     `SELECT id, collection, claim_text, verdict, confidence, status, themes, rationale, verified_at
        FROM beaiready_claim_checks WHERE ${where.join(' AND ')} ORDER BY updated_at DESC LIMIT 500`, vals);
+  return rows;
+}
+
+// Org-wide judging criteria (role='criteria', not tied to a mine) — the standards applied
+// to every mine's claims. Per-mine criteria live on the mine (collection set) instead.
+export async function listOrgCriteria(newsroomId) {
+  const { rows } = await pool.query(
+    "SELECT id, title, kind, created_at FROM beaiready_company_sources WHERE newsroom_id=$1 AND role='criteria' AND collection IS NULL ORDER BY created_at DESC", [newsroomId]);
   return rows;
 }
 

@@ -87,6 +87,32 @@ async function sourceLevelFallback(newsroomId, limit, { collection = null, roles
   return out;
 }
 
+// Judging criteria for the Claims Verifier: the passages of the tenant's criteria docs
+// (role='criteria') most relevant to a claim. Includes org-wide criteria (collection IS
+// NULL) and this mine's own criteria (collection = $collection). Falls back to raw text
+// when the embedding model is unavailable.
+export async function retrieveCriteriaChunks(newsroomId, question, collection = null, limit = 4) {
+  const emb = await generateEmbedding(question).catch(() => null);
+  if (emb) {
+    const { rows } = await pool.query(
+      `SELECT c.text_chunk, s.title
+         FROM beaiready_source_chunks c
+         JOIN beaiready_company_sources s ON s.id = c.source_id
+        WHERE c.newsroom_id = $1 AND c.embedding IS NOT NULL AND s.role = 'criteria'
+          AND s.inclusion <> 'exclude' AND s.sensitivity <> 'withdrawn'
+          AND (s.collection = $2 OR s.collection IS NULL)
+        ORDER BY c.embedding <=> $3::vector
+        LIMIT $4`, [newsroomId, collection, toPgVector(emb), limit]).catch(() => ({ rows: [] }));
+    if (rows.length) return rows.map((r) => ({ title: r.title, text: decryptFor(newsroomId, r.text_chunk) || '' })).filter((r) => r.text);
+  }
+  const { rows } = await pool.query(
+    `SELECT title, extracted_text FROM beaiready_company_sources
+      WHERE newsroom_id = $1 AND role = 'criteria' AND inclusion <> 'exclude' AND sensitivity <> 'withdrawn'
+        AND (collection = $2 OR collection IS NULL) AND extracted_text IS NOT NULL
+      ORDER BY created_at DESC LIMIT $3`, [newsroomId, collection, limit]).catch(() => ({ rows: [] }));
+  return rows.map((r) => ({ title: r.title, text: (decryptFor(newsroomId, r.extracted_text) || '').slice(0, 1500) })).filter((r) => r.text);
+}
+
 // Explicit search: the single best passage per source, scored, for the search box.
 export async function searchCompanyChunks(newsroomId, q, { limit = 8, collection = null } = {}) {
   const query = String(q || '').trim();

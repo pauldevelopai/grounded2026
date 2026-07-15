@@ -425,18 +425,12 @@ function KnowledgePanel({ setErr }) {
   };
 
   const onFiles = async (fileList) => {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
+    if (!fileList || !fileList.length) return;
     setBusy(true); setErr('');
     try {
-      const fd = new FormData();
-      files.forEach((f) => fd.append('files', f, f.name));
-      const headers = {};
-      const nid = getActiveNewsroomId();
-      if (nid) headers['X-Newsroom-Id'] = nid;
-      const res = await fetch('/api/beaiready/knowhow/sources/upload', { method: 'POST', body: fd, credentials: 'include', headers });
-      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || 'Upload failed'); }
-      load();
+      const r = await uploadFileList(fileList);
+      if (!r.added) setErr(r.error || 'Nothing uploaded.');
+      else { if (r.skipped) setErr(`Uploaded ${r.added}; skipped ${r.skipped} unsupported file(s).`); load(); }
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -503,7 +497,12 @@ function KnowledgePanel({ setErr }) {
           <input type="file" multiple hidden disabled={busy}
             onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
         </label>
-        <span style={{ ...muted, marginLeft: 10 }}>PDF, Word, spreadsheets, CSV or text.</span>
+        <label style={{ ...btn, display: 'inline-block', marginLeft: 8, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+          Choose folder…
+          <input type="file" hidden disabled={busy} webkitdirectory="" directory="" multiple
+            onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} />
+        </label>
+        <span style={{ ...muted, marginLeft: 10 }}>PDF, Word, spreadsheets, CSV or text — a whole folder at once is fine.</span>
       </div>
 
       <div style={{ ...card, marginBottom: 12, display: 'grid', gap: 8 }}>
@@ -697,11 +696,29 @@ function SourceChips({ sources }) {
 const VERDICT_COLORS = { supported: '#166534', contradicted: '#b91c1c', misleading: '#b45309', unverified: '#8a8076', pending: '#c9c2b8' };
 const VERDICT_LABEL = { supported: 'Supported', contradicted: 'Contradicted', misleading: 'Misleading', unverified: 'Unverified', pending: 'Pending' };
 const VERDICT_ORDER = ['supported', 'contradicted', 'misleading', 'unverified', 'pending'];
-const ROLE_LABEL = { claim: "Company claim", reporting: 'EnviroPress reporting', external: 'External source' };
-const ROLE_PILL = { claim: { background: '#fee2e2', color: '#b91c1c' }, reporting: { background: '#dbeafe', color: '#1e40af' }, external: { background: '#dcfce7', color: '#166534' } };
+const ROLE_LABEL = { claim: "Company claim", reporting: 'EnviroPress reporting', external: 'External source', criteria: 'Judging criteria' };
+const ROLE_PILL = { claim: { background: '#fee2e2', color: '#b91c1c' }, reporting: { background: '#dbeafe', color: '#1e40af' }, external: { background: '#dcfce7', color: '#166534' }, criteria: { background: '#fef3c7', color: '#92400e' } };
 const STANCE_COLOR = { supports: '#166534', contradicts: '#b91c1c', context: '#8a8076', counterclaim: '#b45309' };
 const STANCE_LABEL = { supports: 'Supports', contradicts: 'Contradicts', context: 'Context', counterclaim: 'Counterclaim' };
 const CLAIM_STATUSES = ['open', 'needs_reporting', 'disputed', 'resolved'];
+const UPLOAD_EXT = /\.(pdf|docx|xlsx|csv|txt)$/i;   // server-accepted types; folder uploads are filtered to these
+
+// Upload files (from a file OR folder picker) to KnowHow, filtering to supported types and
+// tagging with extra fields (collection/role). Returns { added, skipped, error }.
+async function uploadFileList(fileList, extra = {}) {
+  let files = Array.from(fileList || []);
+  const before = files.length;
+  files = files.filter((f) => UPLOAD_EXT.test(f.name));
+  const skipped = before - files.length;
+  if (!files.length) return { added: 0, skipped, error: 'No supported files here (PDF, Word, Excel, CSV, text).' };
+  const fd = new FormData();
+  files.forEach((f) => fd.append('files', f, f.name));
+  for (const [k, v] of Object.entries(extra)) if (v != null) fd.append(k, v);
+  const headers = {}; const nid = getActiveNewsroomId(); if (nid) headers['X-Newsroom-Id'] = nid;
+  const res = await fetch('/api/beaiready/knowhow/sources/upload', { method: 'POST', body: fd, credentials: 'include', headers });
+  if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || 'Upload failed'); }
+  return { added: files.length, skipped, error: null };
+}
 const STATUS_LABEL = { open: 'Open', needs_reporting: 'Needs reporting', disputed: 'Disputed', resolved: 'Resolved' };
 const VERDICT_CHOICES = ['pending', 'supported', 'contradicted', 'misleading', 'unverified'];
 
@@ -717,6 +734,63 @@ function VerdictBar({ counts }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 5, fontSize: 11.5, color: '#6b6359' }}>
         {VERDICT_ORDER.map((k) => (c[k] ? <span key={k}><span style={{ color: VERDICT_COLORS[k] }}>●</span> {VERDICT_LABEL[k]} {c[k]}</span> : null))}
       </div>
+    </div>
+  );
+}
+
+// Org-wide judging criteria — the standards every mine's claims are tested against.
+function CriteriaCard({ setErr }) {
+  const [items, setItems] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [text, setText] = useState('');
+  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/criteria').then((d) => setItems(d.criteria || [])).catch(() => setItems([])), []);
+  useEffect(() => { load(); }, [load]);
+  const onFiles = async (fl) => {
+    if (!fl || !fl.length) return;
+    setBusy(true); setErr('');
+    try { const r = await uploadFileList(fl, { role: 'criteria' }); if (!r.added) setErr(r.error || 'Nothing uploaded.'); else load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const addNote = async () => {
+    if (!text.trim()) return;
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/sources/note', { method: 'POST', body: JSON.stringify({ title: 'Criteria', text: text.trim(), role: 'criteria' }) }); setText(''); load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+  const count = items?.length || 0;
+  return (
+    <div style={{ ...card, margin: '0 0 16px', borderColor: '#f0e4c4', background: '#fffdf7' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 13.5, fontWeight: 700 }}>Judging criteria <span style={{ ...pill, ...ROLE_PILL.criteria, marginLeft: 4 }}>applies to all mines</span></div>
+          <div style={{ ...muted, fontSize: 12 }}>The standards KnowHow measures every mine's claims against — environmental law, rehabilitation norms, disclosure rules. {count} on file. (Add mine-specific criteria inside a mine.)</div>
+        </div>
+        <button onClick={() => setOpen(!open)} style={tag}>{open ? 'Close' : 'Add / manage'}</button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload files<input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+            <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload folder<input type="file" hidden webkitdirectory="" directory="" multiple onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+          </div>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="…or paste a standard / criterion" style={{ ...input, minHeight: 50, resize: 'vertical' }} />
+          <div><button onClick={addNote} disabled={busy || !text.trim()} style={btn}>Add criterion</button></div>
+          {count > 0 && (
+            <div style={{ display: 'grid', gap: 5 }}>
+              {items.map((it) => (
+                <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <span>{it.title || 'Criteria'}</span>
+                  <button onClick={() => del(it.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -755,10 +829,11 @@ function ClaimsPanel({ setErr }) {
           <button onClick={() => setView('report')} style={btn}>View report →</button>
         </div>
       </div>
-      <div style={{ ...card, margin: '4px 0 16px', display: 'flex', gap: 8 }}>
+      <div style={{ ...card, margin: '4px 0 12px', display: 'flex', gap: 8 }}>
         <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="Add a mine (e.g. Bikita Minerals)…" style={input} />
         <button onClick={addMine} disabled={!newMine.trim()} style={btn}>Add mine</button>
       </div>
+      <CriteriaCard setErr={setErr} />
       {mines == null ? <p style={muted}>Loading…</p> : mines.length === 0 ? <p style={muted}>No mines yet — add your first bucket above.</p> : (
         <div style={{ display: 'grid', gap: 10 }}>
           {mines.map((m) => (
@@ -789,8 +864,11 @@ function MineView({ setErr, mine, back }) {
   const [ttl, setTtl] = useState('');
   const [text, setText] = useState('');
   const [mc, setMc] = useState('');
+  const [driveFolder, setDriveFolder] = useState('');
+  const [caps, setCaps] = useState({});
   const load = useCallback(() => apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}`).then(setData).catch((e) => setErr(e.message)), [mine, setErr]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { apiFetch('/beaiready/knowhow/sources/capabilities').then(setCaps).catch(() => {}); }, []);
 
   const addClaim = async () => {
     if (!mc.trim()) return;
@@ -814,17 +892,22 @@ function MineView({ setErr, mine, back }) {
     setBusy(false);
   };
   const onFiles = async (fileList) => {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
+    if (!fileList || !fileList.length) return;
     setBusy(true); setErr('');
     try {
-      const fd = new FormData();
-      files.forEach((f) => fd.append('files', f, f.name));
-      fd.append('collection', mine); fd.append('role', role);
-      const headers = {}; const nid = getActiveNewsroomId(); if (nid) headers['X-Newsroom-Id'] = nid;
-      const res = await fetch('/api/beaiready/knowhow/sources/upload', { method: 'POST', body: fd, credentials: 'include', headers });
-      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.message || 'Upload failed'); }
-      load();
+      const r = await uploadFileList(fileList, { collection: mine, role });
+      if (!r.added) setErr(r.error || 'Nothing uploaded.');
+      else { if (r.skipped) setErr(`Uploaded ${r.added}; skipped ${r.skipped} unsupported file(s).`); load(); }
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const addDrive = async () => {
+    if (!driveFolder.trim()) return;
+    setBusy(true); setErr('');
+    try {
+      const r = await apiFetch('/beaiready/knowhow/sources/drive', { method: 'POST', body: JSON.stringify({ folder: driveFolder.trim(), ...meta() }) });
+      if (r?.error) setErr(r.message || 'Drive import failed.');
+      else { setDriveFolder(''); load(); }
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -850,14 +933,22 @@ function MineView({ setErr, mine, back }) {
             <option value="claim">Company's own claim</option>
             <option value="reporting">EnviroPress reporting</option>
             <option value="external">External source</option>
+            <option value="criteria">Judging criteria</option>
           </select>
           <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload files<input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+          <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload folder<input type="file" hidden webkitdirectory="" directory="" multiple onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
         </div>
-        <p style={{ ...muted, fontSize: 12, margin: 0 }}>PDF, Word, Excel, CSV or text. For a <b>video or audio</b> claim, upload or paste its <b>transcript</b> — the words are what gets tested.</p>
+        <p style={{ ...muted, fontSize: 12, margin: 0 }}>PDF, Word, Excel, CSV or text — a whole folder at once is fine. For a <b>video or audio</b> claim, upload or paste its <b>transcript</b>. <b>Judging criteria</b> are the standards this mine's claims are tested against.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="…or paste a web-page URL" style={input} />
           <button onClick={addUrl} disabled={busy || !url.trim()} style={btn}>Add</button>
         </div>
+        {caps.drive && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={driveFolder} onChange={(e) => setDriveFolder(e.target.value)} placeholder="…or a Google Drive folder link" style={input} />
+            <button onClick={addDrive} disabled={busy || !driveFolder.trim()} style={btn}>Import</button>
+          </div>
+        )}
         <input value={ttl} onChange={(e) => setTtl(e.target.value)} placeholder="…or a note title (optional)" style={input} />
         <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="…or paste text — a claim, a finding, a quote" style={{ ...input, minHeight: 56, resize: 'vertical' }} />
         <div><button onClick={addNote} disabled={busy || !text.trim()} style={btn}>Add note</button></div>
@@ -1077,28 +1168,129 @@ function TrendChart({ snapshots }) {
   );
 }
 
+function StatTile({ value, label, sub, accent }) {
+  return (
+    <div style={{ ...card, padding: '12px 14px', flex: '1 1 130px', minWidth: 118 }}>
+      <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.05, color: accent || '#1c1b1a' }}>{value}</div>
+      <div style={{ ...muted, fontSize: 12, marginTop: 3 }}>{label}</div>
+      {sub != null && <div style={{ fontSize: 11, color: '#8a8076', marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// Horizontal bars: theme by claim count, with the false/misleading share filled red.
+function ThemeBars({ themes }) {
+  if (!themes.length) return <p style={muted}>No themes yet — run Verify and KnowHow tags each claim by topic.</p>;
+  const max = Math.max(1, ...themes.map((t) => t.total));
+  return (
+    <div style={{ display: 'grid', gap: 9 }}>
+      {themes.map((t) => (
+        <div key={t.name}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 3 }}>
+            <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{t.name}</span>
+            <span style={muted}>{t.total} claim{t.total === 1 ? '' : 's'}{t.bad ? ` · ${t.bad} false/misleading` : ''}</span>
+          </div>
+          <div style={{ height: 12, borderRadius: 6, overflow: 'hidden', border: '1px solid #eee5da', width: `${Math.max(10, (t.total / max) * 100)}%`, background: '#ece6dc' }}>
+            {t.bad > 0 && <div style={{ width: `${(t.bad / t.total) * 100}%`, height: '100%', background: VERDICT_COLORS.contradicted }} />}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ClaimsReport({ setErr, back }) {
   const [d, setD] = useState(null);
-  useEffect(() => { apiFetch('/beaiready/knowhow/claims/report').then(setD).catch((e) => setErr(e.message)); }, [setErr]);
+  const [claims, setClaims] = useState(null);
+  useEffect(() => {
+    apiFetch('/beaiready/knowhow/claims/report').then(setD).catch((e) => setErr(e.message));
+    apiFetch('/beaiready/knowhow/claims/db/search').then((r) => setClaims(r.claims || [])).catch(() => setClaims([]));
+  }, [setErr]);
+  const exp = async (fmt) => {
+    setErr('');
+    try {
+      const headers = {}; const nid = getActiveNewsroomId(); if (nid) headers['X-Newsroom-Id'] = nid;
+      const res = await fetch(`/api/beaiready/knowhow/claims/export?format=${fmt}`, { credentials: 'include', headers });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `claims-database.${fmt === 'json' ? 'json' : 'csv'}`; a.click(); URL.revokeObjectURL(a.href);
+    } catch (e) { setErr(e.message); }
+  };
   if (!d) return <p style={muted}>Loading…</p>;
+
+  const mines = d.mines || [];
+  const sum = (k) => mines.reduce((a, m) => a + (m.counts?.[k] || 0), 0);
+  const supported = sum('supported'), contradicted = sum('contradicted'), misleading = sum('misleading'), unverified = sum('unverified'), pending = sum('pending');
+  const total = supported + contradicted + misleading + unverified + pending;
+  const tested = total - pending;
+  const bad = contradicted + misleading;
+  const rate = tested ? Math.round((bad / tested) * 100) : 0;
+  const sources = mines.reduce((a, m) => a + (m.sources.claim + m.sources.reporting + m.sources.external), 0);
+  const lastAt = (d.snapshots || []).reduce((mx, s) => { const t = new Date(s.taken_at); return t > mx ? t : mx; }, new Date(0));
+  const lastLabel = lastAt.getTime() > 0 ? lastAt.toLocaleDateString() : '—';
+
+  const tmap = {};
+  for (const c of (claims || [])) for (const th of (c.themes || [])) {
+    tmap[th] = tmap[th] || { name: th, total: 0, bad: 0 };
+    tmap[th].total++; if (c.verdict === 'contradicted' || c.verdict === 'misleading') tmap[th].bad++;
+  }
+  const themes = Object.values(tmap).sort((a, b) => b.bad - a.bad || b.total - a.total).slice(0, 8);
+  const ranked = [...mines].sort((a, b) => ((b.counts.contradicted || 0) + (b.counts.misleading || 0)) - ((a.counts.contradicted || 0) + (a.counts.misleading || 0)));
+
   return (
     <>
-      <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>
-      <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 10px' }}>Claims verification report</h2>
-      {d.mines.length === 0 ? <p style={muted}>No mines yet.</p> : (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {d.mines.map((m) => (
-            <div key={m.name} style={card}>
-              <strong style={{ fontSize: 15 }}>{m.name}</strong>
-              <div style={{ ...muted, fontSize: 11.5 }}>{m.claims} claim{m.claims === 1 ? '' : 's'} tested · {m.sources.claim + m.sources.reporting + m.sources.external} sources</div>
-              <VerdictBar counts={m.counts} />
-            </div>
-          ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <button onClick={back} style={tag}>← All mines</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => exp('csv')} style={tag}>Export CSV</button>
+          <button onClick={() => window.print()} style={tag}>Print / PDF</button>
         </div>
+      </div>
+      <h2 style={{ fontSize: 22, fontWeight: 800, margin: '10px 0 2px' }}>Claims dashboard</h2>
+      <p style={{ ...muted, marginTop: 0 }}>What the mines claim, tested against your evidence and criteria — at a glance.</p>
+
+      {total === 0 ? <p style={muted}>No claims yet. Add a mine's documents and hit Verify to populate the dashboard.</p> : (
+        <>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '6px 0 18px' }}>
+            <StatTile value={`${rate}%`} label="False or misleading" sub={`${bad} of ${tested} tested`} accent={VERDICT_COLORS.contradicted} />
+            <StatTile value={mines.length} label={`Mine${mines.length === 1 ? '' : 's'} tracked`} />
+            <StatTile value={total} label="Claims" sub={pending ? `${pending} awaiting check` : 'all checked'} />
+            <StatTile value={contradicted} label="Contradicted" accent={VERDICT_COLORS.contradicted} />
+            <StatTile value={misleading} label="Misleading" accent={VERDICT_COLORS.misleading} />
+            <StatTile value={supported} label="Supported" accent={VERDICT_COLORS.supported} />
+            <StatTile value={sources} label="Sources" />
+            <StatTile value={lastLabel} label="Last verified" />
+          </div>
+
+          <div className="hub-section-label">Mines — most false claims first</div>
+          <div style={{ display: 'grid', gap: 10, margin: '4px 0 18px' }}>
+            {ranked.map((m) => {
+              const mBad = (m.counts.contradicted || 0) + (m.counts.misleading || 0);
+              return (
+                <div key={m.name} style={card}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <strong style={{ fontSize: 15 }}>{m.name}</strong>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: mBad ? VERDICT_COLORS.contradicted : '#8a8076' }}>{mBad} false/misleading</span>
+                  </div>
+                  <div style={{ ...muted, fontSize: 11.5 }}>{m.claims} claim{m.claims === 1 ? '' : 's'} · {m.sources.claim + m.sources.reporting + m.sources.external} sources{m.last_verified ? ` · ${new Date(m.last_verified).toLocaleDateString()}` : ''}</div>
+                  <VerdictBar counts={m.counts} />
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+            <div>
+              <div className="hub-section-label">Themes — where false claims cluster</div>
+              <div style={{ ...card, marginTop: 4 }}><ThemeBars themes={themes} /></div>
+            </div>
+            <div>
+              <div className="hub-section-label">Trend over time</div>
+              <div style={{ ...card, marginTop: 4 }}><TrendChart snapshots={d.snapshots} /></div>
+            </div>
+          </div>
+        </>
       )}
-      <div className="hub-section-label" style={{ marginTop: 20 }}>Over time</div>
-      <TrendChart snapshots={d.snapshots} />
-      <div style={{ marginTop: 16 }}><button onClick={() => window.print()} style={tag}>Print / save as PDF</button></div>
     </>
   );
 }
