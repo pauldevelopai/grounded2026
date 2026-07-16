@@ -1073,7 +1073,7 @@ function UnfiledPanel({ mines, setErr, onFiled }) {
 
 // Generated reports: each run is kept and stamped, so results accumulate into a record
 // the newsroom can look back through as more evidence lands.
-function ReportsPanel({ mines, setErr, onOpen }) {
+function ReportsPanel({ mines, setErr, onOpen, onCount }) {
   const [reports, setReports] = useState(null);
   const [scope, setScope] = useState('');
   const [kind, setKind] = useState('inconsistencies');
@@ -1081,6 +1081,7 @@ function ReportsPanel({ mines, setErr, onOpen }) {
   const [viewing, setViewing] = useState(null);
   const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/reports').then((d) => setReports(d.reports || [])).catch((e) => setErr(e.message)), [setErr]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (reports) onCount?.(reports.length); }, [reports, onCount]);
 
   const gen = async () => {
     setBusy(true); setErr('');
@@ -1182,6 +1183,16 @@ function InconsistencyTable({ mines, onJump }) {
   );
 }
 
+// The job is a process, so the tabs are its steps, in the order you do them.
+const STEPS = [
+  { key: 'mines', n: 1, label: 'Mines', hint: 'Step 1 — which mines are you tracking? Everything else hangs off these.' },
+  { key: 'criteria', n: 2, label: 'Criteria', hint: 'Step 2 — the standards you judge claims against. Optional, but it is what makes a verdict defensible.' },
+  { key: 'evidence', n: 3, label: 'Evidence', hint: 'Step 3 — for each mine: what they claim, your reporting, and independent sources.' },
+  { key: 'check', n: 4, label: 'Check', hint: 'Step 4 — test every claim against the evidence and your criteria.' },
+  { key: 'results', n: 5, label: 'Results', hint: 'Step 5 — what does not match, and what is missing on either side.' },
+  { key: 'reports', n: 6, label: 'Reports', hint: 'Step 6 — save a stamped snapshot, search everything, export.' },
+];
+
 function ClaimsWorkspace({ setErr }) {
   const [mines, setMines] = useState(null);
   const [report, setReport] = useState(null);
@@ -1192,16 +1203,29 @@ function ClaimsWorkspace({ setErr }) {
   const [verifying, setVerifying] = useState('');
   const [critKey, setCritKey] = useState(0);       // bump to refresh the org-wide criteria list
   const [showSearch, setShowSearch] = useState(false);
+  const [step, setStep] = useState(null);          // null until we know where to drop you
+  const [critCount, setCritCount] = useState(0);
+  const [reportCount, setReportCount] = useState(0);
 
   const loadMines = useCallback(() => apiFetch('/beaiready/knowhow/claims').then((d) => setMines(d.mines || [])).catch((e) => setErr(e.message)), [setErr]);
   const loadDash = useCallback(() => {
     apiFetch('/beaiready/knowhow/claims/report').then(setReport).catch(() => {});
     apiFetch('/beaiready/knowhow/claims/db/search').then((r) => setAllClaims(r.claims || [])).catch(() => setAllClaims([]));
     apiFetch('/beaiready/knowhow/claims/analysis').then(setAnalysis).catch(() => {});
+    // counts drive the step ticks, so they must be true whether or not you've opened that step
+    apiFetch('/beaiready/knowhow/claims/criteria').then((d) => setCritCount((d.criteria || []).length)).catch(() => {});
+    apiFetch('/beaiready/knowhow/claims/reports').then((d) => setReportCount((d.reports || []).length)).catch(() => {});
   }, []);
   const refresh = useCallback(() => { loadMines(); loadDash(); }, [loadMines, loadDash]);
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { if (!target && mines?.length) setTarget(mines[0].name); }, [mines, target]);
+  // Drop you at the first step that still needs you — and at Results once there's an answer.
+  useEffect(() => {
+    if (step !== null || mines == null) return;
+    const tested = mines.some((m) => m.claims > 0);
+    const ready = mines.some((m) => m.sources.claim > 0 && (m.sources.reporting + m.sources.external) > 0);
+    setStep(!mines.length ? 'mines' : tested ? 'results' : ready ? 'check' : 'evidence');
+  }, [mines, step]);
 
   const delMine = async (name) => {
     if (!window.confirm(`Remove "${name}" from the list? Its documents and verdicts stay.`)) return;
@@ -1236,7 +1260,7 @@ function ClaimsWorkspace({ setErr }) {
     } catch (e) { setErr(e.message); }
   };
 
-  if (mines == null) return <p style={muted}>Loading…</p>;
+  if (mines == null || step === null) return <p style={muted}>Loading…</p>;
 
   const list = report?.mines || mines;
   const sum = (k) => list.reduce((a, m) => a + (m.counts?.[k] || 0), 0);
@@ -1254,153 +1278,228 @@ function ClaimsWorkspace({ setErr }) {
   }
   const themes = Object.values(tmap).sort((a, b) => b.bad - a.bad || b.total - a.total).slice(0, 6);
 
+  const hasMines = mines.length > 0;
+  const readyMines = list.filter((m) => m.sources.claim > 0 && (m.sources.reporting + m.sources.external) > 0);
+  const done = { mines: hasMines, criteria: critCount > 0, evidence: readyMines.length > 0, check: total > 0, results: total > 0, reports: reportCount > 0 };
+  const stepIdx = STEPS.findIndex((s) => s.key === step);
+  const next = STEPS[stepIdx + 1];
+
   return (
     <>
-      {/* ── The mines lead: nothing else on this page works without one ── */}
-      <MinesBar mines={mines} setErr={setErr} onJump={(n) => { setOpenMine(n); setTarget(n); }}
-        onChanged={(n) => { if (n) setTarget(n); refresh(); }} />
-
-      {/* ── 1. What the data means, at a glance ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div className="hub-section-label" style={{ margin: 0 }}>Where the claims don't match the evidence</div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => exp('csv')} style={tag}>Export CSV</button>
-          <button onClick={() => window.print()} style={tag}>Print</button>
-        </div>
+      {/* The process in order — each tab is a step, and you can see where you are in it. */}
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #eee5da', marginBottom: 6, flexWrap: 'wrap' }}>
+        {STEPS.map((s) => {
+          const active = step === s.key;
+          return (
+            <button key={s.key} onClick={() => { setErr(''); setStep(s.key); }} title={s.hint}
+              style={{ ...tabBtn, ...(active ? tabActive : {}), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-flex', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+                fontSize: 10.5, fontWeight: 700, flex: '0 0 auto',
+                background: done[s.key] ? '#166534' : active ? '#c75b39' : '#e8e2d8',
+                color: done[s.key] || active ? '#fff' : '#8a8076' }}>{done[s.key] ? '✓' : s.n}</span>
+              {s.label}
+            </button>
+          );
+        })}
       </div>
+      <p style={{ ...muted, fontSize: 12.5, margin: '0 0 16px' }}>{STEPS[stepIdx]?.hint}</p>
 
-      {total === 0 ? (
-        <div style={{ ...card, margin: '8px 0 20px' }}>
-          <p style={{ ...muted, margin: 0 }}>Nothing tested yet. Add a mine above, give it the mine's own documents plus your reporting, then press <b>Check this mine</b> — the inconsistencies will appear here.</p>
-        </div>
+      {/* ── Step 1 · Mines ── */}
+      {step === 'mines' && (
+        <>
+          <MinesBar mines={mines} setErr={setErr} onJump={(n) => { setTarget(n); setStep('evidence'); }}
+            onChanged={(n) => { if (n) setTarget(n); refresh(); }} />
+          {hasMines && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {mines.map((m) => (
+                <div key={m.name} style={{ ...card, padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div>
+                    <strong style={{ fontSize: 14.5 }}>{m.name}</strong>
+                    <div style={{ ...muted, fontSize: 11.5 }}>{m.sources.claim} claim docs · {m.sources.reporting} reporting · {m.sources.external} external</div>
+                  </div>
+                  <button onClick={() => delMine(m.name)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Step 2 · Criteria ── */}
+      {step === 'criteria' && (
+        <>
+          <p style={{ ...muted, fontSize: 12.5, margin: '0 0 8px', maxWidth: '72ch' }}>
+            The standards every mine's claims are measured against — environmental law, rehabilitation norms, disclosure
+            rules. Load these <b>before</b> you Check: without them a claim is judged only against your evidence; with them
+            it's judged against the law. This step is optional, but it's what makes a verdict defensible.
+          </p>
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+            <DataZone zone={CRITERIA_ZONE} collection={target} setErr={setErr} onAdded={() => { refresh(); setCritKey((k) => k + 1); }} />
+            <CriteriaList setErr={setErr} reloadKey={critKey} onCount={setCritCount} />
+          </div>
+        </>
+      )}
+
+      {/* ── Step 3 · Evidence ── */}
+      {step === 'evidence' && (!hasMines ? (
+        <p style={muted}>Add a mine in step 1 first — evidence has to belong to one.</p>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '8px 0 14px' }}>
-            <StatTile value={`${rate}%`} label="Claims that don't hold up" sub={`${bad} of ${tested} tested`} accent={VERDICT_COLORS.contradicted} />
-            <StatTile value={contradicted} label="Contradicted" accent={VERDICT_COLORS.contradicted} />
-            <StatTile value={misleading} label="Misleading" accent={VERDICT_COLORS.misleading} />
-            <StatTile value={supported} label="Supported" accent={VERDICT_COLORS.supported} />
-            <StatTile value={unverified} label="Not settled" />
-            <StatTile value={list.length} label={`Mine${list.length === 1 ? '' : 's'}`} />
-            <StatTile value={sources} label="Documents" />
+          <div style={{ ...card, margin: '0 0 10px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ ...muted, fontSize: 13 }}>Add to mine:</span>
+            <select value={target} onChange={(e) => setTarget(e.target.value)} style={sel}>
+              {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+            </select>
           </div>
-          {analysis && (
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))' }}>
+            {MINE_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr} onAdded={refresh} />)}
+          </div>
+          <UnfiledPanel mines={mines} setErr={setErr} onFiled={refresh} />
+        </>
+      ))}
+
+      {/* ── Step 4 · Check ── */}
+      {step === 'check' && (
+        <>
+          <div style={{ ...card, marginBottom: 12 }}>
+            <p style={{ ...muted, fontSize: 12.5, margin: '0 0 10px' }}>
+              This pulls the concrete claims out of each mine's <b>own</b> documents and tests every one against your
+              reporting, your independent sources and your criteria. It re-runs itself nightly as you add evidence, so
+              you only need to press this when you want an answer now.
+            </p>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select value={target} onChange={(e) => setTarget(e.target.value)} style={sel}>
+                {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+              </select>
+              <button onClick={verifyOne} disabled={!target} style={btn}>Check {target || 'this mine'}</button>
+              <button onClick={verifyAll} disabled={!mines.length} style={tag}>Check every mine</button>
+              {verifying && <span style={{ ...muted, fontSize: 12 }}>{verifying}</span>}
+            </div>
+          </div>
+          <div className="hub-section-label">Is each mine ready?</div>
+          <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+            {list.map((m) => {
+              const missing = [!m.sources.claim ? 'nothing the mine claims' : null, !(m.sources.reporting + m.sources.external) ? 'nothing to test it against' : null].filter(Boolean);
+              return (
+                <div key={m.name} style={{ ...card, padding: '9px 12px', display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: 13.5 }}>{m.name}</strong>
+                  <span style={{ fontSize: 12, color: missing.length ? '#b45309' : '#166534', fontWeight: 700 }}>
+                    {missing.length ? `Not ready — ${missing.join(' and ')}` : `Ready · ${m.sources.claim} claim docs vs ${m.sources.reporting + m.sources.external} to test against`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* ── Step 5 · Results ── */}
+      {step === 'results' && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div className="hub-section-label" style={{ margin: 0 }}>Where the claims don't match the evidence</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => exp('csv')} style={tag}>Export CSV</button>
+              <button onClick={() => window.print()} style={tag}>Print</button>
+            </div>
+          </div>
+          {total === 0 ? (
+            <div style={{ ...card, margin: '8px 0 20px' }}>
+              <p style={{ ...muted, margin: 0 }}>Nothing tested yet — go back to step 4 and press Check.</p>
+            </div>
+          ) : (
             <>
-              <div className="hub-section-label" style={{ marginTop: 16 }}>What they claim vs what you found</div>
-              <div style={{ marginTop: 4 }}>
-                <Inconsistencies items={analysis.inconsistencies} onOpen={(n) => { setOpenMine(n); setTarget(n); }} />
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '8px 0 14px' }}>
+                <StatTile value={`${rate}%`} label="Claims that don't hold up" sub={`${bad} of ${tested} tested`} accent={VERDICT_COLORS.contradicted} />
+                <StatTile value={contradicted} label="Contradicted" accent={VERDICT_COLORS.contradicted} />
+                <StatTile value={misleading} label="Misleading" accent={VERDICT_COLORS.misleading} />
+                <StatTile value={supported} label="Supported" accent={VERDICT_COLORS.supported} />
+                <StatTile value={unverified} label="Not settled" />
+                <StatTile value={list.length} label={`Mine${list.length === 1 ? '' : 's'}`} />
+                <StatTile value={sources} label="Documents" />
+              </div>
+              {analysis && (
+                <>
+                  <div className="hub-section-label" style={{ marginTop: 16 }}>What they claim vs what you found</div>
+                  <div style={{ marginTop: 4 }}><Inconsistencies items={analysis.inconsistencies} onOpen={(n) => setOpenMine(n)} /></div>
+                </>
+              )}
+              <div className="hub-section-label" style={{ marginTop: 20 }}>By mine</div>
+              <div style={{ marginTop: 4 }}><InconsistencyTable mines={list} onJump={(n) => setOpenMine(n)} /></div>
+              <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', margin: '16px 0 22px' }}>
+                <div>
+                  <div className="hub-section-label">Themes — where they cluster</div>
+                  <div style={{ ...card, marginTop: 4 }}><ThemeBars themes={themes} /></div>
+                </div>
+                <div>
+                  <div className="hub-section-label">Found over time</div>
+                  <div style={{ ...card, marginTop: 4 }}><TrendChart snapshots={report?.snapshots} /></div>
+                </div>
               </div>
             </>
           )}
 
-          <div className="hub-section-label" style={{ marginTop: 20 }}>By mine</div>
-          <div style={{ marginTop: 4 }}>
-            <InconsistencyTable mines={list} onJump={(n) => { setOpenMine(n); setTarget(n); }} />
-          </div>
-          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', margin: '16px 0 22px' }}>
-            <div>
-              <div className="hub-section-label">Themes — where they cluster</div>
-              <div style={{ ...card, marginTop: 4 }}><ThemeBars themes={themes} /></div>
+          {analysis && (analysis.untested.length > 0 || analysis.unused.length > 0 || analysis.balance.some((b) => b.missing.length)) && (
+            <>
+              <div className="hub-section-label" style={{ marginTop: 18 }}>Gaps in the data — both sides</div>
+              <div style={{ margin: '4px 0 22px' }}><GapsPanel a={analysis} onOpen={(n) => setOpenMine(n)} /></div>
+            </>
+          )}
+
+          <div className="hub-section-label">Mines &amp; their claims</div>
+          {mines.length === 0 ? <p style={muted}>No mines yet.</p> : (
+            <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
+              {mines.map((m) => (
+                <div key={m.name} style={card}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => setOpenMine(openMine === m.name ? null : m.name)}
+                      style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 15, fontWeight: 800, color: '#1c1b1a', cursor: 'pointer' }}>
+                      {openMine === m.name ? '▾' : '▸'} {m.name}
+                    </button>
+                    <span style={{ ...muted, fontSize: 11.5 }}>{m.claims} claim{m.claims === 1 ? '' : 's'}</span>
+                  </div>
+                  <VerdictBar counts={m.counts} />
+                  {openMine === m.name && (
+                    <div style={{ marginTop: 12, borderTop: '1px solid #eee5da', paddingTop: 10 }}>
+                      <MineView setErr={setErr} mine={m.name} embedded onChanged={refresh} />
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-            <div>
-              <div className="hub-section-label">Found over time</div>
-              <div style={{ ...card, marginTop: 4 }}><TrendChart snapshots={report?.snapshots} /></div>
-            </div>
-          </div>
+          )}
         </>
       )}
 
-      {/* Gaps matter most before anything is tested — a mine missing a whole side shows here first. */}
-      {analysis && (analysis.untested.length > 0 || analysis.unused.length > 0 || analysis.balance.some((b) => b.missing.length)) && (
+      {/* ── Step 6 · Reports ── */}
+      {step === 'reports' && (
         <>
-          <div className="hub-section-label" style={{ marginTop: 18 }}>Gaps in the data — both sides</div>
-          <div style={{ margin: '4px 0 22px' }}>
-            <GapsPanel a={analysis} onOpen={(n) => { setOpenMine(n); setTarget(n); }} />
+          <ReportsPanel mines={mines} setErr={setErr} onOpen={(n) => { setOpenMine(n); setStep('results'); }} onCount={setReportCount} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 0' }}>
+            <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Search every claim</div>
+            <button onClick={() => setShowSearch(!showSearch)} style={tag}>{showSearch ? 'Hide' : 'Open search'}</button>
           </div>
+          {showSearch && <div style={{ marginTop: 8 }}><ClaimsDatabase setErr={setErr} embedded open={(n) => { setOpenMine(n); setStep('results'); }} /></div>}
         </>
       )}
 
-      {/* Anything already on file but not yet part of a mine — shown so it never looks lost. */}
-      <UnfiledPanel mines={mines} setErr={setErr} onFiled={refresh} />
-
-      {/* ── 2. Evidence for one mine, then run the check ── */}
-      <div className="hub-section-label" style={{ marginTop: 8 }}>Add evidence about a mine</div>
-      <div style={{ ...card, margin: '4px 0 10px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={{ ...muted, fontSize: 13 }}>Add to mine:</span>
-        <select value={target} onChange={(e) => setTarget(e.target.value)} style={sel}>
-          {mines.length === 0 && <option value="">— add a mine at the top of the page first —</option>}
-          {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-        </select>
-      </div>
-      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))' }}>
-        {MINE_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr} onAdded={refresh} />)}
-      </div>
-      <div style={{ ...card, margin: '10px 0 22px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button onClick={verifyOne} disabled={!target} style={btn}>Check {target || 'this mine'}</button>
-        <button onClick={verifyAll} disabled={!mines.length} style={tag}>Check every mine</button>
-        <span style={{ ...muted, fontSize: 12, flex: 1 }}>
-          {verifying || 'Pulls the claims out of the mine’s own documents and tests each against your reporting, external sources and criteria. Re-runs itself nightly as you add evidence.'}
-        </span>
-      </div>
-
-      {/* ── Criteria are the yardstick for EVERY mine — kept apart from the per-mine zones ── */}
-      <div className="hub-section-label">Judging criteria — used for every mine</div>
-      <p style={{ ...muted, fontSize: 12, margin: '2px 0 6px', maxWidth: '70ch' }}>
-        The standards KnowHow measures every mine's claims against. These apply across all mines by default — switch a
-        document to “Only this mine” if a standard is specific to the mine selected above.
-      </p>
-      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-        <DataZone zone={CRITERIA_ZONE} collection={target} setErr={setErr} onAdded={() => { refresh(); setCritKey((k) => k + 1); }} />
-        <CriteriaList setErr={setErr} reloadKey={critKey} />
-      </div>
-
-      {/* ── 3. The mines themselves ── */}
-      <div className="hub-section-label">Mines &amp; their claims</div>
-      {mines.length === 0 ? <p style={muted}>No mines yet.</p> : (
-        <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
-          {mines.map((m) => (
-            <div key={m.name} style={card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <button onClick={() => setOpenMine(openMine === m.name ? null : m.name)}
-                  style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 15, fontWeight: 800, color: '#1c1b1a', cursor: 'pointer' }}>
-                  {openMine === m.name ? '▾' : '▸'} {m.name}
-                </button>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ ...muted, fontSize: 11.5 }}>{m.claims} claim{m.claims === 1 ? '' : 's'}</span>
-                  <button onClick={() => delMine(m.name)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
-                </div>
-              </div>
-              <VerdictBar counts={m.counts} />
-              {openMine === m.name && (
-                <div style={{ marginTop: 12, borderTop: '1px solid #eee5da', paddingTop: 10 }}>
-                  <MineView setErr={setErr} mine={m.name} embedded onChanged={refresh} />
-                </div>
-              )}
-            </div>
-          ))}
+      {/* onward — the process has an end */}
+      {next && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24, paddingTop: 12, borderTop: '1px solid #eee5da' }}>
+          <button onClick={() => { setErr(''); setStep(next.key); }} style={btn}>Next: {next.n}. {next.label} →</button>
         </div>
       )}
-
-      {/* ── 4. Reports: build a record that accumulates over time ── */}
-      <div className="hub-section-label" style={{ marginTop: 22 }}>Reports</div>
-      <ReportsPanel mines={mines} setErr={setErr} onOpen={(n) => { setOpenMine(n); setTarget(n); }} />
-
-      {/* ── 5. Search every claim across every mine ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 0' }}>
-        <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Search every claim</div>
-        <button onClick={() => setShowSearch(!showSearch)} style={tag}>{showSearch ? 'Hide' : 'Open search'}</button>
-      </div>
-      {showSearch && <div style={{ marginTop: 8 }}><ClaimsDatabase setErr={setErr} embedded open={(n) => { setOpenMine(n); setTarget(n); }} /></div>}
     </>
   );
 }
 
 // Org-wide judging criteria — the standards every mine's claims are tested against.
 // The org-wide criteria on file — adding is done in the "Judging criteria" zone above.
-function CriteriaList({ setErr, reloadKey }) {
+function CriteriaList({ setErr, reloadKey, onCount }) {
   const [items, setItems] = useState(null);
   const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/criteria').then((d) => setItems(d.criteria || [])).catch(() => setItems([])), []);
   useEffect(() => { load(); }, [load, reloadKey]);
+  useEffect(() => { if (items) onCount?.(items.length); }, [items, onCount]);
   const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
   if (!items) return null;
   if (!items.length) {
