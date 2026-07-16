@@ -95,6 +95,12 @@ function renderOgBlock({ title, description, url, image, type = 'article', siteN
 }
 
 function serveHtml(res, og) {
+  // The shell names the content-hashed bundles, so it must never be served stale: a cached
+  // index.html keeps pointing at the PREVIOUS build's /assets/index-<hash>.js, and a deploy
+  // looks like it silently did nothing. `no-cache` still allows caching — it just forces a
+  // revalidation, which the existing ETag answers with a cheap 304 when nothing changed.
+  // The hashed assets themselves are immutable and stay cached hard (Caddy sets that).
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   if (!indexTemplate) {
     // Not built — just pass through to the SPA (user-agents that run JS will
     // still see the page; crawlers get a minimal placeholder).
