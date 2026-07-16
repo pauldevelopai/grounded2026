@@ -297,6 +297,63 @@ export async function claimsReport(newsroomId) {
   return { mines, snapshots };
 }
 
+// ── The output: what doesn't match, and what's missing on each side ──
+//
+// Three things a newsroom actually needs out of this:
+//  1. the INCONSISTENCIES — claims the evidence contradicts, with the quote that does it;
+//  2. the CLAIM-SIDE GAP — claims nothing in your files can test yet (a reporting to-do);
+//  3. the REPORTING-SIDE GAP — your reporting/independent sources that no claim rests on
+//     (what the mine stays silent about — often the story).
+export async function claimsAnalysis(newsroomId) {
+  const { rows: inc } = await pool.query(
+    `SELECT id, collection, claim_text, verdict, rationale, confidence, themes, status
+       FROM beaiready_claim_checks
+      WHERE newsroom_id=$1 AND verdict IN ('contradicted','misleading')
+      ORDER BY confidence DESC NULLS LAST, updated_at DESC LIMIT 50`, [newsroomId]);
+  const ids = inc.map((r) => r.id);
+  const evByClaim = {};
+  if (ids.length) {
+    const { rows: ev } = await pool.query(
+      `SELECT claim_id, title, role, quote, stance FROM beaiready_claim_evidence
+        WHERE claim_id = ANY($1) AND stance IN ('contradicts','counterclaim') ORDER BY manual, created_at`, [ids]);
+    for (const e of ev) (evByClaim[e.claim_id] ||= []).push({ title: e.title, role: e.role, stance: e.stance, quote: (decryptFor(newsroomId, e.quote) || '').slice(0, 300) });
+  }
+  const inconsistencies = inc.map((c) => ({ ...c, evidence: evByClaim[c.id] || [] }));
+
+  // Claim-side gap: a claim with no evidence attached at all — nothing on file can test it.
+  const { rows: untested } = await pool.query(
+    `SELECT c.id, c.collection, c.claim_text, c.verdict, c.themes
+       FROM beaiready_claim_checks c
+      WHERE c.newsroom_id=$1 AND c.verdict IN ('unverified','pending')
+        AND NOT EXISTS (SELECT 1 FROM beaiready_claim_evidence e WHERE e.claim_id = c.id)
+      ORDER BY c.collection, c.updated_at DESC LIMIT 100`, [newsroomId]);
+
+  // Reporting-side gap: your reporting/external that no verdict has ever rested on.
+  const { rows: unused } = await pool.query(
+    `SELECT s.id, s.collection, s.title, s.role
+       FROM beaiready_company_sources s
+      WHERE s.newsroom_id=$1 AND s.role IN ('reporting','external') AND s.collection IS NOT NULL
+        AND s.inclusion <> 'exclude' AND s.sensitivity <> 'withdrawn'
+        AND NOT EXISTS (SELECT 1 FROM beaiready_claim_evidence e WHERE e.source_id = s.id)
+      ORDER BY s.collection, s.created_at DESC LIMIT 100`, [newsroomId]);
+
+  // Balance: a mine missing a whole side of the comparison.
+  const mines = await listMines(newsroomId);
+  const balance = mines.map((m) => ({
+    name: m.name,
+    sources: m.sources,
+    missing: [
+      !m.sources.claim ? 'nothing the mine itself claims' : null,
+      !m.sources.reporting ? 'none of your own reporting' : null,
+      !m.sources.external ? 'no independent sources' : null,
+    ].filter(Boolean),
+    untested: untested.filter((u) => u.collection === m.name).length,
+    unused: unused.filter((u) => u.collection === m.name).length,
+  }));
+
+  return { inconsistencies, untested, unused, balance };
+}
+
 // ── Phase 4: the cross-mine claims database — search, themes, export ──
 
 // Filterable search across ALL of a tenant's claims (claim_text is stored in the clear).

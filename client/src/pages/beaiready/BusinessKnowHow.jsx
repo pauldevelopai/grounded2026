@@ -861,6 +861,94 @@ function DataZone({ zone, collection, setErr, onAdded }) {
   );
 }
 
+// The output proper: each claim the evidence contradicts, with the quote that does it.
+function Inconsistencies({ items, onOpen }) {
+  if (!items.length) {
+    return <p style={{ ...muted, margin: 0 }}>Nothing contradicted yet — either the claims hold up, or there isn't enough evidence on file to test them. Check the gaps below.</p>;
+  }
+  return (
+    <div style={{ display: 'grid', gap: 9 }}>
+      {items.map((c) => (
+        <div key={c.id} style={{ ...card, borderLeft: `4px solid ${VERDICT_COLORS[c.verdict]}` }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+            <span style={{ ...pill, background: `${VERDICT_COLORS[c.verdict]}22`, color: VERDICT_COLORS[c.verdict], border: `1px solid ${VERDICT_COLORS[c.verdict]}` }}>{VERDICT_LABEL[c.verdict]}</span>
+            <button onClick={() => onOpen(c.collection)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 12, fontWeight: 700, color: '#c75b39', cursor: 'pointer' }}>{c.collection}</button>
+            {typeof c.confidence === 'number' && <span style={{ ...muted, fontSize: 11 }}>confidence {Math.round(c.confidence * 100)}%</span>}
+            {(c.themes || []).map((t) => <span key={t} style={{ ...muted, fontSize: 11 }}>· {t}</span>)}
+          </div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, margin: '6px 0 0' }}>They claim: “{c.claim_text}”</div>
+          {c.rationale && <div style={{ fontSize: 12.5, color: '#5b5249', marginTop: 4 }}>{c.rationale}</div>}
+          {c.evidence.map((e, i) => (
+            <div key={i} style={{ marginTop: 6, borderLeft: `3px solid ${STANCE_COLOR[e.stance] || '#e4dcd2'}`, paddingLeft: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: STANCE_COLOR[e.stance] || '#8a8076' }}>
+                {e.stance === 'counterclaim' ? 'Counterclaim' : 'But your evidence says'}{e.title ? ` · ${e.title}` : ''}{e.role ? ` (${ROLE_LABEL[e.role] || e.role})` : ''}
+              </div>
+              <div style={{ fontSize: 12, fontStyle: 'italic', color: '#5b5249' }}>“{e.quote}”</div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The gaps, on both sides of the comparison.
+function GapsPanel({ a, onOpen }) {
+  const shaky = (a.balance || []).filter((b) => b.missing.length);
+  const Col = ({ title, count, blurb, empty, children }) => (
+    <div style={{ ...card, alignContent: 'start' }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{title} <span style={{ ...muted, fontWeight: 400 }}>({count})</span></div>
+      <p style={{ ...muted, fontSize: 11.5, margin: '3px 0 8px' }}>{blurb}</p>
+      {count === 0 ? <p style={{ ...muted, fontSize: 12, margin: 0 }}>{empty}</p> : children}
+    </div>
+  );
+  return (
+    <>
+      {shaky.length > 0 && (
+        <div style={{ ...card, marginBottom: 10, background: '#fffdf7', borderColor: '#f0e4c4' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Mines missing a whole side of the comparison</div>
+          {shaky.map((b) => (
+            <div key={b.name} style={{ fontSize: 12.5, marginTop: 3 }}>
+              <button onClick={() => onOpen(b.name)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 12.5, fontWeight: 700, color: '#c75b39', cursor: 'pointer' }}>{b.name}</button>
+              <span style={muted}> — has {b.missing.join(', ')}.</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+        <Col title="Claims you can’t test yet" count={a.untested.length}
+          blurb="They claim it; nothing on file checks it either way. This is your reporting to-do list."
+          empty="None — every claim has something to test it against.">
+          <div style={{ display: 'grid', gap: 7 }}>
+            {a.untested.slice(0, 8).map((u) => (
+              <div key={u.id}>
+                <button onClick={() => onOpen(u.collection)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 11, fontWeight: 700, color: '#c75b39', cursor: 'pointer' }}>{u.collection}</button>
+                <div style={{ fontSize: 12.5, color: '#5b5249' }}>{u.claim_text}</div>
+              </div>
+            ))}
+            {a.untested.length > 8 && <div style={{ ...muted, fontSize: 11 }}>+{a.untested.length - 8} more</div>}
+          </div>
+        </Col>
+        <Col title="They claim nothing about this" count={a.unused.length}
+          blurb="Your reporting and independent sources that none of their claims rests on — what they stay silent about."
+          empty="None — every document you've added is connected to a claim.">
+          <div style={{ display: 'grid', gap: 7 }}>
+            {a.unused.slice(0, 8).map((s) => (
+              <div key={s.id}>
+                <button onClick={() => onOpen(s.collection)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 11, fontWeight: 700, color: '#c75b39', cursor: 'pointer' }}>{s.collection}</button>
+                <div style={{ fontSize: 12.5, color: '#5b5249' }}>
+                  <span style={{ ...pill, ...(ROLE_PILL[s.role] || {}), marginRight: 5 }}>{ROLE_LABEL[s.role] || s.role}</span>{s.title}
+                </div>
+              </div>
+            ))}
+            {a.unused.length > 8 && <div style={{ ...muted, fontSize: 11 }}>+{a.unused.length - 8} more</div>}
+          </div>
+        </Col>
+      </div>
+    </>
+  );
+}
+
 // Where the inconsistencies are: one row per mine, ranked by claims that don't hold up.
 function InconsistencyTable({ mines, onJump }) {
   if (!mines.length) return <p style={muted}>No mines yet — add your first below.</p>;
@@ -893,6 +981,7 @@ function ClaimsWorkspace({ setErr }) {
   const [mines, setMines] = useState(null);
   const [report, setReport] = useState(null);
   const [allClaims, setAllClaims] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
   const [target, setTarget] = useState('');        // mine the upload zones write to
   const [openMine, setOpenMine] = useState(null);  // expanded mine section
   const [newMine, setNewMine] = useState('');
@@ -904,6 +993,7 @@ function ClaimsWorkspace({ setErr }) {
   const loadDash = useCallback(() => {
     apiFetch('/beaiready/knowhow/claims/report').then(setReport).catch(() => {});
     apiFetch('/beaiready/knowhow/claims/db/search').then((r) => setAllClaims(r.claims || [])).catch(() => setAllClaims([]));
+    apiFetch('/beaiready/knowhow/claims/analysis').then(setAnalysis).catch(() => {});
   }, []);
   const refresh = useCallback(() => { loadMines(); loadDash(); }, [loadMines, loadDash]);
   useEffect(() => { refresh(); }, [refresh]);
@@ -991,7 +1081,19 @@ function ClaimsWorkspace({ setErr }) {
             <StatTile value={list.length} label={`Mine${list.length === 1 ? '' : 's'}`} />
             <StatTile value={sources} label="Documents" />
           </div>
-          <InconsistencyTable mines={list} onJump={(n) => { setOpenMine(n); setTarget(n); }} />
+          {analysis && (
+            <>
+              <div className="hub-section-label" style={{ marginTop: 16 }}>What they claim vs what you found</div>
+              <div style={{ marginTop: 4 }}>
+                <Inconsistencies items={analysis.inconsistencies} onOpen={(n) => { setOpenMine(n); setTarget(n); }} />
+              </div>
+            </>
+          )}
+
+          <div className="hub-section-label" style={{ marginTop: 20 }}>By mine</div>
+          <div style={{ marginTop: 4 }}>
+            <InconsistencyTable mines={list} onJump={(n) => { setOpenMine(n); setTarget(n); }} />
+          </div>
           <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', margin: '16px 0 22px' }}>
             <div>
               <div className="hub-section-label">Themes — where they cluster</div>
@@ -1001,6 +1103,16 @@ function ClaimsWorkspace({ setErr }) {
               <div className="hub-section-label">Found over time</div>
               <div style={{ ...card, marginTop: 4 }}><TrendChart snapshots={report?.snapshots} /></div>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* Gaps matter most before anything is tested — a mine missing a whole side shows here first. */}
+      {analysis && (analysis.untested.length > 0 || analysis.unused.length > 0 || analysis.balance.some((b) => b.missing.length)) && (
+        <>
+          <div className="hub-section-label" style={{ marginTop: 18 }}>Gaps in the data — both sides</div>
+          <div style={{ margin: '4px 0 22px' }}>
+            <GapsPanel a={analysis} onOpen={(n) => { setOpenMine(n); setTarget(n); }} />
           </div>
         </>
       )}

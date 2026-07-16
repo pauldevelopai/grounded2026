@@ -19,7 +19,7 @@ import { getSettings, saveSettings, buildBundle, bundleStats } from '../services
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 import { PRESETS } from '../services/knowhow-presets.js';
-import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria } from '../services/claims-verify.js';
+import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis } from '../services/claims-verify.js';
 
 const router = Router();
 
@@ -512,6 +512,10 @@ router.get('/claims/db/search', async (req, res) => {
 router.get('/claims/db/themes', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json({ themes: await listThemes(newsroomId) }); }
   catch (e) { console.error('[knowhow/claims:themes]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.get('/claims/analysis', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json(await claimsAnalysis(newsroomId)); }
+  catch (e) { console.error('[knowhow/claims:analysis]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 router.get('/claims/criteria', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json({ criteria: await listOrgCriteria(newsroomId) }); }
