@@ -359,6 +359,31 @@ export async function claimsAnalysis(newsroomId, collection = null) {
   return { inconsistencies, untested, unused, balance };
 }
 
+// Documents that belong to no mine yet — anything added before the mines existed (or via
+// the general KnowHow tools). They're intact, just not part of any comparison until filed.
+// Org-wide criteria are deliberately mine-less, so they're not "unassigned".
+export async function listUnassigned(newsroomId) {
+  const { rows } = await pool.query(
+    `SELECT id, kind, title, url, role, created_at FROM beaiready_company_sources
+      WHERE newsroom_id=$1 AND collection IS NULL AND role <> 'criteria'
+        AND inclusion <> 'exclude' AND sensitivity <> 'withdrawn'
+      ORDER BY created_at DESC LIMIT 300`, [newsroomId]);
+  return rows;
+}
+
+// File an existing document into a mine (and set what kind of evidence it is).
+export async function assignSource(newsroomId, sourceId, { collection, role }) {
+  const c = String(collection || '').trim();
+  if (!c) return null;
+  const r = ['claim', 'reporting', 'external', 'criteria'].includes(role) ? role : 'reporting';
+  const { rowCount } = await pool.query(
+    'UPDATE beaiready_company_sources SET collection=$3, role=$4 WHERE id=$1 AND newsroom_id=$2', [sourceId, newsroomId, c, r]);
+  if (!rowCount) return null;
+  // Its verdicts are now stale for that mine — the nightly pass (or Check) will fold it in.
+  await pool.query('UPDATE beaiready_claim_checks SET verified_at=NULL WHERE newsroom_id=$1 AND collection=$2 AND locked = false', [newsroomId, c]);
+  return true;
+}
+
 // ── Generated reports: a timestamped, accumulating record of results ──
 //
 // Each generation is KEPT, never overwritten, so the newsroom builds its own series over

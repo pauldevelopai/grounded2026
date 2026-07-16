@@ -949,6 +949,58 @@ function GapsPanel({ a, onOpen }) {
   );
 }
 
+// Documents already on file that aren't part of any mine yet — anything added before the
+// mines existed. They're intact and searchable; they just take no part in a comparison
+// until they're filed, so we surface them rather than let them look lost.
+function UnfiledRow({ s, mines, onFile, busy }) {
+  const [c, setC] = useState(mines[0]?.name || '');
+  const [r, setR] = useState('reporting');
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid #f2ece4' }}>
+      <span style={{ flex: '1 1 200px', fontSize: 12.5 }}>{s.title || '(untitled)'} <span style={{ ...muted, fontSize: 11 }}>· {KIND_LABEL[s.kind] || s.kind}</span></span>
+      <select value={c} onChange={(e) => setC(e.target.value)} style={sel}>
+        {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+      </select>
+      <select value={r} onChange={(e) => setR(e.target.value)} style={sel}>
+        <option value="claim">Company claim</option>
+        <option value="reporting">Your reporting</option>
+        <option value="external">External source</option>
+        <option value="criteria">Judging criteria</option>
+      </select>
+      <button onClick={() => onFile(s.id, c, r)} disabled={busy || !c} style={{ ...tag, fontWeight: 700 }}>File</button>
+    </div>
+  );
+}
+
+function UnfiledPanel({ mines, setErr, onFiled }) {
+  const [items, setItems] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/unassigned').then((d) => setItems(d.sources || [])).catch(() => setItems([])), []);
+  useEffect(() => { load(); }, [load]);
+  const file = async (id, collection, role) => {
+    if (!collection) { setErr('Pick a mine to file this under.'); return; }
+    setBusy(true); setErr('');
+    try { await apiFetch(`/beaiready/knowhow/claims/unassigned/${id}`, { method: 'PATCH', body: JSON.stringify({ collection, role }) }); load(); onFiled?.(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  if (!items || !items.length) return null;
+  return (
+    <>
+      <div className="hub-section-label" style={{ marginTop: 18 }}>Documents not filed to a mine yet ({items.length})</div>
+      <div style={{ ...card, margin: '4px 0 22px' }}>
+        <p style={{ ...muted, fontSize: 12, margin: '0 0 4px' }}>
+          {mines.length
+            ? 'These are on file and fully searchable, but they take no part in any comparison until you say which mine they belong to.'
+            : 'These are on file and fully searchable. Add a mine above, then file them so they can be compared.'}
+        </p>
+        {mines.length > 0 && items.slice(0, 20).map((s) => <UnfiledRow key={s.id} s={s} mines={mines} onFile={file} busy={busy} />)}
+        {items.length > 20 && <div style={{ ...muted, fontSize: 11, marginTop: 6 }}>+{items.length - 20} more — file these and the rest will show.</div>}
+      </div>
+    </>
+  );
+}
+
 // Generated reports: each run is kept and stamped, so results accumulate into a record
 // the newsroom can look back through as more evidence lands.
 function ReportsPanel({ mines, setErr, onOpen }) {
@@ -1199,6 +1251,9 @@ function ClaimsWorkspace({ setErr }) {
           </div>
         </>
       )}
+
+      {/* Anything already on file but not yet part of a mine — shown so it never looks lost. */}
+      <UnfiledPanel mines={mines} setErr={setErr} onFiled={refresh} />
 
       {/* ── 2. Evidence for one mine, then run the check ── */}
       <div className="hub-section-label" style={{ marginTop: 8 }}>Add evidence about a mine</div>

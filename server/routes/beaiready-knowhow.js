@@ -19,7 +19,7 @@ import { getSettings, saveSettings, buildBundle, bundleStats } from '../services
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 import { PRESETS } from '../services/knowhow-presets.js';
-import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis, generateReport, listReports, getReport, deleteReport } from '../services/claims-verify.js';
+import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis, generateReport, listReports, getReport, deleteReport, listUnassigned, assignSource } from '../services/claims-verify.js';
 
 const router = Router();
 
@@ -531,6 +531,16 @@ router.get('/claims/reports/:id', async (req, res) => {
 router.delete('/claims/reports/:id', async (req, res) => {
   try { const { newsroomId } = await ctx(req); await deleteReport(newsroomId, req.params.id); res.json({ ok: true }); }
   catch (e) { console.error('[knowhow/claims:report-del]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+// Documents on file that aren't part of any mine yet, and filing them into one.
+router.get('/claims/unassigned', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ sources: await listUnassigned(newsroomId) }); }
+  catch (e) { console.error('[knowhow/claims:unassigned]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.patch('/claims/unassigned/:id', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); const ok = await assignSource(newsroomId, req.params.id, req.body || {});
+    if (!ok) return res.status(400).json({ message: 'Pick a mine to file this under.' }); res.json({ ok: true }); }
+  catch (e) { console.error('[knowhow/claims:assign]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 router.get('/claims/analysis', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json(await claimsAnalysis(newsroomId)); }
