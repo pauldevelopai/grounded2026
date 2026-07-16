@@ -18,31 +18,50 @@ const TABS = [
   { key: 'publish', label: 'Publish' },
 ];
 
+const CLAIMS_UC = 'claims-verification';   // the use case that turns KnowHow into the claims/mines version
+
 const SOURCE_LABEL = { document: 'your documents', knowledge: 'company knowledge', pattern: 'sector pattern', team_history: 'earlier team Q&A' };
 const KIND_LABEL = { doc: 'Document', website: 'Website', note: 'Note' };
 
 export default function BusinessKnowHow() {
-  const [tab, setTab] = useState('ask');
+  const [tab, setTab] = useState(null);                 // null until we know the use case
   const [err, setErr] = useState('');
   const { user } = useAuth();
-  const [useCase, setUseCase] = useState('');
-  useEffect(() => { apiFetch('/beaiready/knowhow/assistant').then((d) => setUseCase(d.use_case || '')).catch(() => {}); }, []);
-  // Claims Verifier shows only for tenants on that use case; Assistant only for consultants.
-  let tabs = [...TABS];
-  if (useCase === 'claims-verification') tabs = [...tabs, { key: 'claims', label: 'Claims' }];
+  const [useCase, setUseCase] = useState(undefined);    // undefined = still loading
+  useEffect(() => { apiFetch('/beaiready/knowhow/assistant').then((d) => setUseCase(d.use_case || '')).catch(() => setUseCase('')); }, []);
+
+  // KnowHow is the broader app; the tenant's use case decides which version of it they get —
+  // which surfaces exist, what leads, and how the page describes itself.
+  const isClaims = useCase === CLAIMS_UC;
+  useEffect(() => { if (tab === null && useCase !== undefined) setTab(isClaims ? 'claims' : 'ask'); }, [useCase, tab, isClaims]);
+
+  let tabs = isClaims ? [{ key: 'claims', label: 'Mines & claims' }, ...TABS] : [...TABS];
   if (user?.role === 'admin') tabs = [...tabs, { key: 'assistant', label: 'Assistant' }];
+
+  if (tab === null) return <div className="hub hub-beaiready"><p style={muted}>Loading…</p></div>;
 
   return (
     <div className="hub hub-beaiready">
       <div className="hub-eyebrow">Be AI Ready · Knowledge</div>
       <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>KnowHow</h1>
       <p style={{ color: '#6b6359', maxWidth: '70ch', marginBottom: 16 }}>
-        Your team's AI, grounded in your <b>own</b> knowledge. Ask anything and every answer is kept so the
-        business builds on it; add your documents, website and notes so the AI knows how you really work; and
-        capture the know-how in people's heads as workflows. Nothing leaves your company.
+        {isClaims ? (
+          <>
+            Test what each mine <b>claims</b> against what your reporting and independent sources show it has
+            actually <b>done</b>. Every mine is its own bucket of evidence; KnowHow reads each document, weighs
+            each claim against your evidence and your criteria, and surfaces where they don't match.
+            Nothing leaves your newsroom.
+          </>
+        ) : (
+          <>
+            Your team's AI, grounded in your <b>own</b> knowledge. Ask anything and every answer is kept so the
+            business builds on it; add your documents, website and notes so the AI knows how you really work; and
+            capture the know-how in people's heads as workflows. Nothing leaves your company.
+          </>
+        )}
       </p>
 
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #eee5da', marginBottom: 18 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #eee5da', marginBottom: 18, flexWrap: 'wrap' }}>
         {tabs.map((t) => (
           <button key={t.key} onClick={() => { setErr(''); setTab(t.key); }}
             style={{ ...tabBtn, ...(tab === t.key ? tabActive : {}) }}>{t.label}</button>
@@ -943,12 +962,16 @@ function MineView({ setErr, mine, back }) {
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="…or paste a web-page URL" style={input} />
           <button onClick={addUrl} disabled={busy || !url.trim()} style={btn}>Add</button>
         </div>
-        {caps.drive && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input value={driveFolder} onChange={(e) => setDriveFolder(e.target.value)} placeholder="…or a Google Drive folder link" style={input} />
-            <button onClick={addDrive} disabled={busy || !driveFolder.trim()} style={btn}>Import</button>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={driveFolder} onChange={(e) => setDriveFolder(e.target.value)} disabled={!caps.drive}
+            placeholder="…or a Google Drive folder link" style={input} />
+          <button onClick={addDrive} disabled={busy || !caps.drive || !driveFolder.trim()} style={btn}>Import</button>
+        </div>
+        <p style={{ ...muted, fontSize: 12, margin: 0 }}>
+          {caps.drive
+            ? 'Share the Drive folder as “anyone with the link (Viewer)” — Google Docs, PDFs and Word files are imported.'
+            : 'Google Drive import needs a Google API key on the server — ask your Be AI Ready consultant to enable it. Folder upload above works now.'}
+        </p>
         <input value={ttl} onChange={(e) => setTtl(e.target.value)} placeholder="…or a note title (optional)" style={input} />
         <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="…or paste text — a claim, a finding, a quote" style={{ ...input, minHeight: 56, resize: 'vertical' }} />
         <div><button onClick={addNote} disabled={busy || !text.trim()} style={btn}>Add note</button></div>
