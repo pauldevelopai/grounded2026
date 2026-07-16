@@ -35,7 +35,7 @@ export default function BusinessKnowHow() {
   const isClaims = useCase === CLAIMS_UC;
   useEffect(() => { if (tab === null && useCase !== undefined) setTab(isClaims ? 'claims' : 'ask'); }, [useCase, tab, isClaims]);
 
-  let tabs = isClaims ? [{ key: 'claims', label: 'Mines & claims' }, ...TABS] : [...TABS];
+  let tabs = [...TABS];
   if (user?.role === 'admin') tabs = [...tabs, { key: 'assistant', label: 'Assistant' }];
 
   if (tab === null) return <div className="hub hub-beaiready"><p style={muted}>Loading…</p></div>;
@@ -61,27 +61,49 @@ export default function BusinessKnowHow() {
         )}
       </p>
 
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #eee5da', marginBottom: 18, flexWrap: 'wrap' }}>
-        {tabs.map((t) => (
-          <button key={t.key} onClick={() => { setErr(''); setTab(t.key); }}
-            style={{ ...tabBtn, ...(tab === t.key ? tabActive : {}) }}>{t.label}</button>
-        ))}
-      </div>
+      {/* Claims tenants get one working page — no tabs hiding the job. Everyone else keeps the tabbed tools. */}
+      {!isClaims && (
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #eee5da', marginBottom: 18, flexWrap: 'wrap' }}>
+          {tabs.map((t) => (
+            <button key={t.key} onClick={() => { setErr(''); setTab(t.key); }}
+              style={{ ...tabBtn, ...(tab === t.key ? tabActive : {}) }}>{t.label}</button>
+          ))}
+        </div>
+      )}
 
       {err && <div style={banner}>{err}</div>}
 
-      {tab === 'ask' && <AskPanel setErr={setErr} />}
-      {tab === 'knowledge' && <KnowledgePanel setErr={setErr} />}
-      {tab === 'manifest' && <ManifestPanel setErr={setErr} />}
-      {tab === 'workflows' && <WorkflowsPanel setErr={setErr} />}
-      {tab === 'publish' && <PublishPanel setErr={setErr} />}
-      {tab === 'claims' && <ClaimsPanel setErr={setErr} />}
-      {tab === 'assistant' && <AssistantPanel setErr={setErr} />}
+      {isClaims ? (
+        <>
+          <ClaimsWorkspace setErr={setErr} />
+          {user?.role === 'admin' && <ConsultantTools setErr={setErr} />}
+        </>
+      ) : (
+        <>
+          {tab === 'ask' && <AskPanel setErr={setErr} />}
+          {tab === 'knowledge' && <KnowledgePanel setErr={setErr} />}
+          {tab === 'manifest' && <ManifestPanel setErr={setErr} />}
+          {tab === 'workflows' && <WorkflowsPanel setErr={setErr} />}
+          {tab === 'publish' && <PublishPanel setErr={setErr} />}
+          {tab === 'assistant' && <AssistantPanel setErr={setErr} />}
+        </>
+      )}
     </div>
   );
 }
 
 // ── Assistant — consultant sets this client's AI persona via a use-case preset ────
+// The claims page has no tabs, so consultants reach the persona editor from here.
+function ConsultantTools({ setErr }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 28, borderTop: '1px solid #eee5da', paddingTop: 12 }}>
+      <button onClick={() => setOpen(!open)} style={tag}>{open ? 'Hide consultant tools' : 'Consultant: assistant persona'}</button>
+      {open && <div style={{ marginTop: 12 }}><AssistantPanel setErr={setErr} /></div>}
+    </div>
+  );
+}
+
 function AssistantPanel({ setErr }) {
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -757,124 +779,300 @@ function VerdictBar({ counts }) {
   );
 }
 
-// Org-wide judging criteria — the standards every mine's claims are tested against.
-function CriteriaCard({ setErr }) {
-  const [items, setItems] = useState(null);
-  const [open, setOpen] = useState(false);
+// ── The single claims page: dashboard on top, one clear place to add each kind of data,
+// then every mine and its inconsistencies inline. No tabs. ──────────────────────────────
+
+const DATA_ZONES = [
+  { role: 'claim', title: 'What the mine claims', hint: "The mine's own reports, press releases, website copy — or a transcript of what they said on video." },
+  { role: 'reporting', title: 'Your reporting', hint: 'EnviroPress field reporting, investigations, interviews, site visits.' },
+  { role: 'external', title: 'External sources', hint: 'Government inspections, NGO studies, court records, academic work.' },
+  { role: 'criteria', title: 'Judging criteria', hint: 'The standards to judge against — environmental law, rehabilitation norms, disclosure rules.' },
+];
+
+// One labelled drop-zone per kind of data. Files, a whole folder, a URL, or pasted text.
+function DataZone({ zone, collection, setErr, onAdded }) {
   const [busy, setBusy] = useState(false);
+  const [url, setUrl] = useState('');
   const [text, setText] = useState('');
-  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/criteria').then((d) => setItems(d.criteria || [])).catch(() => setItems([])), []);
-  useEffect(() => { load(); }, [load]);
-  const onFiles = async (fl) => {
-    if (!fl || !fl.length) return;
+  const [orgWide, setOrgWide] = useState(zone.role === 'criteria');
+  const isCriteria = zone.role === 'criteria';
+  // Criteria can apply to every mine (no collection) or just this one.
+  const meta = () => ({ role: zone.role, collection: isCriteria && orgWide ? null : collection });
+  const done = (msg) => { setBusy(false); onAdded?.(msg); };
+  const run = async (fn) => {
+    if (!isCriteria || !orgWide) { if (!collection) { setErr('Pick a mine first (or add one).'); return; } }
     setBusy(true); setErr('');
-    try { const r = await uploadFileList(fl, { role: 'criteria' }); if (!r.added) setErr(r.error || 'Nothing uploaded.'); else load(); }
-    catch (e) { setErr(e.message); }
-    setBusy(false);
+    try { await fn(); } catch (e) { setErr(e.message); }
+    done();
   };
-  const addNote = async () => {
-    if (!text.trim()) return;
-    setBusy(true); setErr('');
-    try { await apiFetch('/beaiready/knowhow/sources/note', { method: 'POST', body: JSON.stringify({ title: 'Criteria', text: text.trim(), role: 'criteria' }) }); setText(''); load(); }
-    catch (e) { setErr(e.message); }
-    setBusy(false);
-  };
-  const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
-  const count = items?.length || 0;
+  const onFiles = (fl) => run(async () => {
+    const r = await uploadFileList(fl, meta());
+    if (!r.added) setErr(r.error || 'Nothing uploaded.');
+    else if (r.skipped) setErr(`Added ${r.added}; skipped ${r.skipped} unsupported file(s).`);
+  });
+  const addUrl = () => run(async () => { await apiFetch('/beaiready/knowhow/sources/website', { method: 'POST', body: JSON.stringify({ url: url.trim(), ...meta() }) }); setUrl(''); });
+  const addText = () => run(async () => { await apiFetch('/beaiready/knowhow/sources/note', { method: 'POST', body: JSON.stringify({ title: zone.title, text: text.trim(), ...meta() }) }); setText(''); });
+
   return (
-    <div style={{ ...card, margin: '0 0 16px', borderColor: '#f0e4c4', background: '#fffdf7' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 13.5, fontWeight: 700 }}>Judging criteria <span style={{ ...pill, ...ROLE_PILL.criteria, marginLeft: 4 }}>applies to all mines</span></div>
-          <div style={{ ...muted, fontSize: 12 }}>The standards KnowHow measures every mine's claims against — environmental law, rehabilitation norms, disclosure rules. {count} on file. (Add mine-specific criteria inside a mine.)</div>
-        </div>
-        <button onClick={() => setOpen(!open)} style={tag}>{open ? 'Close' : 'Add / manage'}</button>
+    <div style={{ ...card, display: 'grid', gap: 7, alignContent: 'start', borderTop: `3px solid ${ROLE_PILL[zone.role]?.color || '#c75b39'}` }}>
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 700 }}>{zone.title}</div>
+        <div style={{ ...muted, fontSize: 11.5, marginTop: 2 }}>{zone.hint}</div>
       </div>
-      {open && (
-        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload files<input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
-            <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Upload folder<input type="file" hidden webkitdirectory="" directory="" multiple onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
-          </div>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="…or paste a standard / criterion" style={{ ...input, minHeight: 50, resize: 'vertical' }} />
-          <div><button onClick={addNote} disabled={busy || !text.trim()} style={btn}>Add criterion</button></div>
-          {count > 0 && (
-            <div style={{ display: 'grid', gap: 5 }}>
-              {items.map((it) => (
-                <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                  <span>{it.title || 'Criteria'}</span>
-                  <button onClick={() => del(it.id)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {isCriteria && (
+        <select value={orgWide ? 'all' : 'mine'} onChange={(e) => setOrgWide(e.target.value === 'all')} style={sel}>
+          <option value="all">Applies to all mines</option>
+          <option value="mine">Only this mine</option>
+        </select>
       )}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Files<input type="file" multiple hidden disabled={busy} onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+        <label style={{ ...tag, cursor: busy ? 'wait' : 'pointer' }}>Folder<input type="file" hidden multiple disabled={busy} webkitdirectory="" directory="" onChange={(e) => { onFiles(e.target.files); e.target.value = ''; }} /></label>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste a URL" style={{ ...input, fontSize: 12.5, padding: '6px 8px' }} />
+        <button onClick={addUrl} disabled={busy || !url.trim()} style={{ ...tag, fontWeight: 700 }}>Add</button>
+      </div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="…or paste text" style={{ ...input, minHeight: 44, fontSize: 12.5, padding: '6px 8px', resize: 'vertical' }} />
+      <div><button onClick={addText} disabled={busy || !text.trim()} style={{ ...tag, fontWeight: 700 }}>Add text</button></div>
     </div>
   );
 }
 
-function ClaimsPanel({ setErr }) {
+// Where the inconsistencies are: one row per mine, ranked by claims that don't hold up.
+function InconsistencyTable({ mines, onJump }) {
+  if (!mines.length) return <p style={muted}>No mines yet — add your first below.</p>;
+  const ranked = [...mines].sort((a, b) => ((b.counts.contradicted || 0) + (b.counts.misleading || 0)) - ((a.counts.contradicted || 0) + (a.counts.misleading || 0)));
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      {ranked.map((m) => {
+        const bad = (m.counts.contradicted || 0) + (m.counts.misleading || 0);
+        const tested = m.claims - (m.counts.pending || 0);
+        return (
+          <div key={m.name} style={{ ...card, padding: '10px 12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => onJump(m.name)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 14.5, fontWeight: 800, color: '#1c1b1a', cursor: 'pointer' }}>{m.name} →</button>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: bad ? VERDICT_COLORS.contradicted : '#8a8076' }}>
+                {bad ? `${bad} of ${tested} claims don't hold up` : tested ? 'nothing contradicted yet' : 'not tested yet'}
+              </span>
+            </div>
+            <div style={{ ...muted, fontSize: 11, marginTop: 2 }}>
+              {m.sources.claim} claim docs · {m.sources.reporting} reporting · {m.sources.external} external
+            </div>
+            <VerdictBar counts={m.counts} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ClaimsWorkspace({ setErr }) {
   const [mines, setMines] = useState(null);
-  const [view, setView] = useState('mines');          // 'mines' | 'report' | <mine name>
+  const [report, setReport] = useState(null);
+  const [allClaims, setAllClaims] = useState(null);
+  const [target, setTarget] = useState('');        // mine the upload zones write to
+  const [openMine, setOpenMine] = useState(null);  // expanded mine section
   const [newMine, setNewMine] = useState('');
-  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims').then((d) => setMines(d.mines || [])).catch((e) => setErr(e.message)), [setErr]);
-  useEffect(() => { load(); }, [load]);
+  const [verifying, setVerifying] = useState('');
+  const [critKey, setCritKey] = useState(0);       // bump to refresh the org-wide criteria list
+  const [showSearch, setShowSearch] = useState(false);
+
+  const loadMines = useCallback(() => apiFetch('/beaiready/knowhow/claims').then((d) => setMines(d.mines || [])).catch((e) => setErr(e.message)), [setErr]);
+  const loadDash = useCallback(() => {
+    apiFetch('/beaiready/knowhow/claims/report').then(setReport).catch(() => {});
+    apiFetch('/beaiready/knowhow/claims/db/search').then((r) => setAllClaims(r.claims || [])).catch(() => setAllClaims([]));
+  }, []);
+  const refresh = useCallback(() => { loadMines(); loadDash(); }, [loadMines, loadDash]);
+  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { if (!target && mines?.length) setTarget(mines[0].name); }, [mines, target]);
 
   const addMine = async () => {
     if (!newMine.trim()) return;
-    try { const d = await apiFetch('/beaiready/knowhow/claims', { method: 'POST', body: JSON.stringify({ name: newMine.trim() }) }); setMines(d.mines || []); setNewMine(''); }
+    try { const d = await apiFetch('/beaiready/knowhow/claims', { method: 'POST', body: JSON.stringify({ name: newMine.trim() }) }); setMines(d.mines || []); setTarget(newMine.trim()); setNewMine(''); }
     catch (e) { setErr(e.message); }
   };
   const delMine = async (name) => {
-    if (!window.confirm(`Remove "${name}" from the list? Its documents and verdicts stay in your knowledge — this just hides the bucket.`)) return;
+    if (!window.confirm(`Remove "${name}" from the list? Its documents and verdicts stay.`)) return;
     try { const d = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(name)}`, { method: 'DELETE' }); setMines(d.mines || []); }
     catch (e) { setErr(e.message); }
   };
+  const verifyAll = async () => {
+    if (!mines?.length) return;
+    setErr('');
+    for (const m of mines) {
+      setVerifying(`Checking ${m.name}…`);
+      try { await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(m.name)}/verify`, { method: 'POST', body: '{}' }); }
+      catch (e) { setErr(e.message); }
+    }
+    setVerifying('Done — every mine re-checked.');
+    refresh();
+  };
+  const verifyOne = async () => {
+    if (!target) return;
+    setErr(''); setVerifying(`Checking ${target}…`);
+    try { const r = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(target)}/verify`, { method: 'POST', body: '{}' }); setVerifying(`Done — ${r.verified} claim(s) checked in ${target}.`); refresh(); }
+    catch (e) { setErr(e.message); setVerifying(''); }
+  };
+  const exp = async (fmt) => {
+    setErr('');
+    try {
+      const headers = {}; const nid = getActiveNewsroomId(); if (nid) headers['X-Newsroom-Id'] = nid;
+      const res = await fetch(`/api/beaiready/knowhow/claims/export?format=${fmt}`, { credentials: 'include', headers });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `claims-database.${fmt === 'json' ? 'json' : 'csv'}`; a.click(); URL.revokeObjectURL(a.href);
+    } catch (e) { setErr(e.message); }
+  };
 
-  if (view === 'report') return <ClaimsReport setErr={setErr} back={() => { setView('mines'); load(); }} />;
-  if (view === 'database') return <ClaimsDatabase setErr={setErr} back={() => setView('mines')} open={(m) => setView(m)} />;
-  if (view !== 'mines') return <MineView setErr={setErr} mine={view} back={() => { setView('mines'); load(); }} />;
+  if (mines == null) return <p style={muted}>Loading…</p>;
+
+  const list = report?.mines || mines;
+  const sum = (k) => list.reduce((a, m) => a + (m.counts?.[k] || 0), 0);
+  const supported = sum('supported'), contradicted = sum('contradicted'), misleading = sum('misleading'), unverified = sum('unverified'), pending = sum('pending');
+  const total = supported + contradicted + misleading + unverified + pending;
+  const tested = total - pending;
+  const bad = contradicted + misleading;
+  const rate = tested ? Math.round((bad / tested) * 100) : 0;
+  const sources = list.reduce((a, m) => a + (m.sources.claim + m.sources.reporting + m.sources.external), 0);
+
+  const tmap = {};
+  for (const c of (allClaims || [])) for (const th of (c.themes || [])) {
+    tmap[th] = tmap[th] || { name: th, total: 0, bad: 0 };
+    tmap[th].total++; if (c.verdict === 'contradicted' || c.verdict === 'misleading') tmap[th].bad++;
+  }
+  const themes = Object.values(tmap).sort((a, b) => b.bad - a.bad || b.total - a.total).slice(0, 6);
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-        <p style={{ ...muted, maxWidth: '64ch', marginTop: 0 }}>
-          Each <b>mine</b> is a separate bucket. Add the mine's own <b>claims</b>, your <b>reporting</b>, and <b>external</b> sources, then
-          Verify — KnowHow tests each claim against the evidence and tells you what's supported, contradicted or misleading.
-        </p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setView('database')} style={tag}>Search database</button>
-          <button onClick={() => setView('report')} style={btn}>View report →</button>
+      {/* ── 1. What the data means, at a glance ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div className="hub-section-label" style={{ margin: 0 }}>Where the claims don't match the evidence</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => exp('csv')} style={tag}>Export CSV</button>
+          <button onClick={() => window.print()} style={tag}>Print</button>
         </div>
       </div>
-      <div style={{ ...card, margin: '4px 0 12px', display: 'flex', gap: 8 }}>
-        <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="Add a mine (e.g. Bikita Minerals)…" style={input} />
-        <button onClick={addMine} disabled={!newMine.trim()} style={btn}>Add mine</button>
+
+      {total === 0 ? (
+        <div style={{ ...card, margin: '8px 0 20px' }}>
+          <p style={{ ...muted, margin: 0 }}>Nothing tested yet. Add a mine below, give it the mine's own documents plus your reporting, then press <b>Check this mine</b> — the inconsistencies will appear here.</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '8px 0 14px' }}>
+            <StatTile value={`${rate}%`} label="Claims that don't hold up" sub={`${bad} of ${tested} tested`} accent={VERDICT_COLORS.contradicted} />
+            <StatTile value={contradicted} label="Contradicted" accent={VERDICT_COLORS.contradicted} />
+            <StatTile value={misleading} label="Misleading" accent={VERDICT_COLORS.misleading} />
+            <StatTile value={supported} label="Supported" accent={VERDICT_COLORS.supported} />
+            <StatTile value={unverified} label="Not settled" />
+            <StatTile value={list.length} label={`Mine${list.length === 1 ? '' : 's'}`} />
+            <StatTile value={sources} label="Documents" />
+          </div>
+          <InconsistencyTable mines={list} onJump={(n) => { setOpenMine(n); setTarget(n); }} />
+          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', margin: '16px 0 22px' }}>
+            <div>
+              <div className="hub-section-label">Themes — where they cluster</div>
+              <div style={{ ...card, marginTop: 4 }}><ThemeBars themes={themes} /></div>
+            </div>
+            <div>
+              <div className="hub-section-label">Found over time</div>
+              <div style={{ ...card, marginTop: 4 }}><TrendChart snapshots={report?.snapshots} /></div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── 2. Put the data in, and run the check ── */}
+      <div className="hub-section-label" style={{ marginTop: 8 }}>Add data</div>
+      <div style={{ ...card, margin: '4px 0 10px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ ...muted, fontSize: 13 }}>Add to mine:</span>
+        <select value={target} onChange={(e) => setTarget(e.target.value)} style={sel}>
+          {mines.length === 0 && <option value="">— add a mine first —</option>}
+          {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+        </select>
+        <span style={{ ...muted, fontSize: 12 }}>or</span>
+        <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="new mine name…" style={{ ...input, width: 190, flex: '0 0 auto' }} />
+        <button onClick={addMine} disabled={!newMine.trim()} style={tag}>Add mine</button>
       </div>
-      <CriteriaCard setErr={setErr} />
-      {mines == null ? <p style={muted}>Loading…</p> : mines.length === 0 ? <p style={muted}>No mines yet — add your first bucket above.</p> : (
-        <div style={{ display: 'grid', gap: 10 }}>
+      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))' }}>
+        {DATA_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr} onAdded={() => { refresh(); setCritKey((k) => k + 1); }} />)}
+      </div>
+      <CriteriaList setErr={setErr} reloadKey={critKey} />
+      <div style={{ ...card, margin: '10px 0 22px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={verifyOne} disabled={!target} style={btn}>Check {target || 'this mine'}</button>
+        <button onClick={verifyAll} disabled={!mines.length} style={tag}>Check every mine</button>
+        <span style={{ ...muted, fontSize: 12, flex: 1 }}>
+          {verifying || 'Pulls the claims out of the mine’s own documents and tests each against your reporting, external sources and criteria. Re-runs itself nightly as you add evidence.'}
+        </span>
+      </div>
+
+      {/* ── 3. The mines themselves ── */}
+      <div className="hub-section-label">Mines &amp; their claims</div>
+      {mines.length === 0 ? <p style={muted}>No mines yet.</p> : (
+        <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
           {mines.map((m) => (
             <div key={m.name} style={card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-                <button onClick={() => setView(m.name)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 15, fontWeight: 800, color: '#1c1b1a', cursor: 'pointer' }}>{m.name} →</button>
-                <button onClick={() => delMine(m.name)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
-              </div>
-              <div style={{ ...muted, fontSize: 12, marginTop: 4 }}>
-                {m.sources.claim} claim{m.sources.claim === 1 ? '' : 's'} · {m.sources.reporting} reporting · {m.sources.external} external · {m.claims} claim{m.claims === 1 ? '' : 's'} tested
-                {m.last_verified ? ` · verified ${new Date(m.last_verified).toLocaleDateString()}` : ''}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => setOpenMine(openMine === m.name ? null : m.name)}
+                  style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 15, fontWeight: 800, color: '#1c1b1a', cursor: 'pointer' }}>
+                  {openMine === m.name ? '▾' : '▸'} {m.name}
+                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ ...muted, fontSize: 11.5 }}>{m.claims} claim{m.claims === 1 ? '' : 's'}</span>
+                  <button onClick={() => delMine(m.name)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+                </div>
               </div>
               <VerdictBar counts={m.counts} />
+              {openMine === m.name && (
+                <div style={{ marginTop: 12, borderTop: '1px solid #eee5da', paddingTop: 10 }}>
+                  <MineView setErr={setErr} mine={m.name} embedded onChanged={refresh} />
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
+
+      {/* ── 4. Search every claim across every mine ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 0' }}>
+        <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Search every claim</div>
+        <button onClick={() => setShowSearch(!showSearch)} style={tag}>{showSearch ? 'Hide' : 'Open search'}</button>
+      </div>
+      {showSearch && <div style={{ marginTop: 8 }}><ClaimsDatabase setErr={setErr} embedded open={(n) => { setOpenMine(n); setTarget(n); }} /></div>}
     </>
   );
 }
 
-function MineView({ setErr, mine, back }) {
+// Org-wide judging criteria — the standards every mine's claims are tested against.
+// The org-wide criteria on file — adding is done in the "Judging criteria" zone above.
+function CriteriaList({ setErr, reloadKey }) {
+  const [items, setItems] = useState(null);
+  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/criteria').then((d) => setItems(d.criteria || [])).catch(() => setItems([])), []);
+  useEffect(() => { load(); }, [load, reloadKey]);
+  const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+  if (!items || !items.length) return null;
+  return (
+    <div style={{ ...card, marginTop: 10, background: '#fffdf7', borderColor: '#f0e4c4' }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
+        Criteria applying to all mines <span style={{ ...muted, fontWeight: 400 }}>({items.length})</span>
+      </div>
+      <div style={{ display: 'grid', gap: 4 }}>
+        {items.map((it) => (
+          <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+            <span>{it.title || 'Criteria'}</span>
+            <button onClick={() => del(it.id)} style={{ ...tag, color: '#b91c1c', fontSize: 11 }}>Remove</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// `embedded` renders just the mine's claims/verdicts/sources inline on the single claims
+// page — the back button, title and add-evidence card are provided by the page around it.
+function MineView({ setErr, mine, back, embedded = false, onChanged }) {
   const [data, setData] = useState(null);
   const [role, setRole] = useState('claim');
   const [busy, setBusy] = useState(false);
@@ -932,7 +1130,7 @@ function MineView({ setErr, mine, back }) {
   };
   const verify = async () => {
     setVerifying('Extracting claims and checking them against your evidence…'); setErr('');
-    try { const r = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}/verify`, { method: 'POST', body: '{}' }); setVerifying(`Done — ${r.verified} claim(s) checked.`); load(); }
+    try { const r = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}/verify`, { method: 'POST', body: '{}' }); setVerifying(`Done — ${r.verified} claim(s) checked.`); load(); onChanged?.(); }
     catch (e) { setErr(e.message); setVerifying(''); }
   };
   const delSource = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
@@ -940,10 +1138,11 @@ function MineView({ setErr, mine, back }) {
   if (!data) return <p style={muted}>Loading…</p>;
   return (
     <>
-      <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>
-      <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 2px' }}>{mine}</h2>
-      <VerdictBar counts={data.counts} />
+      {!embedded && <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>}
+      {!embedded && <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 2px' }}>{mine}</h2>}
+      {!embedded && <VerdictBar counts={data.counts} />}
 
+      {!embedded && (
       <div style={{ ...card, margin: '14px 0', display: 'grid', gap: 8 }}>
         <div style={kicker}>Add evidence to this bucket</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -976,6 +1175,7 @@ function MineView({ setErr, mine, back }) {
         <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="…or paste text — a claim, a finding, a quote" style={{ ...input, minHeight: 56, resize: 'vertical' }} />
         <div><button onClick={addNote} disabled={busy || !text.trim()} style={btn}>Add note</button></div>
       </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0 8px' }}>
         <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Claims &amp; verdicts</div>
@@ -1095,7 +1295,7 @@ function ClaimCard({ cl, onChange, setErr }) {
 }
 
 // The cross-mine claims database: search + filters + export.
-function ClaimsDatabase({ setErr, back, open }) {
+function ClaimsDatabase({ setErr, back, open, embedded = false }) {
   const [f, setF] = useState({ q: '', mine: '', verdict: '', theme: '', status: '' });
   const [rows, setRows] = useState(null);
   const [mines, setMines] = useState([]);
@@ -1121,9 +1321,9 @@ function ClaimsDatabase({ setErr, back, open }) {
   };
   return (
     <>
-      <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>
+      {!embedded && <button onClick={back} style={{ ...tag, marginBottom: 10 }}>← All mines</button>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Claims database</h2>
+        {!embedded && <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Claims database</h2>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => exp('csv')} style={tag}>Export CSV</button>
           <button onClick={() => exp('json')} style={tag}>Export JSON</button>
@@ -1222,101 +1422,6 @@ function ThemeBars({ themes }) {
   );
 }
 
-function ClaimsReport({ setErr, back }) {
-  const [d, setD] = useState(null);
-  const [claims, setClaims] = useState(null);
-  useEffect(() => {
-    apiFetch('/beaiready/knowhow/claims/report').then(setD).catch((e) => setErr(e.message));
-    apiFetch('/beaiready/knowhow/claims/db/search').then((r) => setClaims(r.claims || [])).catch(() => setClaims([]));
-  }, [setErr]);
-  const exp = async (fmt) => {
-    setErr('');
-    try {
-      const headers = {}; const nid = getActiveNewsroomId(); if (nid) headers['X-Newsroom-Id'] = nid;
-      const res = await fetch(`/api/beaiready/knowhow/claims/export?format=${fmt}`, { credentials: 'include', headers });
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `claims-database.${fmt === 'json' ? 'json' : 'csv'}`; a.click(); URL.revokeObjectURL(a.href);
-    } catch (e) { setErr(e.message); }
-  };
-  if (!d) return <p style={muted}>Loading…</p>;
-
-  const mines = d.mines || [];
-  const sum = (k) => mines.reduce((a, m) => a + (m.counts?.[k] || 0), 0);
-  const supported = sum('supported'), contradicted = sum('contradicted'), misleading = sum('misleading'), unverified = sum('unverified'), pending = sum('pending');
-  const total = supported + contradicted + misleading + unverified + pending;
-  const tested = total - pending;
-  const bad = contradicted + misleading;
-  const rate = tested ? Math.round((bad / tested) * 100) : 0;
-  const sources = mines.reduce((a, m) => a + (m.sources.claim + m.sources.reporting + m.sources.external), 0);
-  const lastAt = (d.snapshots || []).reduce((mx, s) => { const t = new Date(s.taken_at); return t > mx ? t : mx; }, new Date(0));
-  const lastLabel = lastAt.getTime() > 0 ? lastAt.toLocaleDateString() : '—';
-
-  const tmap = {};
-  for (const c of (claims || [])) for (const th of (c.themes || [])) {
-    tmap[th] = tmap[th] || { name: th, total: 0, bad: 0 };
-    tmap[th].total++; if (c.verdict === 'contradicted' || c.verdict === 'misleading') tmap[th].bad++;
-  }
-  const themes = Object.values(tmap).sort((a, b) => b.bad - a.bad || b.total - a.total).slice(0, 8);
-  const ranked = [...mines].sort((a, b) => ((b.counts.contradicted || 0) + (b.counts.misleading || 0)) - ((a.counts.contradicted || 0) + (a.counts.misleading || 0)));
-
-  return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <button onClick={back} style={tag}>← All mines</button>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => exp('csv')} style={tag}>Export CSV</button>
-          <button onClick={() => window.print()} style={tag}>Print / PDF</button>
-        </div>
-      </div>
-      <h2 style={{ fontSize: 22, fontWeight: 800, margin: '10px 0 2px' }}>Claims dashboard</h2>
-      <p style={{ ...muted, marginTop: 0 }}>What the mines claim, tested against your evidence and criteria — at a glance.</p>
-
-      {total === 0 ? <p style={muted}>No claims yet. Add a mine's documents and hit Verify to populate the dashboard.</p> : (
-        <>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', margin: '6px 0 18px' }}>
-            <StatTile value={`${rate}%`} label="False or misleading" sub={`${bad} of ${tested} tested`} accent={VERDICT_COLORS.contradicted} />
-            <StatTile value={mines.length} label={`Mine${mines.length === 1 ? '' : 's'} tracked`} />
-            <StatTile value={total} label="Claims" sub={pending ? `${pending} awaiting check` : 'all checked'} />
-            <StatTile value={contradicted} label="Contradicted" accent={VERDICT_COLORS.contradicted} />
-            <StatTile value={misleading} label="Misleading" accent={VERDICT_COLORS.misleading} />
-            <StatTile value={supported} label="Supported" accent={VERDICT_COLORS.supported} />
-            <StatTile value={sources} label="Sources" />
-            <StatTile value={lastLabel} label="Last verified" />
-          </div>
-
-          <div className="hub-section-label">Mines — most false claims first</div>
-          <div style={{ display: 'grid', gap: 10, margin: '4px 0 18px' }}>
-            {ranked.map((m) => {
-              const mBad = (m.counts.contradicted || 0) + (m.counts.misleading || 0);
-              return (
-                <div key={m.name} style={card}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <strong style={{ fontSize: 15 }}>{m.name}</strong>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: mBad ? VERDICT_COLORS.contradicted : '#8a8076' }}>{mBad} false/misleading</span>
-                  </div>
-                  <div style={{ ...muted, fontSize: 11.5 }}>{m.claims} claim{m.claims === 1 ? '' : 's'} · {m.sources.claim + m.sources.reporting + m.sources.external} sources{m.last_verified ? ` · ${new Date(m.last_verified).toLocaleDateString()}` : ''}</div>
-                  <VerdictBar counts={m.counts} />
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-            <div>
-              <div className="hub-section-label">Themes — where false claims cluster</div>
-              <div style={{ ...card, marginTop: 4 }}><ThemeBars themes={themes} /></div>
-            </div>
-            <div>
-              <div className="hub-section-label">Trend over time</div>
-              <div style={{ ...card, marginTop: 4 }}><TrendChart snapshots={d.snapshots} /></div>
-            </div>
-          </div>
-        </>
-      )}
-    </>
-  );
-}
 
 const card = { background: '#fff', border: '1px solid #eee5da', borderRadius: 12, padding: 14 };
 const banner = { background: '#FEF2F2', color: '#B91C1C', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 };
