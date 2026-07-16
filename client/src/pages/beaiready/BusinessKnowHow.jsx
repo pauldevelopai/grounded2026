@@ -952,6 +952,43 @@ function GapsPanel({ a, onOpen }) {
 // Documents already on file that aren't part of any mine yet — anything added before the
 // mines existed. They're intact and searchable; they just take no part in a comparison
 // until they're filed, so we surface them rather than let them look lost.
+// Step 1 of the whole workflow, and it leads the page: everything else needs a mine to
+// hang off, so creating one is the first thing you see rather than a control to hunt for.
+function MinesBar({ mines, setErr, onChanged, onJump }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const add = async () => {
+    if (!name.trim()) return;
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/claims', { method: 'POST', body: JSON.stringify({ name: name.trim() }) }); setName(''); onChanged?.(name.trim()); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ ...card, borderTop: '3px solid #c75b39', marginBottom: 18 }}>
+      <div style={{ ...kicker, margin: '0 0 6px' }}>The mines you're tracking</div>
+      {mines.length === 0 ? (
+        <p style={{ ...muted, fontSize: 13, margin: '0 0 8px' }}>
+          None yet — <b>start here</b>. Each mine is its own bucket: its claims, your reporting and the independent
+          sources all sit inside it, and everything on this page hangs off them.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+          {mines.map((m) => (
+            <button key={m.name} onClick={() => onJump(m.name)} title="Jump to this mine"
+              style={{ ...tag, fontWeight: 700, borderColor: '#e4dcd2' }}>{m.name}</button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()}
+          placeholder="Mine name — e.g. Bikita Minerals" style={{ ...input, maxWidth: 280 }} />
+        <button onClick={add} disabled={busy || !name.trim()} style={btn}>{busy ? 'Adding…' : 'Add mine'}</button>
+      </div>
+    </div>
+  );
+}
+
 const ORG_CRITERIA = '__org_criteria__';   // destination: applies to every mine, not one
 
 function UnfiledPanel({ mines, setErr, onFiled }) {
@@ -959,7 +996,6 @@ function UnfiledPanel({ mines, setErr, onFiled }) {
   const [picked, setPicked] = useState(() => new Set());
   const [dest, setDest] = useState('');
   const [role, setRole] = useState('claim');
-  const [newMine, setNewMine] = useState('');
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
   const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/unassigned').then((d) => setItems(d.sources || [])).catch(() => setItems([])), []);
@@ -970,13 +1006,6 @@ function UnfiledPanel({ mines, setErr, onFiled }) {
   const toggle = (id) => setPicked((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const isOrg = dest === ORG_CRITERIA;
 
-  const addMine = async () => {
-    if (!newMine.trim()) return;
-    setBusy(true); setErr('');
-    try { await apiFetch('/beaiready/knowhow/claims', { method: 'POST', body: JSON.stringify({ name: newMine.trim() }) }); setDest(newMine.trim()); setNewMine(''); onFiled?.(); }
-    catch (e) { setErr(e.message); }
-    setBusy(false);
-  };
   const fileSelected = async () => {
     if (!picked.size) { setErr('Tick the documents you want to file first.'); return; }
     setBusy(true); setErr('');
@@ -1025,9 +1054,6 @@ function UnfiledPanel({ mines, setErr, onFiled }) {
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by filename… (e.g. “Bikita”, “Act”)" style={{ ...input, flex: '1 1 200px' }} />
-          <span style={{ ...muted, fontSize: 12 }}>or add a mine:</span>
-          <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="e.g. Bikita Minerals" style={{ ...input, width: 170, flex: '0 0 auto' }} />
-          <button onClick={addMine} disabled={busy || !newMine.trim()} style={tag}>Add mine</button>
         </div>
 
         <div style={{ maxHeight: 380, overflowY: 'auto', border: '1px solid #f2ece4', borderRadius: 8 }}>
@@ -1163,7 +1189,6 @@ function ClaimsWorkspace({ setErr }) {
   const [analysis, setAnalysis] = useState(null);
   const [target, setTarget] = useState('');        // mine the upload zones write to
   const [openMine, setOpenMine] = useState(null);  // expanded mine section
-  const [newMine, setNewMine] = useState('');
   const [verifying, setVerifying] = useState('');
   const [critKey, setCritKey] = useState(0);       // bump to refresh the org-wide criteria list
   const [showSearch, setShowSearch] = useState(false);
@@ -1178,11 +1203,6 @@ function ClaimsWorkspace({ setErr }) {
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { if (!target && mines?.length) setTarget(mines[0].name); }, [mines, target]);
 
-  const addMine = async () => {
-    if (!newMine.trim()) return;
-    try { const d = await apiFetch('/beaiready/knowhow/claims', { method: 'POST', body: JSON.stringify({ name: newMine.trim() }) }); setMines(d.mines || []); setTarget(newMine.trim()); setNewMine(''); }
-    catch (e) { setErr(e.message); }
-  };
   const delMine = async (name) => {
     if (!window.confirm(`Remove "${name}" from the list? Its documents and verdicts stay.`)) return;
     try { const d = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(name)}`, { method: 'DELETE' }); setMines(d.mines || []); }
@@ -1236,6 +1256,10 @@ function ClaimsWorkspace({ setErr }) {
 
   return (
     <>
+      {/* ── The mines lead: nothing else on this page works without one ── */}
+      <MinesBar mines={mines} setErr={setErr} onJump={(n) => { setOpenMine(n); setTarget(n); }}
+        onChanged={(n) => { if (n) setTarget(n); refresh(); }} />
+
       {/* ── 1. What the data means, at a glance ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div className="hub-section-label" style={{ margin: 0 }}>Where the claims don't match the evidence</div>
@@ -1247,7 +1271,7 @@ function ClaimsWorkspace({ setErr }) {
 
       {total === 0 ? (
         <div style={{ ...card, margin: '8px 0 20px' }}>
-          <p style={{ ...muted, margin: 0 }}>Nothing tested yet. Add a mine below, give it the mine's own documents plus your reporting, then press <b>Check this mine</b> — the inconsistencies will appear here.</p>
+          <p style={{ ...muted, margin: 0 }}>Nothing tested yet. Add a mine above, give it the mine's own documents plus your reporting, then press <b>Check this mine</b> — the inconsistencies will appear here.</p>
         </div>
       ) : (
         <>
@@ -1304,12 +1328,9 @@ function ClaimsWorkspace({ setErr }) {
       <div style={{ ...card, margin: '4px 0 10px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ ...muted, fontSize: 13 }}>Add to mine:</span>
         <select value={target} onChange={(e) => setTarget(e.target.value)} style={sel}>
-          {mines.length === 0 && <option value="">— add a mine first —</option>}
+          {mines.length === 0 && <option value="">— add a mine at the top of the page first —</option>}
           {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
         </select>
-        <span style={{ ...muted, fontSize: 12 }}>or</span>
-        <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="new mine name…" style={{ ...input, width: 190, flex: '0 0 auto' }} />
-        <button onClick={addMine} disabled={!newMine.trim()} style={tag}>Add mine</button>
       </div>
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))' }}>
         {MINE_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr} onAdded={refresh} />)}
