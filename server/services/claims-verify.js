@@ -371,17 +371,19 @@ export async function listUnassigned(newsroomId) {
   return rows;
 }
 
-// File an existing document into a mine (and set what kind of evidence it is).
-export async function assignSource(newsroomId, sourceId, { collection, role }) {
-  const c = String(collection || '').trim();
-  if (!c) return null;
+// File existing documents in bulk: into a mine as claim/reporting/external/criteria, OR —
+// with no mine — as org-wide criteria (a law applies to every mine, not one of them).
+export async function assignSources(newsroomId, ids, { collection, role }) {
+  const list = (Array.isArray(ids) ? ids : []).filter(Boolean);
+  if (!list.length) return { updated: 0, message: 'Nothing selected.' };
   const r = ['claim', 'reporting', 'external', 'criteria'].includes(role) ? role : 'reporting';
+  const c = String(collection || '').trim() || null;
+  if (!c && r !== 'criteria') return { updated: 0, message: 'Pick a mine — only judging criteria can apply to every mine.' };
   const { rowCount } = await pool.query(
-    'UPDATE beaiready_company_sources SET collection=$3, role=$4 WHERE id=$1 AND newsroom_id=$2', [sourceId, newsroomId, c, r]);
-  if (!rowCount) return null;
-  // Its verdicts are now stale for that mine — the nightly pass (or Check) will fold it in.
-  await pool.query('UPDATE beaiready_claim_checks SET verified_at=NULL WHERE newsroom_id=$1 AND collection=$2 AND locked = false', [newsroomId, c]);
-  return true;
+    'UPDATE beaiready_company_sources SET collection=$3, role=$4 WHERE id = ANY($1::uuid[]) AND newsroom_id=$2', [list, newsroomId, c, r]);
+  // The mine's verdicts are now stale — the next Check (or the nightly pass) folds these in.
+  if (c) await pool.query('UPDATE beaiready_claim_checks SET verified_at=NULL WHERE newsroom_id=$1 AND collection=$2 AND locked = false', [newsroomId, c]);
+  return { updated: rowCount };
 }
 
 // ── Generated reports: a timestamped, accumulating record of results ──

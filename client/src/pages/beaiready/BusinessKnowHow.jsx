@@ -952,50 +952,94 @@ function GapsPanel({ a, onOpen }) {
 // Documents already on file that aren't part of any mine yet — anything added before the
 // mines existed. They're intact and searchable; they just take no part in a comparison
 // until they're filed, so we surface them rather than let them look lost.
-function UnfiledRow({ s, mines, onFile, busy }) {
-  const [c, setC] = useState(mines[0]?.name || '');
-  const [r, setR] = useState('reporting');
-  return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid #f2ece4' }}>
-      <span style={{ flex: '1 1 200px', fontSize: 12.5 }}>{s.title || '(untitled)'} <span style={{ ...muted, fontSize: 11 }}>· {KIND_LABEL[s.kind] || s.kind}</span></span>
-      <select value={c} onChange={(e) => setC(e.target.value)} style={sel}>
-        {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-      </select>
-      <select value={r} onChange={(e) => setR(e.target.value)} style={sel}>
-        <option value="claim">Company claim</option>
-        <option value="reporting">Your reporting</option>
-        <option value="external">External source</option>
-        <option value="criteria">Judging criteria</option>
-      </select>
-      <button onClick={() => onFile(s.id, c, r)} disabled={busy || !c} style={{ ...tag, fontWeight: 700 }}>File</button>
-    </div>
-  );
-}
+const ORG_CRITERIA = '__org_criteria__';   // destination: applies to every mine, not one
 
 function UnfiledPanel({ mines, setErr, onFiled }) {
   const [items, setItems] = useState(null);
+  const [picked, setPicked] = useState(() => new Set());
+  const [dest, setDest] = useState('');
+  const [role, setRole] = useState('claim');
+  const [newMine, setNewMine] = useState('');
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
   const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/unassigned').then((d) => setItems(d.sources || [])).catch(() => setItems([])), []);
   useEffect(() => { load(); }, [load]);
-  const file = async (id, collection, role) => {
-    if (!collection) { setErr('Pick a mine to file this under.'); return; }
+  useEffect(() => { if (!dest && mines.length) setDest(mines[0].name); }, [mines, dest]);
+
+  const shown = (items || []).filter((s) => !q.trim() || (s.title || '').toLowerCase().includes(q.trim().toLowerCase()));
+  const toggle = (id) => setPicked((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const isOrg = dest === ORG_CRITERIA;
+
+  const addMine = async () => {
+    if (!newMine.trim()) return;
     setBusy(true); setErr('');
-    try { await apiFetch(`/beaiready/knowhow/claims/unassigned/${id}`, { method: 'PATCH', body: JSON.stringify({ collection, role }) }); load(); onFiled?.(); }
+    try { await apiFetch('/beaiready/knowhow/claims', { method: 'POST', body: JSON.stringify({ name: newMine.trim() }) }); setDest(newMine.trim()); setNewMine(''); onFiled?.(); }
     catch (e) { setErr(e.message); }
     setBusy(false);
   };
+  const fileSelected = async () => {
+    if (!picked.size) { setErr('Tick the documents you want to file first.'); return; }
+    setBusy(true); setErr('');
+    try {
+      const body = isOrg ? { ids: [...picked], collection: null, role: 'criteria' } : { ids: [...picked], collection: dest, role };
+      const r = await apiFetch('/beaiready/knowhow/claims/unassigned', { method: 'PATCH', body: JSON.stringify(body) });
+      setPicked(new Set()); load(); onFiled?.();
+      if (!r.updated) setErr('Nothing was filed.');
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
   if (!items || !items.length) return null;
   return (
     <>
       <div className="hub-section-label" style={{ marginTop: 18 }}>Documents not filed to a mine yet ({items.length})</div>
       <div style={{ ...card, margin: '4px 0 22px' }}>
-        <p style={{ ...muted, fontSize: 12, margin: '0 0 4px' }}>
-          {mines.length
-            ? 'These are on file and fully searchable, but they take no part in any comparison until you say which mine they belong to.'
-            : 'These are on file and fully searchable. Add a mine above, then file them so they can be compared.'}
+        <p style={{ ...muted, fontSize: 12, margin: '0 0 8px' }}>
+          These are on file and fully searchable — they just take no part in any comparison until you say what they are.
+          Tick several at once: the mine's own reports are <b>claims</b>, your work is <b>reporting</b>, and a law or standard is
+          <b> judging criteria for all mines</b>.
         </p>
-        {mines.length > 0 && items.slice(0, 20).map((s) => <UnfiledRow key={s.id} s={s} mines={mines} onFile={file} busy={busy} />)}
-        {items.length > 20 && <div style={{ ...muted, fontSize: 11, marginTop: 6 }}>+{items.length - 20} more — file these and the rest will show.</div>}
+
+        {/* the bulk bar — one destination + one role for everything ticked */}
+        <div style={{ ...card, background: '#faf8f5', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          <button onClick={() => setPicked(new Set(shown.map((s) => s.id)))} style={tag}>Select all {q.trim() ? 'shown' : ''}</button>
+          <button onClick={() => setPicked(new Set())} style={tag}>Clear</button>
+          <span style={{ ...muted, fontSize: 12.5, fontWeight: 700 }}>{picked.size} selected</span>
+          <span style={{ ...muted, fontSize: 12 }}>→ file as</span>
+          <select value={dest} onChange={(e) => setDest(e.target.value)} style={sel}>
+            {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+            <option value={ORG_CRITERIA}>⚖ Judging criteria — all mines</option>
+          </select>
+          {!isOrg && (
+            <select value={role} onChange={(e) => setRole(e.target.value)} style={sel}>
+              <option value="claim">What the mine claims</option>
+              <option value="reporting">Your reporting</option>
+              <option value="external">External source</option>
+              <option value="criteria">Criteria for this mine only</option>
+            </select>
+          )}
+          <button onClick={fileSelected} disabled={busy || !picked.size} style={btn}>
+            {busy ? 'Filing…' : `File ${picked.size || ''} document${picked.size === 1 ? '' : 's'}`}
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by filename… (e.g. “Bikita”, “Act”)" style={{ ...input, flex: '1 1 200px' }} />
+          <span style={{ ...muted, fontSize: 12 }}>or add a mine:</span>
+          <input value={newMine} onChange={(e) => setNewMine(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addMine()} placeholder="e.g. Bikita Minerals" style={{ ...input, width: 170, flex: '0 0 auto' }} />
+          <button onClick={addMine} disabled={busy || !newMine.trim()} style={tag}>Add mine</button>
+        </div>
+
+        <div style={{ maxHeight: 380, overflowY: 'auto', border: '1px solid #f2ece4', borderRadius: 8 }}>
+          {shown.length === 0 ? <p style={{ ...muted, fontSize: 12, padding: 10, margin: 0 }}>Nothing matches “{q}”.</p> : shown.map((s) => (
+            <label key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid #f7f3ee', cursor: 'pointer', background: picked.has(s.id) ? '#fdf6f3' : 'transparent' }}>
+              <input type="checkbox" checked={picked.has(s.id)} onChange={() => toggle(s.id)} />
+              <span style={{ fontSize: 12.5, flex: 1 }}>{s.title || '(untitled)'}</span>
+              <span style={{ ...muted, fontSize: 11 }}>{KIND_LABEL[s.kind] || s.kind}</span>
+            </label>
+          ))}
+        </div>
+        <div style={{ ...muted, fontSize: 11, marginTop: 6 }}>Showing {shown.length} of {items.length}. Filing marks that mine for re-checking, so the next Check folds them in.</div>
       </div>
     </>
   );
