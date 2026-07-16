@@ -949,6 +949,89 @@ function GapsPanel({ a, onOpen }) {
   );
 }
 
+// Generated reports: each run is kept and stamped, so results accumulate into a record
+// the newsroom can look back through as more evidence lands.
+function ReportsPanel({ mines, setErr, onOpen }) {
+  const [reports, setReports] = useState(null);
+  const [scope, setScope] = useState('');
+  const [kind, setKind] = useState('inconsistencies');
+  const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState(null);
+  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/reports').then((d) => setReports(d.reports || [])).catch((e) => setErr(e.message)), [setErr]);
+  useEffect(() => { load(); }, [load]);
+
+  const gen = async () => {
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/claims/reports', { method: 'POST', body: JSON.stringify({ collection: scope || null, kind }) }); load(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  const open = async (id) => { setErr(''); try { setViewing(await apiFetch(`/beaiready/knowhow/claims/reports/${id}`)); } catch (e) { setErr(e.message); } };
+  const del = async (id) => {
+    if (!window.confirm('Delete this saved report? It is the record of what you knew on that date.')) return;
+    try { await apiFetch(`/beaiready/knowhow/claims/reports/${id}`, { method: 'DELETE' }); setViewing(null); load(); } catch (e) { setErr(e.message); }
+  };
+  const when = (t) => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const summarise = (r) => r.kind === 'inconsistencies'
+    ? `${r.stats.inconsistencies ?? 0} inconsistenc${(r.stats.inconsistencies ?? 0) === 1 ? 'y' : 'ies'} · ${r.stats.contradicted ?? 0} contradicted · ${r.stats.misleading ?? 0} misleading`
+    : `${r.stats.untested ?? 0} untestable claim(s) · ${r.stats.unused ?? 0} unmatched source(s) · ${r.stats.minesMissingASide ?? 0} mine(s) missing a side`;
+
+  return (
+    <>
+      <div style={{ ...card, margin: '4px 0 10px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ ...muted, fontSize: 13 }}>Build a report on</span>
+        <select value={kind} onChange={(e) => setKind(e.target.value)} style={sel}>
+          <option value="inconsistencies">Inconsistencies</option>
+          <option value="gaps">Gaps in the data</option>
+        </select>
+        <span style={{ ...muted, fontSize: 13 }}>for</span>
+        <select value={scope} onChange={(e) => setScope(e.target.value)} style={sel}>
+          <option value="">All mines</option>
+          {mines.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+        </select>
+        <button onClick={gen} disabled={busy} style={btn}>{busy ? 'Building…' : 'Generate report'}</button>
+        <span style={{ ...muted, fontSize: 11.5, flex: 1 }}>Each report is stamped and kept — generate again as evidence lands and you build a record over time.</span>
+      </div>
+
+      {reports == null ? <p style={muted}>Loading…</p> : reports.length === 0 ? (
+        <p style={{ ...muted, fontSize: 12.5 }}>No reports yet. Generate one above and it becomes the first entry in your record.</p>
+      ) : (
+        <div style={{ display: 'grid', gap: 6 }}>
+          {reports.map((r) => (
+            <div key={r.id} style={{ ...card, padding: '9px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div>
+                <button onClick={() => open(r.id)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 13.5, fontWeight: 700, color: '#1c1b1a', cursor: 'pointer' }}>{r.title} →</button>
+                <div style={{ ...muted, fontSize: 11.5 }}>{when(r.generated_at)} · {summarise(r)}</div>
+              </div>
+              <button onClick={() => del(r.id)} style={{ ...tag, color: '#b91c1c', fontSize: 11 }}>Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {viewing && (
+        <div style={{ ...card, marginTop: 12, background: '#faf8f5' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div>
+              <strong style={{ fontSize: 15 }}>{viewing.title}</strong>
+              <div style={{ ...muted, fontSize: 11.5 }}>As at {when(viewing.generated_at)} — a snapshot, not a live view.</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => window.print()} style={tag}>Print</button>
+              <button onClick={() => setViewing(null)} style={tag}>Close</button>
+            </div>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            {viewing.kind === 'inconsistencies'
+              ? <Inconsistencies items={viewing.payload.inconsistencies || []} onOpen={onOpen} />
+              : <GapsPanel a={{ untested: viewing.payload.untested || [], unused: viewing.payload.unused || [], balance: viewing.payload.balance || [] }} onOpen={onOpen} />}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // Where the inconsistencies are: one row per mine, ranked by claims that don't hold up.
 function InconsistencyTable({ mines, onJump }) {
   if (!mines.length) return <p style={muted}>No mines yet — add your first below.</p>;
@@ -1178,7 +1261,11 @@ function ClaimsWorkspace({ setErr }) {
         </div>
       )}
 
-      {/* ── 4. Search every claim across every mine ── */}
+      {/* ── 4. Reports: build a record that accumulates over time ── */}
+      <div className="hub-section-label" style={{ marginTop: 22 }}>Reports</div>
+      <ReportsPanel mines={mines} setErr={setErr} onOpen={(n) => { setOpenMine(n); setTarget(n); }} />
+
+      {/* ── 5. Search every claim across every mine ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '22px 0 0' }}>
         <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>Search every claim</div>
         <button onClick={() => setShowSearch(!showSearch)} style={tag}>{showSearch ? 'Hide' : 'Open search'}</button>

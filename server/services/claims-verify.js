@@ -304,12 +304,14 @@ export async function claimsReport(newsroomId) {
 //  2. the CLAIM-SIDE GAP — claims nothing in your files can test yet (a reporting to-do);
 //  3. the REPORTING-SIDE GAP — your reporting/independent sources that no claim rests on
 //     (what the mine stays silent about — often the story).
-export async function claimsAnalysis(newsroomId) {
+// `collection` scopes the whole analysis to one mine (null = every mine).
+export async function claimsAnalysis(newsroomId, collection = null) {
   const { rows: inc } = await pool.query(
     `SELECT id, collection, claim_text, verdict, rationale, confidence, themes, status
        FROM beaiready_claim_checks
       WHERE newsroom_id=$1 AND verdict IN ('contradicted','misleading')
-      ORDER BY confidence DESC NULLS LAST, updated_at DESC LIMIT 50`, [newsroomId]);
+        AND ($2::text IS NULL OR collection = $2)
+      ORDER BY confidence DESC NULLS LAST, updated_at DESC LIMIT 50`, [newsroomId, collection]);
   const ids = inc.map((r) => r.id);
   const evByClaim = {};
   if (ids.length) {
@@ -325,20 +327,23 @@ export async function claimsAnalysis(newsroomId) {
     `SELECT c.id, c.collection, c.claim_text, c.verdict, c.themes
        FROM beaiready_claim_checks c
       WHERE c.newsroom_id=$1 AND c.verdict IN ('unverified','pending')
+        AND ($2::text IS NULL OR c.collection = $2)
         AND NOT EXISTS (SELECT 1 FROM beaiready_claim_evidence e WHERE e.claim_id = c.id)
-      ORDER BY c.collection, c.updated_at DESC LIMIT 100`, [newsroomId]);
+      ORDER BY c.collection, c.updated_at DESC LIMIT 100`, [newsroomId, collection]);
 
   // Reporting-side gap: your reporting/external that no verdict has ever rested on.
   const { rows: unused } = await pool.query(
     `SELECT s.id, s.collection, s.title, s.role
        FROM beaiready_company_sources s
       WHERE s.newsroom_id=$1 AND s.role IN ('reporting','external') AND s.collection IS NOT NULL
+        AND ($2::text IS NULL OR s.collection = $2)
         AND s.inclusion <> 'exclude' AND s.sensitivity <> 'withdrawn'
         AND NOT EXISTS (SELECT 1 FROM beaiready_claim_evidence e WHERE e.source_id = s.id)
-      ORDER BY s.collection, s.created_at DESC LIMIT 100`, [newsroomId]);
+      ORDER BY s.collection, s.created_at DESC LIMIT 100`, [newsroomId, collection]);
 
   // Balance: a mine missing a whole side of the comparison.
-  const mines = await listMines(newsroomId);
+  const allMines = await listMines(newsroomId);
+  const mines = collection ? allMines.filter((m) => m.name === collection) : allMines;
   const balance = mines.map((m) => ({
     name: m.name,
     sources: m.sources,
@@ -352,6 +357,54 @@ export async function claimsAnalysis(newsroomId) {
   }));
 
   return { inconsistencies, untested, unused, balance };
+}
+
+// ── Generated reports: a timestamped, accumulating record of results ──
+//
+// Each generation is KEPT, never overwritten, so the newsroom builds its own series over
+// months: what the claims looked like on a date, and how that moved as evidence landed.
+const REPORT_KINDS = ['inconsistencies', 'gaps'];
+
+export async function generateReport(newsroomId, { collection = null, kind = 'inconsistencies' } = {}, userId = null) {
+  const k = REPORT_KINDS.includes(kind) ? kind : 'inconsistencies';
+  const scope = collection || null;
+  const a = await claimsAnalysis(newsroomId, scope);
+  const payload = k === 'inconsistencies'
+    ? { inconsistencies: a.inconsistencies }
+    : { untested: a.untested, unused: a.unused, balance: a.balance };
+  const stats = k === 'inconsistencies'
+    ? { inconsistencies: a.inconsistencies.length, contradicted: a.inconsistencies.filter((c) => c.verdict === 'contradicted').length, misleading: a.inconsistencies.filter((c) => c.verdict === 'misleading').length }
+    : { untested: a.untested.length, unused: a.unused.length, minesMissingASide: a.balance.filter((b) => b.missing.length).length };
+  const title = `${k === 'gaps' ? 'Gaps' : 'Inconsistencies'} — ${scope || 'all mines'}`;
+  const { rows: [r] } = await pool.query(
+    `INSERT INTO beaiready_claim_reports (newsroom_id, collection, kind, title, stats, payload, generated_by)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7) RETURNING id, collection, kind, title, stats, generated_at`,
+    [newsroomId, scope, k, title, JSON.stringify(stats), encryptFor(newsroomId, JSON.stringify(payload)), userId]);
+  return r;
+}
+
+export async function listReports(newsroomId, { collection = '', kind = '' } = {}) {
+  const where = ['newsroom_id = $1']; const vals = [newsroomId]; const p = (v) => { vals.push(v); return `$${vals.length}`; };
+  if (String(collection).trim()) where.push(`collection = ${p(String(collection).trim())}`);
+  if (REPORT_KINDS.includes(kind)) where.push(`kind = ${p(kind)}`);
+  const { rows } = await pool.query(
+    `SELECT id, collection, kind, title, stats, generated_at FROM beaiready_claim_reports
+      WHERE ${where.join(' AND ')} ORDER BY generated_at DESC LIMIT 200`, vals);
+  return rows;
+}
+
+export async function getReport(newsroomId, id) {
+  const { rows: [r] } = await pool.query(
+    'SELECT id, collection, kind, title, stats, payload, generated_at FROM beaiready_claim_reports WHERE id=$1 AND newsroom_id=$2', [id, newsroomId]);
+  if (!r) return null;
+  let payload = {};
+  try { payload = JSON.parse(decryptFor(newsroomId, r.payload) || '{}'); } catch { payload = {}; }
+  return { ...r, payload };
+}
+
+export async function deleteReport(newsroomId, id) {
+  await pool.query('DELETE FROM beaiready_claim_reports WHERE id=$1 AND newsroom_id=$2', [id, newsroomId]);
+  return true;
 }
 
 // ── Phase 4: the cross-mine claims database — search, themes, export ──

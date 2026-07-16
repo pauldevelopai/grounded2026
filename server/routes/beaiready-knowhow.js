@@ -19,7 +19,7 @@ import { getSettings, saveSettings, buildBundle, bundleStats } from '../services
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 import { PRESETS } from '../services/knowhow-presets.js';
-import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis } from '../services/claims-verify.js';
+import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis, generateReport, listReports, getReport, deleteReport } from '../services/claims-verify.js';
 
 const router = Router();
 
@@ -512,6 +512,25 @@ router.get('/claims/db/search', async (req, res) => {
 router.get('/claims/db/themes', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json({ themes: await listThemes(newsroomId) }); }
   catch (e) { console.error('[knowhow/claims:themes]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+// Generated reports — each run kept, so results accumulate as their own record over time.
+router.post('/claims/reports', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    res.status(201).json(await generateReport(newsroomId, req.body || {}, req.user.id)); }
+  catch (e) { console.error('[knowhow/claims:report-gen]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.get('/claims/reports', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ reports: await listReports(newsroomId, req.query || {}) }); }
+  catch (e) { console.error('[knowhow/claims:reports]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.get('/claims/reports/:id', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); const r = await getReport(newsroomId, req.params.id);
+    if (!r) return res.status(404).json({ message: 'Report not found.' }); res.json(r); }
+  catch (e) { console.error('[knowhow/claims:report]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.delete('/claims/reports/:id', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); await deleteReport(newsroomId, req.params.id); res.json({ ok: true }); }
+  catch (e) { console.error('[knowhow/claims:report-del]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 router.get('/claims/analysis', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json(await claimsAnalysis(newsroomId)); }
