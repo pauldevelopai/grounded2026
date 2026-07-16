@@ -76,7 +76,7 @@ export default function BusinessKnowHow() {
       {isClaims ? (
         <>
           <ClaimsWorkspace setErr={setErr} />
-          {user?.role === 'admin' && <ConsultantTools setErr={setErr} />}
+          <MoreTools setErr={setErr} isAdmin={user?.role === 'admin'} />
         </>
       ) : (
         <>
@@ -93,13 +93,33 @@ export default function BusinessKnowHow() {
 }
 
 // ── Assistant — consultant sets this client's AI persona via a use-case preset ────
-// The claims page has no tabs, so consultants reach the persona editor from here.
-function ConsultantTools({ setErr }) {
-  const [open, setOpen] = useState(false);
+// The claims page has no tabs — so the rest of KnowHow lives here, on the same page,
+// each tool opening in place. Nothing is removed by dropping the tab bar.
+const MORE_TOOLS = [
+  { key: 'ask', label: 'Ask the AI', hint: 'Ask anything across every document you have added', C: AskPanel },
+  { key: 'knowledge', label: 'All your documents', hint: 'Everything you have added, searchable, with per-document controls', C: KnowledgePanel },
+  { key: 'manifest', label: 'Manifest', hint: 'Per-document rules, sensitivity and AI-readiness', C: ManifestPanel },
+  { key: 'workflows', label: 'My know-how', hint: 'Capture how your team works, step by step', C: WorkflowsPanel },
+  { key: 'publish', label: 'Publish', hint: 'llms.txt and outward publishing', C: PublishPanel },
+];
+
+function MoreTools({ setErr, isAdmin }) {
+  const [open, setOpen] = useState(null);
+  const tools = isAdmin ? [...MORE_TOOLS, { key: 'assistant', label: 'Assistant persona', hint: 'Consultant: how this client’s AI behaves', C: AssistantPanel }] : MORE_TOOLS;
+  const Active = tools.find((t) => t.key === open)?.C;
   return (
-    <div style={{ marginTop: 28, borderTop: '1px solid #eee5da', paddingTop: 12 }}>
-      <button onClick={() => setOpen(!open)} style={tag}>{open ? 'Hide consultant tools' : 'Consultant: assistant persona'}</button>
-      {open && <div style={{ marginTop: 12 }}><AssistantPanel setErr={setErr} /></div>}
+    <div style={{ marginTop: 28, borderTop: '1px solid #eee5da', paddingTop: 14 }}>
+      <div className="hub-section-label">The rest of KnowHow</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '6px 0 0' }}>
+        {tools.map((t) => (
+          <button key={t.key} onClick={() => { setErr(''); setOpen(open === t.key ? null : t.key); }}
+            title={t.hint}
+            style={{ ...tag, ...(open === t.key ? { borderColor: '#c75b39', color: '#c75b39', fontWeight: 700 } : {}) }}>
+            {open === t.key ? '▾ ' : '▸ '}{t.label}
+          </button>
+        ))}
+      </div>
+      {Active && <div style={{ marginTop: 14 }}><Active setErr={setErr} /></div>}
     </div>
   );
 }
@@ -782,12 +802,14 @@ function VerdictBar({ counts }) {
 // ── The single claims page: dashboard on top, one clear place to add each kind of data,
 // then every mine and its inconsistencies inline. No tabs. ──────────────────────────────
 
-const DATA_ZONES = [
+// Evidence that belongs to ONE mine.
+const MINE_ZONES = [
   { role: 'claim', title: 'What the mine claims', hint: "The mine's own reports, press releases, website copy — or a transcript of what they said on video." },
   { role: 'reporting', title: 'Your reporting', hint: 'EnviroPress field reporting, investigations, interviews, site visits.' },
   { role: 'external', title: 'External sources', hint: 'Government inspections, NGO studies, court records, academic work.' },
-  { role: 'criteria', title: 'Judging criteria', hint: 'The standards to judge against — environmental law, rehabilitation norms, disclosure rules.' },
 ];
+// Criteria are the yardstick — org-wide by default, so they sit apart from the per-mine zones.
+const CRITERIA_ZONE = { role: 'criteria', title: 'Add judging criteria', hint: 'Environmental law, rehabilitation norms, disclosure rules — the standards every claim is measured against.' };
 
 // One labelled drop-zone per kind of data. Files, a whole folder, a URL, or pasted text.
 function DataZone({ zone, collection, setErr, onAdded }) {
@@ -983,8 +1005,8 @@ function ClaimsWorkspace({ setErr }) {
         </>
       )}
 
-      {/* ── 2. Put the data in, and run the check ── */}
-      <div className="hub-section-label" style={{ marginTop: 8 }}>Add data</div>
+      {/* ── 2. Evidence for one mine, then run the check ── */}
+      <div className="hub-section-label" style={{ marginTop: 8 }}>Add evidence about a mine</div>
       <div style={{ ...card, margin: '4px 0 10px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ ...muted, fontSize: 13 }}>Add to mine:</span>
         <select value={target} onChange={(e) => setTarget(e.target.value)} style={sel}>
@@ -996,15 +1018,25 @@ function ClaimsWorkspace({ setErr }) {
         <button onClick={addMine} disabled={!newMine.trim()} style={tag}>Add mine</button>
       </div>
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))' }}>
-        {DATA_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr} onAdded={() => { refresh(); setCritKey((k) => k + 1); }} />)}
+        {MINE_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr} onAdded={refresh} />)}
       </div>
-      <CriteriaList setErr={setErr} reloadKey={critKey} />
       <div style={{ ...card, margin: '10px 0 22px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={verifyOne} disabled={!target} style={btn}>Check {target || 'this mine'}</button>
         <button onClick={verifyAll} disabled={!mines.length} style={tag}>Check every mine</button>
         <span style={{ ...muted, fontSize: 12, flex: 1 }}>
           {verifying || 'Pulls the claims out of the mine’s own documents and tests each against your reporting, external sources and criteria. Re-runs itself nightly as you add evidence.'}
         </span>
+      </div>
+
+      {/* ── Criteria are the yardstick for EVERY mine — kept apart from the per-mine zones ── */}
+      <div className="hub-section-label">Judging criteria — used for every mine</div>
+      <p style={{ ...muted, fontSize: 12, margin: '2px 0 6px', maxWidth: '70ch' }}>
+        The standards KnowHow measures every mine's claims against. These apply across all mines by default — switch a
+        document to “Only this mine” if a standard is specific to the mine selected above.
+      </p>
+      <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+        <DataZone zone={CRITERIA_ZONE} collection={target} setErr={setErr} onAdded={() => { refresh(); setCritKey((k) => k + 1); }} />
+        <CriteriaList setErr={setErr} reloadKey={critKey} />
       </div>
 
       {/* ── 3. The mines themselves ── */}
@@ -1051,9 +1083,17 @@ function CriteriaList({ setErr, reloadKey }) {
   const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/criteria').then((d) => setItems(d.criteria || [])).catch(() => setItems([])), []);
   useEffect(() => { load(); }, [load, reloadKey]);
   const del = async (id) => { setErr(''); try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
-  if (!items || !items.length) return null;
+  if (!items) return null;
+  if (!items.length) {
+    return (
+      <div style={{ ...card, background: '#fffdf7', borderColor: '#f0e4c4' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Criteria on file</div>
+        <p style={{ ...muted, fontSize: 12, margin: 0 }}>None yet. Until you add criteria, claims are judged on your evidence alone.</p>
+      </div>
+    );
+  }
   return (
-    <div style={{ ...card, marginTop: 10, background: '#fffdf7', borderColor: '#f0e4c4' }}>
+    <div style={{ ...card, background: '#fffdf7', borderColor: '#f0e4c4' }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
         Criteria applying to all mines <span style={{ ...muted, fontWeight: 400 }}>({items.length})</span>
       </div>
