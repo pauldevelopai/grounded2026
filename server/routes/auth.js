@@ -18,16 +18,25 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Email and password required' });
     }
 
+    // Emails are case-insensitive in practice, but here they're stored as typed: most
+    // are lower-cased by the admin/bulk add, a few carry capitals from self-registration.
+    // A plain `email = $1` locked people out whenever they typed their address the way
+    // they write it (e.g. "DevikaS@l2b.co.za"). So: take an EXACT match first — that's
+    // unambiguous and preserves the old behaviour — and only fall back to a
+    // case-insensitive match when it resolves to exactly ONE account, so a case-duplicate
+    // can never sign someone into the wrong one.
     const { rows } = await pool.query(
-      'SELECT id, name, email, password_hash, role, sector_ids, newsroom_id FROM team_members WHERE email = $1 AND tracker_access = true AND is_active = true',
-      [email]
+      `SELECT id, name, email, password_hash, role, sector_ids, newsroom_id
+         FROM team_members
+        WHERE lower(email) = lower($1) AND tracker_access = true AND is_active = true`,
+      [String(email).trim()]
     );
 
-    if (rows.length === 0) {
+    const exact = rows.find((r) => r.email === String(email).trim());
+    const user = exact || (rows.length === 1 ? rows[0] : null);
+    if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-
-    const user = rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ message: 'Invalid credentials' });
