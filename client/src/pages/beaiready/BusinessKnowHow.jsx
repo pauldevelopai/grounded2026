@@ -989,6 +989,64 @@ function MinesBar({ mines, setErr, onChanged, onJump }) {
   );
 }
 
+// What's actually in a mine, and whether each document is really in the system yet.
+// "Uploaded" is not the same as usable: the text has to be split into passages and each
+// passage embedded before a claim can be tested against it, so say which state it's in.
+function docState(s) {
+  if (!s.has_text) return { label: 'No readable text', tone: '#b45309', hint: 'Probably a scanned PDF — upload its transcript instead.' };
+  if (!s.chunks) return { label: 'Reading…', tone: '#8a8076', hint: 'Saved. Being split into passages — this finishes on its own.' };
+  if (s.embedded < s.chunks) return { label: `Ready · ${s.embedded}/${s.chunks} passages`, tone: '#b45309', hint: 'Mostly searchable; the rest catches up automatically.' };
+  return { label: `Ready · ${s.chunks} passages`, tone: '#166534', hint: 'Fully read and searchable.' };
+}
+
+function MineDocuments({ mine, setErr, reloadKey, onChanged }) {
+  const [data, setData] = useState(null);
+  const load = useCallback(() => apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}`).then(setData).catch(() => {}), [mine]);
+  useEffect(() => { load(); }, [load, reloadKey]);
+  const sources = data?.sources || [];
+  const stillReading = sources.filter((s) => s.has_text && !s.chunks).length;
+  // keep looking while anything is mid-read, so "Reading…" turns into "Ready" by itself
+  useEffect(() => {
+    if (!stillReading) return undefined;
+    const t = setTimeout(load, 3000);
+    return () => clearTimeout(t);
+  }, [stillReading, load]);
+
+  const del = async (id, title) => {
+    if (!window.confirm(`Remove “${title}” from ${mine}? The document and its passages are deleted.`)) return;
+    setErr('');
+    try { await apiFetch(`/beaiready/knowhow/sources/${id}`, { method: 'DELETE' }); load(); onChanged?.(); }
+    catch (e) { setErr(e.message); }
+  };
+
+  if (!data) return null;
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 18 }}>
+        <div className="hub-section-label" style={{ margin: 0, flex: 1 }}>In {mine} ({sources.length})</div>
+        {stillReading > 0 && <span style={{ ...muted, fontSize: 11.5 }}>{stillReading} still being read…</span>}
+      </div>
+      {sources.length === 0 ? (
+        <p style={{ ...muted, fontSize: 12.5, marginTop: 4 }}>Nothing yet. Add the mine&rsquo;s own documents plus your reporting above.</p>
+      ) : (
+        <div style={{ ...card, marginTop: 4, padding: 0, overflow: 'hidden' }}>
+          {sources.map((s) => {
+            const st = docState(s);
+            return (
+              <div key={s.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid #f7f3ee', flexWrap: 'wrap' }}>
+                <span style={{ ...pill, ...(ROLE_PILL[s.role] || {}), flex: '0 0 auto' }}>{ROLE_LABEL[s.role] || s.role}</span>
+                <span style={{ fontSize: 12.5, flex: '1 1 180px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.title}</span>
+                <span title={st.hint} style={{ fontSize: 11.5, fontWeight: 700, color: st.tone, flex: '0 0 auto' }}>{st.label}</span>
+                <button onClick={() => del(s.id, s.title)} style={{ ...tag, color: '#b91c1c', fontSize: 11 }}>Remove</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
 const ORG_CRITERIA = '__org_criteria__';   // destination: applies to every mine, not one
 
 function UnfiledPanel({ mines, setErr, onFiled }) {
@@ -1207,6 +1265,7 @@ function ClaimsWorkspace({ setErr }) {
   const [critCount, setCritCount] = useState(0);
   const [reportCount, setReportCount] = useState(0);
   const [indexing, setIndexing] = useState(0);     // stored but not yet chunked/embedded
+  const [docsKey, setDocsKey] = useState(0);       // bump to re-read the mine's document list
 
   const loadMines = useCallback(() => apiFetch('/beaiready/knowhow/claims')
     .then((d) => { setMines(d.mines || []); setIndexing(d.indexing || 0); })
@@ -1228,6 +1287,16 @@ function ClaimsWorkspace({ setErr }) {
     const t = setTimeout(loadMines, 4000);
     return () => clearTimeout(t);
   }, [indexing, loadMines]);
+  // A Check runs on the server, so reloading the page shouldn't look like it stopped —
+  // if one is still going for this mine, pick the reporting back up.
+  useEffect(() => {
+    if (!target || verifying) return;
+    let gone = false;
+    apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(target)}/verify-status`)
+      .then((s) => { if (!gone && s?.running) followVerify(target); })
+      .catch(() => {});
+    return () => { gone = true; };
+  }, [target, verifying, followVerify]);
   // Drop you at the first step that still needs you — and at Results once there's an answer.
   useEffect(() => {
     if (step !== null || mines == null) return;
@@ -1241,22 +1310,44 @@ function ClaimsWorkspace({ setErr }) {
     try { const d = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(name)}`, { method: 'DELETE' }); setMines(d.mines || []); }
     catch (e) { setErr(e.message); }
   };
+  // A Check is minutes of model calls, so the server starts it and we follow along. Nothing
+  // here waits on a long request — that's what was timing out.
+  const followVerify = useCallback(async (mine) => {
+    for (let i = 0; i < 900; i++) {                       // ~30 min ceiling
+      await new Promise((r) => setTimeout(r, 2000));
+      let s;
+      try { s = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(mine)}/verify-status`); }
+      catch { continue; }                                  // a blip shouldn't abandon the run
+      if (s.phase === 'extracting') setVerifying(`${mine}: reading the mine's own documents and pulling out its claims…`);
+      else if (s.phase === 'checking') setVerifying(`${mine}: testing claim ${Math.min(s.done + 1, s.total)} of ${s.total}${s.claim ? ` — “${s.claim}…”` : ''}`);
+      if (!s.running) {
+        if (s.phase === 'failed') { setErr(s.error || 'The check failed.'); setVerifying(''); }
+        else setVerifying(`${mine}: done — ${s.verified} claim${s.verified === 1 ? '' : 's'} tested.`);
+        refresh();
+        return s;
+      }
+    }
+    setVerifying(`${mine}: still running — leave it, it finishes on its own.`);
+    return null;
+  }, [setErr, refresh]);
+
+  const verifyOne = async () => {
+    if (!target) return;
+    setErr(''); setVerifying(`${target}: starting…`);
+    try { await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(target)}/verify`, { method: 'POST', body: '{}' }); }
+    catch (e) { setErr(e.message); setVerifying(''); return; }
+    await followVerify(target);
+  };
   const verifyAll = async () => {
     if (!mines?.length) return;
     setErr('');
     for (const m of mines) {
-      setVerifying(`Checking ${m.name}…`);
       try { await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(m.name)}/verify`, { method: 'POST', body: '{}' }); }
-      catch (e) { setErr(e.message); }
+      catch (e) { setErr(e.message); continue; }
+      await followVerify(m.name);                          // one at a time: they share the model
     }
-    setVerifying('Done — every mine re-checked.');
+    setVerifying('Done — every mine checked.');
     refresh();
-  };
-  const verifyOne = async () => {
-    if (!target) return;
-    setErr(''); setVerifying(`Checking ${target}…`);
-    try { const r = await apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(target)}/verify`, { method: 'POST', body: '{}' }); setVerifying(`Done — ${r.verified} claim(s) checked in ${target}.`); refresh(); }
-    catch (e) { setErr(e.message); setVerifying(''); }
   };
   const exp = async (fmt) => {
     setErr('');
@@ -1371,9 +1462,11 @@ function ClaimsWorkspace({ setErr }) {
             </select>
           </div>
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(215px, 1fr))' }}>
-            {MINE_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr} onAdded={refresh} />)}
+            {MINE_ZONES.map((z) => <DataZone key={z.role} zone={z} collection={target} setErr={setErr}
+              onAdded={() => { refresh(); setDocsKey((k) => k + 1); }} />)}
           </div>
-          <UnfiledPanel mines={mines} setErr={setErr} onFiled={refresh} />
+          <MineDocuments mine={target} setErr={setErr} reloadKey={docsKey} onChanged={refresh} />
+          <UnfiledPanel mines={mines} setErr={setErr} onFiled={() => { refresh(); setDocsKey((k) => k + 1); }} />
         </>
       ))}
 

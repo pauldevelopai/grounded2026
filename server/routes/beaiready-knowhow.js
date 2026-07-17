@@ -19,7 +19,7 @@ import { getSettings, saveSettings, buildBundle, bundleStats } from '../services
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 import { PRESETS } from '../services/knowhow-presets.js';
-import { listMines, addMine, removeMine, getMine, verifyClaims, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis, generateReport, listReports, getReport, deleteReport, listUnassigned, assignSources } from '../services/claims-verify.js';
+import { listMines, addMine, removeMine, getMine, verifyClaims, startVerify, verifyStatus, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis, generateReport, listReports, getReport, deleteReport, listUnassigned, assignSources } from '../services/claims-verify.js';
 
 const router = Router();
 
@@ -505,10 +505,16 @@ router.delete('/claims/:name', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json({ mines: await removeMine(newsroomId, req.params.name) }); }
   catch (e) { console.error('[knowhow/claims:del]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
+// Starts the run and returns straight away — a Check is minutes of model calls, so holding
+// the request open just guarantees a timeout. The page polls verify-status for progress.
 router.post('/claims/:collection/verify', async (req, res) => {
   try { const { newsroomId } = await ctx(req); if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
-    res.json(await verifyClaims(newsroomId, req.params.collection)); }
+    res.status(202).json(startVerify(newsroomId, req.params.collection)); }
   catch (e) { console.error('[knowhow/claims:verify]', e); res.status(500).json({ message: e.message || 'Verify failed' }); }
+});
+router.get('/claims/:collection/verify-status', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json(verifyStatus(newsroomId, req.params.collection)); }
+  catch (e) { console.error('[knowhow/claims:verify-status]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 // Cross-mine database (Phase 4). Literal /claims/db* + /claims/export before the :collection param.
 router.get('/claims/db/search', async (req, res) => {

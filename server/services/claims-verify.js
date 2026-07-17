@@ -84,14 +84,17 @@ export async function extractClaims(newsroomId, collection, { since = null } = {
 // `incremental` re-verifies only stale claims (verified_at IS NULL) — new claims plus any
 // the mine's fresh evidence flagged — so the nightly job never re-runs the model on a
 // claim whose evidence didn't move. `since` scopes extraction to newly-added claim docs.
-export async function verifyClaims(newsroomId, collection, { incremental = false, since = null } = {}) {
+export async function verifyClaims(newsroomId, collection, { incremental = false, since = null, onProgress = null } = {}) {
+  onProgress?.({ phase: 'extracting' });
   await extractClaims(newsroomId, collection, { since });
   const { rows: claims } = await pool.query(
     `SELECT id, claim_text, verdict AS prev FROM beaiready_claim_checks
       WHERE newsroom_id=$1 AND collection=$2 AND locked = false ${incremental ? 'AND verified_at IS NULL' : ''}`, [newsroomId, collection]);
   const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
   let done = 0;
+  onProgress?.({ phase: 'checking', total: claims.length, done: 0 });
   for (const cl of claims) {
+    onProgress?.({ claim: cl.claim_text.slice(0, 90) });
     const evidence = await retrieveCompanyChunks(newsroomId, cl.claim_text, { collection, roles: ['reporting', 'external'], limit: 8 });
     let verdict = 'unverified', rationale = 'No independent evidence has been added yet to test this claim.', citations = [], used = [], confidence = null, themes = [];
     if (evidence.length) {
@@ -142,6 +145,7 @@ export async function verifyClaims(newsroomId, collection, { incremental = false
         [newsroomId, cl.id, cl.prev, verdict, rationale, JSON.stringify({ citations, evidence: used.length })]);
     }
     done++;
+    onProgress?.({ done });
   }
   const counts = await verdictCounts(newsroomId, collection);
   // Only snapshot when something actually changed — keeps the trend free of empty nightly points.
@@ -150,6 +154,36 @@ export async function verifyClaims(newsroomId, collection, { incremental = false
   return { verified: done, counts };
 }
 
+// ── Running a Check without holding the request open ──
+//
+// A Check is one model call per claim DOCUMENT (to pull the claims out) plus one per CLAIM
+// (to reach a verdict). A mine with 15 documents and 40 claims is 55 sequential calls —
+// minutes of work, which no browser or proxy will wait for. So the request starts the run
+// and returns; the page polls this state and shows what's happening.
+const runs = new Map();
+const runKey = (n, c) => `${n}::${c}`;
+
+export function verifyStatus(newsroomId, collection) {
+  return runs.get(runKey(newsroomId, collection)) || { running: false, phase: 'idle' };
+}
+
+export function startVerify(newsroomId, collection, opts = {}) {
+  const key = runKey(newsroomId, collection);
+  const current = runs.get(key);
+  if (current?.running) return current;            // already going — don't start a second
+  const state = { running: true, phase: 'starting', done: 0, total: 0, claim: null, error: null, startedAt: Date.now(), finishedAt: null, verified: 0 };
+  runs.set(key, state);
+  setImmediate(async () => {
+    try {
+      const r = await verifyClaims(newsroomId, collection, { ...opts, onProgress: (p) => Object.assign(state, p) });
+      state.verified = r.verified; state.counts = r.counts; state.phase = 'done';
+    } catch (e) {
+      state.phase = 'failed'; state.error = e.message;
+      console.error('[claims verify]', collection, e.message);
+    } finally { state.running = false; state.finishedAt = Date.now(); }
+  });
+  return state;
+}
 // Mark a mine's claims as needing re-verification (its evidence changed). Locked (human-
 // set) verdicts are left alone — see Phase 3.
 async function markMineStale(newsroomId, collection) {
@@ -219,8 +253,15 @@ export async function getMine(newsroomId, collection) {
   const { rows: claims } = await pool.query(
     `SELECT id, claim_text, verdict, rationale, citations, confidence, status, locked, notes, themes, updated_at, verified_at
        FROM beaiready_claim_checks WHERE newsroom_id=$1 AND collection=$2 ORDER BY updated_at DESC`, [newsroomId, collection]);
+  // Real state per document, not just "uploaded": how many passages were built, how many
+  // are actually searchable, and whether any readable text came out of the file at all.
   const { rows: sources } = await pool.query(
-    'SELECT id, title, role, url FROM beaiready_company_sources WHERE newsroom_id=$1 AND collection=$2 ORDER BY created_at DESC', [newsroomId, collection]);
+    `SELECT s.id, s.title, s.role, s.url, s.created_at,
+            (s.extracted_text IS NOT NULL) AS has_text,
+            (SELECT count(*)::int FROM beaiready_source_chunks c WHERE c.source_id = s.id) AS chunks,
+            (SELECT count(c.embedding)::int FROM beaiready_source_chunks c WHERE c.source_id = s.id) AS embedded
+       FROM beaiready_company_sources s
+      WHERE s.newsroom_id=$1 AND s.collection=$2 ORDER BY s.created_at DESC`, [newsroomId, collection]);
   const ids = claims.map((c) => c.id);
   const evByClaim = {}, evtByClaim = {};
   if (ids.length) {
