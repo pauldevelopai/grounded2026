@@ -145,6 +145,35 @@ export async function sourceChunkStats(newsroomId) {
   return map;
 }
 
+// Embedding is ~30ms per chunk, so a folder of 60 reports is minutes of CPU. Doing that
+// inside the upload request times the request out and looks like a hang. Instead the upload
+// stores the text and returns immediately, and this drains the backlog in the background:
+// it re-reads whatever has text but no chunks, so nothing is held in memory, a restart
+// mid-run loses nothing, and files that land while it's working get caught by the next pass.
+const indexing = new Set();
+export function scheduleIndexing(newsroomId) {
+  if (indexing.has(newsroomId)) return;   // already draining; new rows get picked up below
+  indexing.add(newsroomId);
+  setImmediate(async () => {
+    try {
+      for (;;) {
+        const r = await backfillSourceChunks(newsroomId);
+        if (!r.indexed) break;            // nothing left to do
+      }
+    } catch (e) { console.error('[knowhow indexing]', e.message); }
+    finally { indexing.delete(newsroomId); }
+  });
+}
+
+// How much of a newsroom's knowledge is still waiting to be indexed.
+export async function pendingIndexCount(newsroomId) {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n FROM beaiready_company_sources s
+      WHERE s.newsroom_id = $1 AND s.extracted_text IS NOT NULL AND length(s.extracted_text) > 0
+        AND NOT EXISTS (SELECT 1 FROM beaiready_source_chunks c WHERE c.source_id = s.id)`, [newsroomId]).catch(() => ({ rows: [{ n: 0 }] }));
+  return rows[0]?.n || 0;
+}
+
 // Index any sources that have no chunks yet (existing data / a prior failure).
 export async function backfillSourceChunks(newsroomId = null) {
   const { rows } = await pool.query(
