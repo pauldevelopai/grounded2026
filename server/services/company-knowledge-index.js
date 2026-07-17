@@ -14,6 +14,24 @@ import { encryptFor, decryptFor } from './crypto.js';
 
 const CHUNK_OPTS = { maxWords: 170, overlapWords: 30 };
 
+// The full extracted text of a source is stored, because it is the ONLY copy the chunker
+// works from — anything trimmed off here can never be indexed, searched or tested, silently.
+// Every consumer already slices to what it needs (2.4k for a fallback, 8k to extract claims,
+// 6k to summarise), so a small stored cap protects nothing and just loses the back half of
+// long reports. This bound exists only to stop a pathological file (~165k words) from
+// blowing up memory; no real document reaches it.
+export const MAX_SOURCE_TEXT = 1_000_000;
+
+// Store NULL — not ciphertext — when a document yields no readable text (a scanned PDF,
+// a failed extraction). encryptFor('') still returns a non-empty string, so storing that
+// leaves the row matching `extracted_text IS NOT NULL AND length(...) > 0` forever: it can
+// never produce a chunk, so it sits in the backlog for good and the "still reading…" count
+// never reaches zero. NULL is also the honest answer — the UI can then say we couldn't read it.
+export function encryptedText(newsroomId, text) {
+  const clean = String(text || '').trim();
+  return clean ? encryptFor(newsroomId, clean.slice(0, MAX_SOURCE_TEXT)) : null;
+}
+
 // "Better conversion": tidy raw extracted text before chunking — join hyphenated
 // line-wraps, fold single newlines inside a paragraph to spaces, keep blank-line
 // paragraph breaks. Dependency-free; big quality win for pdf-parse output.
@@ -156,9 +174,16 @@ export function scheduleIndexing(newsroomId) {
   indexing.add(newsroomId);
   setImmediate(async () => {
     try {
-      for (;;) {
+      // Loop until the backlog stops shrinking, NOT until a pass reports work. A source
+      // whose text yields no chunks (a scanned PDF that extracts to whitespace) is counted
+      // as indexed yet still has no chunks, so it matches the backlog query forever — on
+      // "work done" alone this would spin on it, pinning a CPU on a shared box.
+      for (let pass = 0; pass < 50; pass++) {
+        const before = await pendingIndexCount(newsroomId);
+        if (!before) break;                                  // nothing waiting
         const r = await backfillSourceChunks(newsroomId);
-        if (!r.indexed) break;            // nothing left to do
+        const after = await pendingIndexCount(newsroomId);
+        if (!r.indexed || after >= before) break;            // no progress — stop, don't spin
       }
     } catch (e) { console.error('[knowhow indexing]', e.message); }
     finally { indexing.delete(newsroomId); }
@@ -185,8 +210,14 @@ export async function backfillSourceChunks(newsroomId = null) {
     newsroomId ? [newsroomId] : []).catch(() => ({ rows: [] }));
   let indexed = 0;
   for (const s of rows) {
-    const text = decryptFor(s.newsroom_id, s.extracted_text);
-    if (!text) continue;
+    const text = (decryptFor(s.newsroom_id, s.extracted_text) || '').trim();
+    // Nothing readable in it (scanned PDF / failed extraction, or an older row stored as
+    // ciphertext-of-empty). Clear it so it leaves the backlog instead of being retried
+    // every hour forever, and so the page stops reporting it as still being read.
+    if (!text) {
+      await pool.query('UPDATE beaiready_company_sources SET extracted_text = NULL WHERE id = $1', [s.id]).catch(() => {});
+      continue;
+    }
     try { await indexSource(s.id, s.newsroom_id, text); indexed++; } catch (e) { console.error('[knowhow backfill]', s.id, e.message); }
   }
   return { sources: rows.length, indexed };

@@ -13,7 +13,7 @@ import { upload } from '../middleware/upload.js';
 import { scrapeArticle } from '../services/web-scraper.js';
 import { extractText } from '../services/document-processor.js';
 import { encryptFor, decryptFor } from '../services/crypto.js';
-import { indexSource, searchCompanyChunks, sourceChunkStats, scheduleIndexing, pendingIndexCount } from '../services/company-knowledge-index.js';
+import { indexSource, searchCompanyChunks, sourceChunkStats, scheduleIndexing, pendingIndexCount, encryptedText } from '../services/company-knowledge-index.js';
 import { ingestUrls, ingestSitemap, ingestDriveFolder, driveAvailable } from '../services/company-knowledge-ingest.js';
 import { getSettings, saveSettings, buildBundle, bundleStats } from '../services/company-knowledge-bundle.js';
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
@@ -204,7 +204,7 @@ router.post('/sources/upload', uploadFiles, async (req, res) => {
       const { rows: [src] } = await pool.query(
         `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by, collection, role)
          VALUES ($1,'doc',$2,$3,$4,$5,$6,$7) RETURNING id, kind, title, file_id, created_at`,
-        [newsroomId, f.originalname, doc.id, encryptFor(newsroomId, (text || '').slice(0, 20000)), req.user.id, collection, role]);
+        [newsroomId, f.originalname, doc.id, encryptedText(newsroomId, text), req.user.id, collection, role]);
       // NOT indexed here: embedding is ~30ms/chunk, so a folder of reports would keep this
       // request open for minutes and time out. The text is saved; indexing runs after we reply.
       added.push({ ...src, has_text: (text || '').length > 0, chunks: 0, embedded: 0 });
@@ -227,7 +227,7 @@ router.post('/sources/website', async (req, res) => {
     const { rows: [src] } = await pool.query(
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by, collection, role)
        VALUES ($1,'website',$2,$3,$4,$5,$6,$7) RETURNING id, kind, title, url, created_at`,
-      [newsroomId, scraped.title || url.trim(), url.trim(), encryptFor(newsroomId, scraped.text), req.user.id, collection, role]);
+      [newsroomId, scraped.title || url.trim(), url.trim(), encryptedText(newsroomId, scraped.text), req.user.id, collection, role]);
     try { await indexSource(src.id, newsroomId, scraped.text); } catch (e) { console.error('[knowhow index website]', e.message); }
     res.status(201).json(src);
   } catch (err) { console.error('[beaiready-knowhow/sources:website]', err); res.status(500).json({ message: 'Internal server error' }); }
@@ -244,7 +244,7 @@ router.post('/sources/note', async (req, res) => {
     const { rows: [src] } = await pool.query(
       `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, extracted_text, created_by, collection, role)
        VALUES ($1,'note',$2,$3,$4,$5,$6) RETURNING id, kind, title, created_at`,
-      [newsroomId, (title || 'Note').trim(), encryptFor(newsroomId, text.trim()), req.user.id, collection, role]);
+      [newsroomId, (title || 'Note').trim(), encryptedText(newsroomId, text), req.user.id, collection, role]);
     try { await indexSource(src.id, newsroomId, text.trim()); } catch (e) { console.error('[knowhow index note]', e.message); }
     res.status(201).json(src);
   } catch (err) { console.error('[beaiready-knowhow/sources:note]', err); res.status(500).json({ message: 'Internal server error' }); }

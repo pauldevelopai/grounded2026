@@ -11,7 +11,7 @@ import pool from '../db/pool.js';
 import { scrapeArticle } from './web-scraper.js';
 import { extractText } from './document-processor.js';
 import { encryptFor } from './crypto.js';
-import { scheduleIndexing } from './company-knowledge-index.js';
+import { scheduleIndexing, encryptedText } from './company-knowledge-index.js';
 
 const MAX_URLS = 150;                 // per bulk call
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
@@ -31,7 +31,7 @@ async function storeAndIndex(newsroomId, userId, { kind, title, url = null, text
   const { rows: [src] } = await pool.query(
     `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by, collection, role)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-    [newsroomId, kind, title, url, encryptFor(newsroomId, (text || '').slice(0, 20000)), userId, collection, role]);
+    [newsroomId, kind, title, url, encryptedText(newsroomId, text), userId, collection, role]);
   return src.id;
 }
 
