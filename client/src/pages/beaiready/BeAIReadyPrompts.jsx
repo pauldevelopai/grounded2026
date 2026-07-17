@@ -3,7 +3,7 @@
 // with copy, before/after example, per-model validation table, attribution, and a
 // rate / suggest-an-edit control + "Save my version"). Mirrors BeAIReadyToolbox.
 // Model choice persists per browser. "Proven" only ever shows if validation set it.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
 
@@ -78,14 +78,30 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
     setAddBusy(false);
   };
 
+  // The library a member can see (our global prompts + their own company's) is small,
+  // so we fetch it ONCE per model and filter role/task/search in memory. Typing costs
+  // no requests and never blanks the list. `seq` drops out-of-order responses so a
+  // slow earlier fetch can't overwrite a newer one.
+  const seq = useRef(0);
   const load = useCallback(() => {
-    const p = new URLSearchParams({ model });
-    if (role) p.set('role', role);
-    if (taskType) p.set('task_type', taskType);
-    if (search) p.set('search', search);
-    apiFetch(`/prompts?${p}`).then(setItems).catch((e) => { setErr(e.message); setItems([]); });
-  }, [model, role, taskType, search]);
+    const mine = ++seq.current;
+    apiFetch(`/prompts?model=${encodeURIComponent(model)}`)
+      .then((rows) => { if (mine === seq.current) setItems(rows); })
+      .catch((e) => { if (mine === seq.current) { setErr(e.message); setItems([]); } });
+  }, [model]);
   useEffect(() => { if (mode === 'library') { setItems(null); load(); } }, [mode, load]);
+
+  // Mirrors the server's filters exactly: roles contains, task_type equals, and a
+  // case-insensitive substring over title / description / body.
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (items || []).filter((p) => {
+      if (role && !(p.roles || []).includes(role)) return false;
+      if (taskType && p.task_type !== taskType) return false;
+      if (q && ![p.title, p.description, p.body].some((f) => (f || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [items, role, taskType, search]);
 
   if (mode === 'detail') return <PromptDetail id={id} model={model} setModel={setAndStoreModel} onBack={() => navigate('/dashboard/prompts')} />;
 
@@ -139,13 +155,15 @@ export default function BeAIReadyPrompts({ mode = 'library' }) {
         </p>
       )}
 
-      {items == null ? <p style={muted}>Loading…</p> : items.length === 0 ? (
+      {items == null ? <p style={muted}>Loading…</p> : shown.length === 0 ? (
         <p className="hub-band" style={{ margin: 0 }}>
-          No prompts for <strong>{MODEL_LABEL[model]}</strong>{role ? ` in “${role.replace('_', ' ')}”` : ''} yet — try the “General” role or another model.
+          {items.length === 0
+            ? <>No prompts for <strong>{MODEL_LABEL[model]}</strong> yet — try another model, or add your company’s own above.</>
+            : <>None of the {items.length} prompts match your filters — clear the search or role to see them all.</>}
         </p>
       ) : (
         <section className="hub-grid">
-          {items.map((p) => (
+          {shown.map((p) => (
             <Link key={p.id} to={`/dashboard/prompts/${p.id}`} className="hub-card" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                 <strong style={{ fontSize: 15.5 }}>{p.title}</strong>
