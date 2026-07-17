@@ -13,7 +13,7 @@ import { upload } from '../middleware/upload.js';
 import { scrapeArticle } from '../services/web-scraper.js';
 import { extractText } from '../services/document-processor.js';
 import { encryptFor, decryptFor } from '../services/crypto.js';
-import { indexSource, searchCompanyChunks, sourceChunkStats } from '../services/company-knowledge-index.js';
+import { indexSource, searchCompanyChunks, sourceChunkStats, scheduleIndexing, pendingIndexCount } from '../services/company-knowledge-index.js';
 import { ingestUrls, ingestSitemap, ingestDriveFolder, driveAvailable } from '../services/company-knowledge-ingest.js';
 import { getSettings, saveSettings, buildBundle, bundleStats } from '../services/company-knowledge-bundle.js';
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
@@ -205,11 +205,12 @@ router.post('/sources/upload', uploadFiles, async (req, res) => {
         `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, file_id, extracted_text, created_by, collection, role)
          VALUES ($1,'doc',$2,$3,$4,$5,$6,$7) RETURNING id, kind, title, file_id, created_at`,
         [newsroomId, f.originalname, doc.id, encryptFor(newsroomId, (text || '').slice(0, 20000)), req.user.id, collection, role]);
-      let ix = { chunks: 0, embedded: 0 };
-      try { ix = await indexSource(src.id, newsroomId, text); } catch (e) { console.error('[knowhow index upload]', e.message); }
-      added.push({ ...src, has_text: (text || '').length > 0, ...ix });
+      // NOT indexed here: embedding is ~30ms/chunk, so a folder of reports would keep this
+      // request open for minutes and time out. The text is saved; indexing runs after we reply.
+      added.push({ ...src, has_text: (text || '').length > 0, chunks: 0, embedded: 0 });
     }
-    res.status(201).json({ added });
+    res.status(201).json({ added, indexing: true });
+    scheduleIndexing(newsroomId);
   } catch (err) { console.error('[beaiready-knowhow/sources:upload]', err); res.status(500).json({ message: err.message || 'Upload failed' }); }
 });
 
@@ -464,8 +465,13 @@ router.put('/assistant', async (req, res) => {
 // ── Claims Verifier (bespoke; the UI shows it only when use_case='claims-verification') ──
 // Mines are "collections"; each source carries a role (claim / reporting / external).
 router.get('/claims', async (req, res) => {
-  try { const { newsroomId } = await ctx(req); res.json({ mines: await listMines(newsroomId) }); }
-  catch (e) { console.error('[knowhow/claims:get]', e); res.status(500).json({ message: 'Internal server error' }); }
+  try {
+    const { newsroomId } = await ctx(req);
+    // `indexing` = documents stored but not yet chunked/embedded. Surfaced so a big upload
+    // reads as "still being read", not as data that vanished.
+    const [mines, indexing] = await Promise.all([listMines(newsroomId), pendingIndexCount(newsroomId)]);
+    res.json({ mines, indexing });
+  } catch (e) { console.error('[knowhow/claims:get]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 router.get('/claims/report', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json(await claimsReport(newsroomId)); }

@@ -11,7 +11,7 @@ import pool from '../db/pool.js';
 import { scrapeArticle } from './web-scraper.js';
 import { extractText } from './document-processor.js';
 import { encryptFor } from './crypto.js';
-import { indexSource } from './company-knowledge-index.js';
+import { scheduleIndexing } from './company-knowledge-index.js';
 
 const MAX_URLS = 150;                 // per bulk call
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
@@ -23,14 +23,15 @@ const MIME = {
 
 export function driveAvailable() { return !!process.env.GOOGLE_API_KEY; }
 
-// Store one source (encrypted) + build its chunks/embeddings. Best-effort index.
-// Optional collection/role tag it into a Claims-Verifier mine bucket.
+// Store one source (encrypted). Optional collection/role tag it into a Claims-Verifier mine.
+// Chunking/embedding is NOT done here: at ~30ms a chunk it would keep a bulk import (up to
+// 150 URLs, or a Drive folder) waiting for minutes. Callers store everything, then hand off
+// to scheduleIndexing, which drains the backlog after the response has gone out.
 async function storeAndIndex(newsroomId, userId, { kind, title, url = null, text, collection = null, role = 'reporting' }) {
   const { rows: [src] } = await pool.query(
     `INSERT INTO beaiready_company_sources (newsroom_id, kind, title, url, extracted_text, created_by, collection, role)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
     [newsroomId, kind, title, url, encryptFor(newsroomId, (text || '').slice(0, 20000)), userId, collection, role]);
-  try { await indexSource(src.id, newsroomId, text || ''); } catch (e) { console.error('[knowhow ingest index]', e.message); }
   return src.id;
 }
 
@@ -59,6 +60,7 @@ export async function ingestUrls(newsroomId, userId, input, { collection = null,
       stats.added++;
     } catch (e) { stats.failed++; stats.errors.push({ url, status: e.message }); }
   });
+  if (stats.added) scheduleIndexing(newsroomId);
   return stats;
 }
 
@@ -131,6 +133,7 @@ export async function ingestDriveFolder(newsroomId, userId, folderUrl, { collect
       stats.added++;
     } catch (e) { stats.failed++; stats.errors.push({ name: f.name, status: e.message }); }
   });
+  if (stats.added) scheduleIndexing(newsroomId);
   return stats;
 }
 

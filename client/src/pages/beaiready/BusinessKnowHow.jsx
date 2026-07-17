@@ -1206,8 +1206,11 @@ function ClaimsWorkspace({ setErr }) {
   const [step, setStep] = useState(null);          // null until we know where to drop you
   const [critCount, setCritCount] = useState(0);
   const [reportCount, setReportCount] = useState(0);
+  const [indexing, setIndexing] = useState(0);     // stored but not yet chunked/embedded
 
-  const loadMines = useCallback(() => apiFetch('/beaiready/knowhow/claims').then((d) => setMines(d.mines || [])).catch((e) => setErr(e.message)), [setErr]);
+  const loadMines = useCallback(() => apiFetch('/beaiready/knowhow/claims')
+    .then((d) => { setMines(d.mines || []); setIndexing(d.indexing || 0); })
+    .catch((e) => setErr(e.message)), [setErr]);
   const loadDash = useCallback(() => {
     apiFetch('/beaiready/knowhow/claims/report').then(setReport).catch(() => {});
     apiFetch('/beaiready/knowhow/claims/db/search').then((r) => setAllClaims(r.claims || [])).catch(() => setAllClaims([]));
@@ -1219,6 +1222,12 @@ function ClaimsWorkspace({ setErr }) {
   const refresh = useCallback(() => { loadMines(); loadDash(); }, [loadMines, loadDash]);
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { if (!target && mines?.length) setTarget(mines[0].name); }, [mines, target]);
+  // While a backlog is being read, keep checking so the count clears itself on screen.
+  useEffect(() => {
+    if (!indexing) return undefined;
+    const t = setTimeout(loadMines, 4000);
+    return () => clearTimeout(t);
+  }, [indexing, loadMines]);
   // Drop you at the first step that still needs you — and at Results once there's an answer.
   useEffect(() => {
     if (step !== null || mines == null) return;
@@ -1303,6 +1312,16 @@ function ClaimsWorkspace({ setErr }) {
         })}
       </div>
       <p style={{ ...muted, fontSize: 12.5, margin: '0 0 16px' }}>{STEPS[stepIdx]?.hint}</p>
+
+      {/* Uploads return the moment the text is stored; the reading happens after. Say so,
+          or a big upload looks like it did nothing — or worse, like it was lost. */}
+      {indexing > 0 && (
+        <div style={{ ...card, background: '#fffdf7', borderColor: '#f0e4c4', margin: '0 0 16px', fontSize: 12.5 }}>
+          <b>Reading {indexing} document{indexing === 1 ? '' : 's'}…</b> They are <b>saved</b> — this is KnowHow working
+          through them so they can be searched and tested. It carries on by itself, and you can keep adding or leave the
+          page; refreshing won&rsquo;t lose anything.
+        </div>
+      )}
 
       {/* ── Step 1 · Mines ── */}
       {step === 'mines' && (
