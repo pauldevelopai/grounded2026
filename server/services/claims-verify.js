@@ -19,6 +19,101 @@ const DEDUPE_DIST = 0.18;   // cosine distance ≤ this ⇒ the same claim re-ph
                             // Kept conservative — over-merging would silently drop a real claim.
 
 function safeJson(t) { if (!t) return null; const m = String(t).match(/\{[\s\S]*\}/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } }
+
+// ── Rating pillars — a configurable, WEIGHTED framework (e.g. the ZES-GI) that claims are
+// tagged and rated against, instead of freeform themes the model invents for itself. Kept
+// generic (config over forking): any claims-verification tenant can define their own; the
+// client ships a one-click preset so EnviroPress doesn't need database access to set it up.
+const MIN_TESTED_FOR_CONFIDENCE = 3;   // fewer tested claims than this ⇒ "thin", not "rated"
+
+export async function getPillars(newsroomId) {
+  const { rows } = await pool.query('SELECT rating_pillars FROM beaiready_knowhow_settings WHERE newsroom_id=$1', [newsroomId]);
+  return Array.isArray(rows[0]?.rating_pillars) ? rows[0].rating_pillars : [];
+}
+
+export async function setPillars(newsroomId, pillars) {
+  const clean = (Array.isArray(pillars) ? pillars : [])
+    .map((p) => ({
+      name: String(p?.name || '').trim().slice(0, 120),
+      weight: Math.max(0, Math.min(100, Number(p?.weight) || 0)),
+      definition: String(p?.definition || '').trim().slice(0, 800),
+    }))
+    .filter((p) => p.name);
+  await pool.query(
+    `INSERT INTO beaiready_knowhow_settings (newsroom_id, rating_pillars, updated_at) VALUES ($1,$2::jsonb,NOW())
+     ON CONFLICT (newsroom_id) DO UPDATE SET rating_pillars=$2::jsonb, updated_at=NOW()`, [newsroomId, JSON.stringify(clean)]);
+  return clean;
+}
+
+// Rendered into the extraction/verify prompts so the model tags against these EXACT names —
+// a pillar list is the enumeration; criteriaFramework() (any uploaded framework/Acts text)
+// supplies the detailed rubric alongside it.
+function pillarPromptBlock(pillars) {
+  if (!pillars.length) return '';
+  return '\n\nRATE AGAINST THESE PILLARS — use these EXACT names when tagging a claim (never invent your own):\n'
+    + pillars.map((p) => `- ${p.name} (${p.weight}% weight)${p.definition ? `: ${p.definition}` : ''}`).join('\n');
+}
+
+// Snap a model-returned tag to a configured pillar (case/whitespace-insensitive exact match,
+// then a loose substring match) so minor rewording doesn't fracture one pillar into several
+// buckets. Returns null — "unmapped" — if it matches nothing, which is itself a data-quality
+// signal worth surfacing rather than silently dropping.
+// Normalizes "&" vs "and" and punctuation so a minor rewording ("Transparency and
+// Institutional Governance" vs "Transparency & Institutional Governance") doesn't read as a
+// missed pillar — that would falsely show a gap that isn't really there.
+const normPillar = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[,.]/g, '').replace(/\s+/g, ' ').trim();
+function matchPillar(tag, pillars) {
+  const t = normPillar(tag);
+  if (!t || !pillars.length) return null;
+  const exact = pillars.find((p) => normPillar(p.name) === t);
+  if (exact) return exact.name;
+  const loose = pillars.find((p) => { const n = normPillar(p.name); return t.includes(n) || n.includes(t); });
+  return loose ? loose.name : null;
+}
+
+// Per-pillar rating for a scope (one mine via `collection`, or the whole portfolio when
+// null) — the thematic, weighted view the framework exists to produce, with an explicit
+// status for every pillar so a gap in the data reads as a gap, not a false all-clear.
+export async function pillarRatings(newsroomId, collection = null) {
+  const pillars = await getPillars(newsroomId);
+  const { rows: claims } = await pool.query(
+    `SELECT claim_text, verdict, themes, collection FROM beaiready_claim_checks
+      WHERE newsroom_id=$1 AND ($2::text IS NULL OR collection=$2)`, [newsroomId, collection]);
+
+  const byPillar = new Map(pillars.map((p) => [p.name, { ...EMPTY_COUNTS, claims: [] }]));
+  const unmapped = [];
+  for (const c of claims) {
+    const themes = Array.isArray(c.themes) ? c.themes : [];
+    const hit = themes.map((t) => matchPillar(t, pillars)).find(Boolean);
+    if (!hit) { unmapped.push(c); continue; }
+    const bucket = byPillar.get(hit);
+    bucket[c.verdict] = (bucket[c.verdict] || 0) + 1;
+    bucket.claims.push(c.claim_text);
+  }
+
+  const results = pillars.map((p) => {
+    const b = byPillar.get(p.name);
+    const tested = b.supported + b.contradicted + b.misleading;
+    const total = tested + b.unverified + b.pending;
+    let status, score = null, band = null;
+    if (total === 0) status = 'no_claims';
+    else if (tested === 0) status = 'no_evidence';
+    else {
+      score = Math.round(((b.supported * 100) + (b.misleading * 40)) / tested);
+      band = score >= 75 ? 'Strong' : score >= 50 ? 'Adequate' : score >= 25 ? 'Weak' : 'Poor';
+      status = tested < MIN_TESTED_FOR_CONFIDENCE ? 'thin' : 'rated';
+    }
+    return { name: p.name, weight: p.weight, definition: p.definition, status, score, band, counts: { ...b, claims: undefined }, total, tested };
+  });
+
+  const covered = results.filter((r) => r.score != null);
+  const weightCovered = covered.reduce((a, r) => a + r.weight, 0);
+  const overallScore = weightCovered ? Math.round(covered.reduce((a, r) => a + r.score * r.weight, 0) / weightCovered) : null;
+  const gaps = results.filter((r) => r.status === 'no_claims' || r.status === 'no_evidence')
+    .map((r) => ({ name: r.name, weight: r.weight, status: r.status }));
+
+  return { pillars: results, overallScore, weightCovered, gaps, unmapped: unmapped.length, totalWeight: pillars.reduce((a, p) => a + p.weight, 0) };
+}
 function stanceFor(verdict) { return verdict === 'supported' ? 'supports' : (verdict === 'contradicted' || verdict === 'misleading') ? 'contradicts' : 'context'; }
 
 // Is there already a claim in this bucket that means the same thing? (semantic dedupe)
@@ -50,7 +145,10 @@ export async function extractClaims(newsroomId, collection, { since = null } = {
   const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
   // The framework defines the pillars — what good looks like. Extraction is organised around
   // them, or you harvest whatever the company felt like saying and miss the actual targets.
-  const framework = await criteriaFramework(newsroomId, collection).catch(() => '');
+  // Configured pillars (exact names + weights) take priority for tagging; any uploaded
+  // framework/criteria text supplies the detailed rubric alongside them.
+  const pillars = await getPillars(newsroomId).catch(() => []);
+  const framework = (await criteriaFramework(newsroomId, collection).catch(() => '')) + pillarPromptBlock(pillars);
   let added = 0;
   for (const r of rows) {
     const text = (decryptFor(newsroomId, r.extracted_text) || '').slice(0, 8000);
@@ -108,7 +206,8 @@ export async function verifyClaims(newsroomId, collection, { incremental = false
   const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
   // Fetched once for the whole run, not per claim: the framework is the yardstick for every
   // judgement, so it is always present rather than competing for retrieval slots.
-  const framework = await criteriaFramework(newsroomId, collection).catch(() => '');
+  const pillars = await getPillars(newsroomId).catch(() => []);
+  const framework = (await criteriaFramework(newsroomId, collection).catch(() => '')) + pillarPromptBlock(pillars);
   let done = 0;
   onProgress?.({ phase: 'checking', total: claims.length, done: 0 });
   for (const cl of claims) {

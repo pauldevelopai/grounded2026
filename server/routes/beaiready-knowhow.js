@@ -19,7 +19,7 @@ import { getSettings, saveSettings, buildBundle, bundleStats } from '../services
 import { applyRules, applyRulesAll, countMatches, isPublishable, RULE_TARGET_FIELDS, RULE_WHEN_FIELDS, OPS } from '../services/company-knowledge-rules.js';
 import { generateSummaries, buildJsonLd, jsonLdScript } from '../services/company-knowledge-generate.js';
 import { PRESETS } from '../services/knowhow-presets.js';
-import { listMines, addMine, removeMine, getMine, verifyClaims, startVerify, verifyStatus, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis, generateReport, listReports, getReport, deleteReport, listUnassigned, assignSources } from '../services/claims-verify.js';
+import { listMines, addMine, removeMine, getMine, verifyClaims, startVerify, verifyStatus, claimsReport, addManualClaim, updateClaim, addCounterclaim, deleteManualEvidence, searchClaims, listThemes, exportClaims, listOrgCriteria, claimsAnalysis, generateReport, listReports, getReport, deleteReport, listUnassigned, assignSources, getPillars, setPillars, pillarRatings } from '../services/claims-verify.js';
 
 const router = Router();
 
@@ -564,6 +564,24 @@ router.get('/claims/analysis', async (req, res) => {
 router.get('/claims/criteria', async (req, res) => {
   try { const { newsroomId } = await ctx(req); res.json({ criteria: await listOrgCriteria(newsroomId) }); }
   catch (e) { console.error('[knowhow/claims:criteria]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+// A weighted rating framework (e.g. the ZES-GI's four pillars) claims are tagged and rated
+// against. Config is read by anyone (so the team sees the rubric); saved by admins only.
+router.get('/claims/pillars/config', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json({ pillars: await getPillars(newsroomId) }); }
+  catch (e) { console.error('[knowhow/claims:pillars-get]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+router.put('/claims/pillars/config', async (req, res) => {
+  try {
+    const { newsroomId } = await ctx(req);
+    if (newsroomId === OFFICE_NEWSROOM_ID) return res.status(400).json({ message: 'KnowHow is for client businesses.' });
+    res.json({ pillars: await setPillars(newsroomId, req.body?.pillars) });
+  } catch (e) { console.error('[knowhow/claims:pillars-put]', e); res.status(500).json({ message: 'Internal server error' }); }
+});
+// Rating for one mine (?collection=) or the whole portfolio (omit it).
+router.get('/claims/pillars', async (req, res) => {
+  try { const { newsroomId } = await ctx(req); res.json(await pillarRatings(newsroomId, req.query?.collection || null)); }
+  catch (e) { console.error('[knowhow/claims:pillars]', e); res.status(500).json({ message: 'Internal server error' }); }
 });
 router.get('/claims/export', async (req, res) => {
   try {

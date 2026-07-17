@@ -75,7 +75,7 @@ export default function BusinessKnowHow() {
 
       {isClaims ? (
         <>
-          <ClaimsWorkspace setErr={setErr} />
+          <ClaimsWorkspace setErr={setErr} isAdmin={user?.role === 'admin'} />
           <MoreTools setErr={setErr} isAdmin={user?.role === 'admin'} />
         </>
       ) : (
@@ -1255,7 +1255,148 @@ const STEPS = [
   { key: 'reports', n: 6, label: 'Reports', hint: 'Step 6 — save a stamped snapshot, search everything, export.' },
 ];
 
-function ClaimsWorkspace({ setErr }) {
+// One-click preset — Moses doesn't need database access to load the exact framework.
+const ZESGI_PRESET = [
+  { name: 'Environmental Protection & Ecological Rehabilitation', weight: 35, definition: 'Ecosystem protection, pollution prevention, and progressive rehabilitation of disturbed land.' },
+  { name: 'Water Security & Climate Resilience', weight: 25, definition: 'Watercourse and catchment protection, discharge control, and climate adaptation.' },
+  { name: 'Community Integration, Socio-Economic Rights & Benefit Sharing', weight: 20, definition: 'Local employment, community investment, and fair benefit sharing.' },
+  { name: 'Statutory Compliance, Transparency & Institutional Governance', weight: 20, definition: 'Compliance with law, public disclosure, and institutional governance.' },
+];
+
+// The rating framework itself — a WEIGHTED pillar list claims are tagged and rated against.
+// Admins edit it (or load the ZES-GI preset in one click); everyone else sees the rubric
+// being applied, read-only, so the team understands what "rated" means before trusting it.
+function PillarEditor({ isAdmin, setErr, onSaved }) {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(() => apiFetch('/beaiready/knowhow/claims/pillars/config').then((d) => setRows(d.pillars || [])).catch(() => setRows([])), []);
+  useEffect(() => { load(); }, [load]);
+
+  const setRow = (i, patch) => setRows((r) => r.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+  const addRow = () => setRows((r) => [...r, { name: '', weight: 0, definition: '' }]);
+  const delRow = (i) => setRows((r) => r.filter((_, idx) => idx !== i));
+  const loadPreset = () => { setRows(ZESGI_PRESET); setOpen(true); };
+  const totalWeight = (rows || []).reduce((a, p) => a + (Number(p.weight) || 0), 0);
+  const save = async () => {
+    setBusy(true); setErr('');
+    try { await apiFetch('/beaiready/knowhow/claims/pillars/config', { method: 'PUT', body: JSON.stringify({ pillars: rows }) }); onSaved?.(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  if (rows === null) return null;
+  if (!isAdmin) {
+    if (!rows.length) return null;
+    return (
+      <div style={{ ...card, marginBottom: 12, background: '#faf8f5' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 4 }}>Rating framework in use</div>
+        {rows.map((p) => (
+          <div key={p.name} style={{ fontSize: 12.5, color: '#5b5249', marginTop: 2 }}>{p.name} <span style={muted}>· {p.weight}%</span></div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div style={{ ...card, marginBottom: 12, borderColor: '#f0e4c4', background: '#fffdf7' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 13.5, fontWeight: 700 }}>Rating framework <span style={{ ...muted, fontWeight: 400 }}>— the weighted pillars claims are tagged and rated against</span></div>
+          {rows.length > 0 && <div style={{ ...muted, fontSize: 11.5 }}>{rows.length} pillar{rows.length === 1 ? '' : 's'} · {totalWeight}% weight{totalWeight !== 100 ? ' (doesn’t total 100 — that’s fine if intentional)' : ''}</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {!rows.length && <button onClick={loadPreset} style={btn}>Use ZES-GI framework</button>}
+          <button onClick={() => setOpen(!open)} style={tag}>{open ? 'Close' : rows.length ? 'Edit' : 'Set up manually'}</button>
+        </div>
+      </div>
+      {open && (
+        <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+          {rows.map((p, i) => (
+            <div key={i} style={{ ...card, padding: '8px 10px', display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={p.name} onChange={(e) => setRow(i, { name: e.target.value })} placeholder="Pillar name" style={{ ...input, flex: 1 }} />
+                <input type="number" min="0" max="100" value={p.weight} onChange={(e) => setRow(i, { weight: Number(e.target.value) })} placeholder="%" style={{ ...input, width: 64 }} />
+                <button onClick={() => delRow(i)} style={{ ...tag, color: '#b91c1c' }}>Remove</button>
+              </div>
+              <textarea value={p.definition} onChange={(e) => setRow(i, { definition: e.target.value })} placeholder="What this pillar means — the ideal situation being tested for" style={{ ...input, minHeight: 40, fontSize: 12.5, resize: 'vertical' }} />
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={addRow} style={tag}>Add pillar</button>
+            {rows.length > 0 && <button onClick={loadPreset} style={tag}>Replace with ZES-GI framework</button>}
+            <button onClick={save} disabled={busy} style={{ ...btn, marginLeft: 'auto' }}>{busy ? 'Saving…' : 'Save'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PILLAR_STATUS = {
+  rated:       { label: 'Rated', color: '#166534' },
+  thin:        { label: 'Thin data', color: '#b45309' },
+  no_evidence: { label: 'No evidence yet', color: '#b91c1c' },
+  no_claims:   { label: 'No claims mapped', color: '#b91c1c' },
+};
+
+// The thematic, weighted view the framework exists to produce — every pillar shown, gaps
+// stated plainly rather than a false all-clear, so a missing rating reads as missing data.
+function PillarRatings({ collection, reloadKey, title }) {
+  const [r, setR] = useState(null);
+  useEffect(() => {
+    const qs = collection ? `?collection=${encodeURIComponent(collection)}` : '';
+    apiFetch(`/beaiready/knowhow/claims/pillars${qs}`).then(setR).catch(() => setR(null));
+  }, [collection, reloadKey]);
+  if (!r || !r.pillars.length) return null;
+  return (
+    <div style={{ margin: collection ? '10px 0' : '8px 0 14px' }}>
+      {title && <div className="hub-section-label" style={{ marginBottom: 4 }}>{title}</div>}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 8 }}>
+        <span style={{ fontSize: 22, fontWeight: 800 }}>{r.overallScore != null ? `${r.overallScore}/100` : '—'}</span>
+        <span style={{ ...muted, fontSize: 12 }}>
+          weighted across {r.pillars.filter((p) => p.score != null).length} of {r.pillars.length} pillars
+          {r.weightCovered < r.totalWeight ? ` (${r.weightCovered}% of ${r.totalWeight}% framework weight has enough data)` : ''}
+        </span>
+      </div>
+      {r.gaps.length > 0 && (
+        <div style={{ ...card, marginBottom: 8, background: '#fef2f2', borderColor: '#fecaca' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#b91c1c', marginBottom: 3 }}>
+            {r.gaps.length} pillar{r.gaps.length === 1 ? '' : 's'} can’t be rated yet — add data to improve this
+          </div>
+          {r.gaps.map((g) => (
+            <div key={g.name} style={{ fontSize: 12, color: '#7f1d1d', marginTop: 1 }}>
+              <b>{g.name}</b> ({g.weight}% weight) — {g.status === 'no_claims' ? 'no claims map to this pillar yet' : 'claims exist, but nothing to test them against'}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'grid', gap: 7 }}>
+        {r.pillars.map((p) => {
+          const st = PILLAR_STATUS[p.status];
+          return (
+            <div key={p.name} style={card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 13, fontWeight: 700 }}>{p.name} <span style={{ ...muted, fontWeight: 400, fontSize: 11.5 }}>· {p.weight}%</span></span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: st.color }}>{p.score != null ? `${p.score}/100 · ${p.band}` : st.label}</span>
+              </div>
+              {p.score != null && (
+                <div style={{ height: 8, borderRadius: 4, background: '#ece6dc', marginTop: 5, overflow: 'hidden' }}>
+                  <div style={{ width: `${p.score}%`, height: '100%', background: st.color }} />
+                </div>
+              )}
+              <div style={{ ...muted, fontSize: 11, marginTop: 4 }}>
+                {p.tested} tested of {p.total} claim{p.total === 1 ? '' : 's'} mapped to this pillar
+                {p.status === 'thin' && ' — below 3 tested claims, treat this rating as provisional'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ClaimsWorkspace({ setErr, isAdmin }) {
   const [mines, setMines] = useState(null);
   const [report, setReport] = useState(null);
   const [allClaims, setAllClaims] = useState(null);
@@ -1270,6 +1411,7 @@ function ClaimsWorkspace({ setErr }) {
   const [reportCount, setReportCount] = useState(0);
   const [indexing, setIndexing] = useState(0);     // stored but not yet chunked/embedded
   const [docsKey, setDocsKey] = useState(0);       // bump to re-read the mine's document list
+  const [pillarsKey, setPillarsKey] = useState(0); // bump to re-fetch pillar ratings
 
   const loadMines = useCallback(() => apiFetch('/beaiready/knowhow/claims')
     .then((d) => { setMines(d.mines || []); setIndexing(d.indexing || 0); })
@@ -1282,7 +1424,7 @@ function ClaimsWorkspace({ setErr }) {
     apiFetch('/beaiready/knowhow/claims/criteria').then((d) => setCritCount((d.criteria || []).length)).catch(() => {});
     apiFetch('/beaiready/knowhow/claims/reports').then((d) => setReportCount((d.reports || []).length)).catch(() => {});
   }, []);
-  const refresh = useCallback(() => { loadMines(); loadDash(); }, [loadMines, loadDash]);
+  const refresh = useCallback(() => { loadMines(); loadDash(); setPillarsKey((k) => k + 1); }, [loadMines, loadDash]);
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { if (!target && mines?.length) setTarget(mines[0].name); }, [mines, target]);
   // While a backlog is being read, keep checking so the count clears itself on screen.
@@ -1447,6 +1589,7 @@ function ClaimsWorkspace({ setErr }) {
             rules. Load these <b>before</b> you Check: without them a claim is judged only against your evidence; with them
             it's judged against the law. This step is optional, but it's what makes a verdict defensible.
           </p>
+          <PillarEditor isAdmin={isAdmin} setErr={setErr} onSaved={() => setPillarsKey((k) => k + 1)} />
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
             <DataZone zone={CRITERIA_ZONE} collection={target} setErr={setErr} onAdded={() => { refresh(); setCritKey((k) => k + 1); }} />
             <CriteriaList setErr={setErr} reloadKey={critKey} onCount={setCritCount} />
@@ -1534,6 +1677,7 @@ function ClaimsWorkspace({ setErr }) {
                 <StatTile value={list.length} label={`Mine${list.length === 1 ? '' : 's'}`} />
                 <StatTile value={sources} label="Documents" />
               </div>
+              <PillarRatings collection={null} reloadKey={pillarsKey} title="By pillar — the whole portfolio" />
               {analysis && (
                 <>
                   <div className="hub-section-label" style={{ marginTop: 16 }}>What they claim vs what you found</div>
@@ -1577,6 +1721,7 @@ function ClaimsWorkspace({ setErr }) {
                   <VerdictBar counts={m.counts} />
                   {openMine === m.name && (
                     <div style={{ marginTop: 12, borderTop: '1px solid #eee5da', paddingTop: 10 }}>
+                      <PillarRatings collection={m.name} reloadKey={pillarsKey} title={`By pillar — ${m.name}`} />
                       <MineView setErr={setErr} mine={m.name} embedded onChanged={refresh} />
                     </div>
                   )}
