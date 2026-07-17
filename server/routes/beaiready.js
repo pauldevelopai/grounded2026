@@ -4,6 +4,7 @@
 // member can only ever see their own data. Admin-only writes self-guard inline.
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import pool from '../db/pool.js';
 import { requireRole } from '../middleware/auth.js';
 import { resolveNewsroomId } from '../lib/tenancy.js';
@@ -1513,6 +1514,52 @@ router.post('/admin/clients/:id/users', requireRole('admin'), async (req, res) =
     );
     res.status(201).json(rows[0]);
   } catch (err) { console.error('[beaiready/admin/clients/users/post]', err); res.status(500).json({ message: 'Internal server error' }); }
+});
+
+// Bulk-add logins for one client. Onboarding a whole team one-at-a-time (each with a
+// hand-typed temp password) doesn't scale — a company can have 30+ staff. This takes a
+// pasted list and creates them all, generating a readable temp password for each.
+// The plaintext passwords are returned ONCE, in this response, for the admin to hand
+// out; only the bcrypt hash is ever stored. Never logged.
+const PW_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';   // no i/l/o/0/1 — safe to read aloud
+function tempPassword() {
+  const b = crypto.randomBytes(12);
+  let s = '';
+  for (let i = 0; i < 12; i++) s += PW_ALPHABET[b[i] % PW_ALPHABET.length];
+  return `${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8, 12)}`;
+}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+router.post('/admin/clients/:id/users/bulk', requireRole('admin'), async (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.users) ? req.body.users : [];
+    if (!list.length) return res.status(400).json({ message: 'users[] required' });
+    if (list.length > 200) return res.status(400).json({ message: 'More than 200 people — please split it into smaller batches.' });
+    const nr = await pool.query("SELECT 1 FROM newsrooms WHERE id = $1 AND kind = 'business'", [req.params.id]);
+    if (!nr.rowCount) return res.status(404).json({ message: 'client not found' });
+
+    // Per-person, so one bad row never sinks the batch — each is reported honestly.
+    const created = [], skipped = [], seen = new Set();
+    for (const u of list) {
+      const email = String(u?.email || '').trim().toLowerCase();
+      const name = String(u?.name || '').trim() || email.split('@')[0];
+      if (!EMAIL_RE.test(email)) { skipped.push({ email: String(u?.email || '(blank)'), reason: 'not a valid email' }); continue; }
+      if (seen.has(email)) { skipped.push({ email, reason: 'listed twice' }); continue; }
+      seen.add(email);
+      const exists = await pool.query('SELECT 1 FROM team_members WHERE email = $1', [email]);
+      if (exists.rowCount) { skipped.push({ email, reason: 'already has a login' }); continue; }
+      const password = tempPassword();
+      try {
+        const hash = await bcrypt.hash(password, 10);
+        const { rows } = await pool.query(
+          `INSERT INTO team_members (name, email, password_hash, role, tracker_access, is_active, newsroom_id)
+           VALUES ($1,$2,$3,'member',true,true,$4) RETURNING id, name, email`,
+          [name, email, hash, req.params.id]);
+        created.push({ ...rows[0], password });
+      } catch (e) { skipped.push({ email, reason: 'could not be created' }); }
+    }
+    res.status(201).json({ created, skipped });
+  } catch (err) { console.error('[beaiready/admin/clients/users/bulk]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 
 // ── Admin · Tools curated FOR one client ────────────────────────────────────
