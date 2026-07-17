@@ -105,6 +105,29 @@ async function sourceLevelFallback(newsroomId, limit, { collection = null, roles
   return out;
 }
 
+// A ratings framework is a RUBRIC, not a corpus: it defines the pillars — what good looks
+// like — so it must be present for every judgement, never fished for by similarity (a
+// pillar doesn't read like a claim, so retrieval reliably misses it). Short criteria docs
+// are therefore included whole. Long ones — an Act runs to hundreds of chunks — are left to
+// retrieveCriteriaChunks, which pulls the provisions relevant to the claim at hand.
+const FRAMEWORK_BUDGET = 14000;   // chars; a framework is a few pages, an Act is not
+export async function criteriaFramework(newsroomId, collection = null) {
+  const { rows } = await pool.query(
+    `SELECT title, extracted_text FROM beaiready_company_sources
+      WHERE newsroom_id = $1 AND role = 'criteria' AND (collection = $2 OR collection IS NULL)
+        AND inclusion <> 'exclude' AND sensitivity <> 'withdrawn' AND extracted_text IS NOT NULL
+      ORDER BY length(extracted_text) ASC`, [newsroomId, collection]).catch(() => ({ rows: [] }));
+  const parts = [];
+  let budget = FRAMEWORK_BUDGET;
+  for (const r of rows) {
+    const t = (decryptFor(newsroomId, r.extracted_text) || '').trim();
+    if (!t || t.length > budget) continue;         // too long ⇒ it's legislation; retrieve it instead
+    parts.push(`--- ${r.title || 'Criteria'} ---\n${t}`);
+    budget -= t.length;
+  }
+  return parts.join('\n\n');
+}
+
 // Judging criteria for the Claims Verifier: the passages of the tenant's criteria docs
 // (role='criteria') most relevant to a claim. Includes org-wide criteria (collection IS
 // NULL) and this mine's own criteria (collection = $collection). Falls back to raw text
@@ -113,7 +136,7 @@ export async function retrieveCriteriaChunks(newsroomId, question, collection = 
   const emb = await generateEmbedding(question).catch(() => null);
   if (emb) {
     const { rows } = await pool.query(
-      `SELECT c.text_chunk, s.title
+      `SELECT c.source_id, c.text_chunk, s.title
          FROM beaiready_source_chunks c
          JOIN beaiready_company_sources s ON s.id = c.source_id
         WHERE c.newsroom_id = $1 AND c.embedding IS NOT NULL AND s.role = 'criteria'
@@ -121,14 +144,14 @@ export async function retrieveCriteriaChunks(newsroomId, question, collection = 
           AND (s.collection = $2 OR s.collection IS NULL)
         ORDER BY c.embedding <=> $3::vector
         LIMIT $4`, [newsroomId, collection, toPgVector(emb), limit]).catch(() => ({ rows: [] }));
-    if (rows.length) return rows.map((r) => ({ title: r.title, text: decryptFor(newsroomId, r.text_chunk) || '' })).filter((r) => r.text);
+    if (rows.length) return rows.map((r) => ({ source_id: r.source_id, title: r.title, text: decryptFor(newsroomId, r.text_chunk) || '' })).filter((r) => r.text);
   }
   const { rows } = await pool.query(
-    `SELECT title, extracted_text FROM beaiready_company_sources
+    `SELECT id, title, extracted_text FROM beaiready_company_sources
       WHERE newsroom_id = $1 AND role = 'criteria' AND inclusion <> 'exclude' AND sensitivity <> 'withdrawn'
         AND (collection = $2 OR collection IS NULL) AND extracted_text IS NOT NULL
       ORDER BY created_at DESC LIMIT $3`, [newsroomId, collection, limit]).catch(() => ({ rows: [] }));
-  return rows.map((r) => ({ title: r.title, text: (decryptFor(newsroomId, r.extracted_text) || '').slice(0, 1500) })).filter((r) => r.text);
+  return rows.map((r) => ({ source_id: r.id, title: r.title, text: (decryptFor(newsroomId, r.extracted_text) || '').slice(0, 1500) })).filter((r) => r.text);
 }
 
 // Explicit search: the single best passage per source, scored, for the search box.

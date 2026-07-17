@@ -7,7 +7,7 @@
 import pool from '../db/pool.js';
 import { decryptFor, encryptFor } from './crypto.js';
 import { callClaude } from './claude.js';
-import { retrieveCompanyChunks, retrieveCriteriaChunks } from './company-knowledge-index.js';
+import { retrieveCompanyChunks, retrieveCriteriaChunks, criteriaFramework } from './company-knowledge-index.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
 import { assistantInstructionsFor } from './knowhow-presets.js';
 
@@ -48,29 +48,44 @@ export async function extractClaims(newsroomId, collection, { since = null } = {
         AND ($3::timestamptz IS NULL OR created_at > $3)`, [newsroomId, collection, since]);
   if (!rows.length) return { extracted: 0 };
   const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
+  // The framework defines the pillars — what good looks like. Extraction is organised around
+  // them, or you harvest whatever the company felt like saying and miss the actual targets.
+  const framework = await criteriaFramework(newsroomId, collection).catch(() => '');
   let added = 0;
   for (const r of rows) {
     const text = (decryptFor(newsroomId, r.extracted_text) || '').slice(0, 8000);
     if (!text) continue;
     const system = (persona ? persona + '\n\n' : '')
-      + 'Extract the concrete, checkable factual CLAIMS this mining company makes about itself in the document — '
-      + 'each a single verifiable assertion (environmental compliance, rehabilitation, pollution/water, community '
-      + 'benefits, safety, production, employment, etc.). Return STRICT JSON: {"claims": string[]}. Each claim '
-      + '≤200 chars, self-contained, prefixed with the mine name if helpful. Skip opinions and vague aspirations.';
+      + (framework
+        ? 'THE NEWSROOM’S RATING FRAMEWORK AND STANDARDS — these pillars describe the situation the newsroom is '
+          + 'testing for. Your extraction MUST be organised around them.\n\n' + framework
+          + '\n\nWorking pillar by pillar, extract the concrete, checkable claims this company makes about itself that '
+          + 'BEAR ON THE PILLARS ABOVE — including claims that only partly address a pillar, and claims that sound '
+          + 'like compliance with a standard. Tag each with the pillar it speaks to, named exactly as in the framework. '
+          + 'If the company says nothing about a pillar, return nothing for it — silence is measured elsewhere.\n'
+        : 'Extract the concrete, checkable factual CLAIMS this mining company makes about itself — each a single '
+          + 'verifiable assertion (environmental compliance, rehabilitation, pollution/water, community benefits, '
+          + 'safety, production, employment). Tag each with a short topic.\n')
+      + 'Return STRICT JSON: {"claims":[{"text":string,"pillar":string}]}. Each text ≤200 chars, self-contained, '
+      + 'prefixed with the company name if helpful. Skip opinions and vague aspirations.';
     let out;
     try { out = await callClaude({ system, userContent: `Document: ${r.title || ''}\n\n${text}\n\nReturn the JSON.`, maxTokens: 1200, temperature: 0.1 }); }
     catch (e) { console.error('[claims extract]', e.message); continue; }
     for (const raw of (safeJson(out)?.claims || [])) {
-      const c = String(raw).trim().slice(0, 400);
+      // tolerate both shapes: {text,pillar} now, a bare string from any older reply
+      const c = String(typeof raw === 'string' ? raw : (raw?.text || '')).trim().slice(0, 400);
       if (!c) continue;
+      // The pillar becomes the claim's theme, so the dashboard clusters by the framework's
+      // pillars rather than by tags the model invented for itself.
+      const pillar = String(raw?.pillar || '').toLowerCase().slice(0, 60).trim();
       const { rowCount } = await pool.query(
         'SELECT 1 FROM beaiready_claim_checks WHERE newsroom_id=$1 AND collection=$2 AND lower(claim_text)=lower($3)', [newsroomId, collection, c]);
       if (rowCount) continue;                                     // exact duplicate
       const vec = await generateEmbedding(c).catch(() => null);
       if (await findSimilarClaim(newsroomId, collection, vec)) continue;   // same claim, re-phrased
       const { rows: [ins] } = await pool.query(
-        'INSERT INTO beaiready_claim_checks (newsroom_id, collection, claim_text, verdict, embedding) VALUES ($1,$2,$3,\'pending\',$4) RETURNING id',
-        [newsroomId, collection, c, vec ? toPgVector(vec) : null]);
+        'INSERT INTO beaiready_claim_checks (newsroom_id, collection, claim_text, verdict, embedding, themes) VALUES ($1,$2,$3,\'pending\',$4,$5::jsonb) RETURNING id',
+        [newsroomId, collection, c, vec ? toPgVector(vec) : null, JSON.stringify(pillar ? [pillar] : [])]);
       await pool.query(
         'INSERT INTO beaiready_claim_events (newsroom_id, claim_id, event_type, new_verdict, detail) VALUES ($1,$2,\'created\',\'pending\',$3::jsonb)',
         [newsroomId, ins.id, JSON.stringify({ from: r.title || 'a company document' })]);
@@ -88,39 +103,53 @@ export async function verifyClaims(newsroomId, collection, { incremental = false
   onProgress?.({ phase: 'extracting' });
   await extractClaims(newsroomId, collection, { since });
   const { rows: claims } = await pool.query(
-    `SELECT id, claim_text, verdict AS prev FROM beaiready_claim_checks
+    `SELECT id, claim_text, themes, verdict AS prev FROM beaiready_claim_checks
       WHERE newsroom_id=$1 AND collection=$2 AND locked = false ${incremental ? 'AND verified_at IS NULL' : ''}`, [newsroomId, collection]);
   const persona = await assistantInstructionsFor(newsroomId).catch(() => '');
+  // Fetched once for the whole run, not per claim: the framework is the yardstick for every
+  // judgement, so it is always present rather than competing for retrieval slots.
+  const framework = await criteriaFramework(newsroomId, collection).catch(() => '');
   let done = 0;
   onProgress?.({ phase: 'checking', total: claims.length, done: 0 });
   for (const cl of claims) {
     onProgress?.({ claim: cl.claim_text.slice(0, 90) });
     const evidence = await retrieveCompanyChunks(newsroomId, cl.claim_text, { collection, roles: ['reporting', 'external'], limit: 8 });
-    let verdict = 'unverified', rationale = 'No independent evidence has been added yet to test this claim.', citations = [], used = [], confidence = null, themes = [];
+    let verdict = 'unverified', rationale = 'No independent evidence has been added yet to test this claim.', citations = [], used = [], confidence = null, themes = [], appliedCriteria = [];
     if (evidence.length) {
       const ctx = evidence.map((e, i) => `[${i + 1}] (${e.kind}) ${e.title || ''}: ${e.text.replace(/\s+/g, ' ').slice(0, 1200)}`).join('\n\n');
-      const criteria = await retrieveCriteriaChunks(newsroomId, cl.claim_text, collection, 4);
-      const criteriaBlock = criteria.length
-        ? '\n\nJUDGING CRITERIA — apply these standards when deciding (the newsroom’s own yardstick):\n'
-          + criteria.map((c) => `- ${c.title ? c.title + ': ' : ''}${c.text.replace(/\s+/g, ' ').slice(0, 600)}`).join('\n')
+      // Legislation, retrieved per claim. Searched on the claim AND its pillar, so a claim
+      // about tailings reaches the discharge provisions even when it never says "discharge".
+      const pillarHint = (Array.isArray(cl.themes) ? cl.themes.join(' ') : '');
+      const criteria = await retrieveCriteriaChunks(newsroomId, `${cl.claim_text} ${pillarHint}`.trim(), collection, 8);
+      const frameworkBlock = framework
+        ? '\n\nTHE RATING FRAMEWORK — the pillars the newsroom is testing for. Judge against these, not against a '
+          + 'standard of your own:\n' + framework
+        : '';
+      const lawBlock = criteria.length
+        ? '\n\nRELEVANT PROVISIONS from the newsroom’s legislation and standards. Where one bears on the claim, apply '
+          + 'it and NAME it in your rationale (e.g. "EMA Act s70 prohibits the discharge of waste…"):\n'
+          + criteria.map((c) => `- ${c.title ? c.title + ': ' : ''}${c.text.replace(/\s+/g, ' ').slice(0, 900)}`).join('\n')
         : '';
       const system = (persona ? persona + '\n\n' : '')
         + 'You are testing a single claim a mining company made about itself, using ONLY the numbered EVIDENCE below '
-        + '(the newsroom’s own reporting and independent sources). Decide a verdict and cite the evidence you used. '
-        + 'Return STRICT JSON: {"verdict":"supported"|"contradicted"|"misleading"|"unverified","rationale":string(<=400 chars, cite [n]),"citations":number[],"confidence":number 0..1,"themes":string[]}. '
+        + '(the newsroom’s own reporting and independent sources), measured against the framework and provisions given. '
+        + 'Return STRICT JSON: {"verdict":"supported"|"contradicted"|"misleading"|"unverified","rationale":string(<=500 chars, cite [n] and name any provision applied),"citations":number[],"confidence":number 0..1,"themes":string[]}. '
         + 'supported = evidence backs it; contradicted = evidence shows it false; misleading = technically true but creates a false '
-        + 'impression; unverified = the evidence does not settle it. confidence = how strongly the evidence settles it. '
-        + 'themes = 1–3 short lowercase topic tags (e.g. "rehabilitation","water pollution","employment"). Go strictly on the evidence — never assume.'
-        + criteriaBlock;
+        + 'impression, OR it meets the letter of a claim while failing the pillar it speaks to; unverified = the evidence does not settle it. '
+        + 'A claim that satisfies the company’s own wording but falls short of the framework’s pillar or a legal provision is NOT "supported". '
+        + 'confidence = how strongly the evidence settles it. themes = the framework pillar(s) this claim speaks to, named as in the '
+        + 'framework; fall back to a short topic only if no framework is given. Go strictly on the evidence — never assume.'
+        + frameworkBlock + lawBlock;
       try {
-        const p = safeJson(await callClaude({ system, userContent: `CLAIM: ${cl.claim_text}\n\nEVIDENCE:\n${ctx}\n\nReturn the JSON.`, maxTokens: 500, temperature: 0.1 }));
+        const p = safeJson(await callClaude({ system, userContent: `CLAIM: ${cl.claim_text}\n\nEVIDENCE:\n${ctx}\n\nReturn the JSON.`, maxTokens: 700, temperature: 0.1 }));
         if (p && VERDICTS.includes(p.verdict)) {
           verdict = p.verdict;
-          rationale = String(p.rationale || '').slice(0, 600);
+          rationale = String(p.rationale || '').slice(0, 700);
           used = (Array.isArray(p.citations) ? p.citations : []).map((n) => evidence[n - 1]).filter(Boolean);
           citations = used.map((e) => ({ title: e.title, kind: e.kind }));
           if (typeof p.confidence === 'number') confidence = Math.max(0, Math.min(1, p.confidence));
           if (Array.isArray(p.themes)) themes = p.themes.slice(0, 3).map((t) => String(t).toLowerCase().slice(0, 40)).filter(Boolean);
+          appliedCriteria = criteria;   // shown under the claim, so you can see the law that was applied
         }
       } catch (e) { console.error('[claims verify]', e.message); }
     }
@@ -137,6 +166,13 @@ export async function verifyClaims(newsroomId, collection, { incremental = false
       await pool.query(
         'INSERT INTO beaiready_claim_evidence (newsroom_id, claim_id, source_id, role, stance, quote, title) VALUES ($1,$2,$3,$4,$5,$6,$7)',
         [newsroomId, cl.id, e.source_id || null, e.role || null, stance, encryptFor(newsroomId, (e.text || '').slice(0, 1200)), e.title || null]);
+    }
+    // The standards actually applied, kept with the verdict — otherwise there's no way to see
+    // whether the law bit, which is exactly the complaint the criteria feature exists to answer.
+    for (const c of appliedCriteria.slice(0, 3)) {
+      await pool.query(
+        'INSERT INTO beaiready_claim_evidence (newsroom_id, claim_id, source_id, role, stance, quote, title) VALUES ($1,$2,$3,\'criteria\',\'context\',$4,$5)',
+        [newsroomId, cl.id, c.source_id || null, encryptFor(newsroomId, (c.text || '').slice(0, 900)), c.title || 'Criteria']);
     }
     // Append-only history: record every verdict change (incl. the first, from 'pending').
     if (cl.prev !== verdict) {

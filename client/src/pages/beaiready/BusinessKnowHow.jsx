@@ -1143,8 +1143,12 @@ function ReportsPanel({ mines, setErr, onOpen, onCount }) {
 
   const gen = async () => {
     setBusy(true); setErr('');
-    try { await apiFetch('/beaiready/knowhow/claims/reports', { method: 'POST', body: JSON.stringify({ collection: scope || null, kind }) }); load(); }
-    catch (e) { setErr(e.message); }
+    try {
+      const r = await apiFetch('/beaiready/knowhow/claims/reports', { method: 'POST', body: JSON.stringify({ collection: scope || null, kind }) });
+      load();
+      // You asked for a report — so show the report, not a row you then have to hunt for.
+      if (r?.id) { try { setViewing(await apiFetch(`/beaiready/knowhow/claims/reports/${r.id}`)); } catch { /* the list still has it */ } }
+    } catch (e) { setErr(e.message); }
     setBusy(false);
   };
   const open = async (id) => { setErr(''); try { setViewing(await apiFetch(`/beaiready/knowhow/claims/reports/${id}`)); } catch (e) { setErr(e.message); } };
