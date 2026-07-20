@@ -93,7 +93,7 @@ export default function StudioShell() {
         {/* Header — a STUDIO badge marks this as the back-office, distinct from
             the newsroom product, with a one-click way back. */}
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0F172A', background: '#FBBF24', padding: '2px 8px', borderRadius: 4, marginBottom: 8 }}>
+          <div style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#fff', background: '#c75b39', padding: '2px 8px', borderRadius: 4, marginBottom: 8 }}>
             Studio
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}>Develop&nbsp;AI back-office</div>
