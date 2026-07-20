@@ -1433,16 +1433,6 @@ function ClaimsWorkspace({ setErr, isAdmin }) {
     const t = setTimeout(loadMines, 4000);
     return () => clearTimeout(t);
   }, [indexing, loadMines]);
-  // A Check runs on the server, so reloading the page shouldn't look like it stopped —
-  // if one is still going for this mine, pick the reporting back up.
-  useEffect(() => {
-    if (!target || verifying) return;
-    let gone = false;
-    apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(target)}/verify-status`)
-      .then((s) => { if (!gone && s?.running) followVerify(target); })
-      .catch(() => {});
-    return () => { gone = true; };
-  }, [target, verifying, followVerify]);
   // Drop you at the first step that still needs you — and at Results once there's an answer.
   useEffect(() => {
     if (step !== null || mines == null) return;
@@ -1476,6 +1466,18 @@ function ClaimsWorkspace({ setErr, isAdmin }) {
     setVerifying(`${mine}: still running — leave it, it finishes on its own.`);
     return null;
   }, [setErr, refresh]);
+
+  // A Check runs on the server, so reloading the page shouldn't look like it stopped — if one
+  // is still going for this mine, pick the reporting back up. Declared AFTER followVerify so it
+  // isn't referenced in the temporal dead zone (that crashed the whole page — blank screen).
+  useEffect(() => {
+    if (!target || verifying) return undefined;
+    let gone = false;
+    apiFetch(`/beaiready/knowhow/claims/${encodeURIComponent(target)}/verify-status`)
+      .then((s) => { if (!gone && s?.running) followVerify(target); })
+      .catch(() => {});
+    return () => { gone = true; };
+  }, [target, verifying, followVerify]);
 
   const verifyOne = async () => {
     if (!target) return;
