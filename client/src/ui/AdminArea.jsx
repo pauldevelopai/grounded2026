@@ -89,7 +89,7 @@ export default function AdminArea() {
         display: 'flex', flexDirection: 'column', zIndex: 50,
       }}>
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#fff', background: '#2563EB', padding: '2px 8px', borderRadius: 4, marginBottom: 8 }}>
+          <div style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#fff', background: '#c75b39', padding: '2px 8px', borderRadius: 4, marginBottom: 8 }}>
             Admin
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}>Platform admin</div>

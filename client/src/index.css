@@ -1,17 +1,20 @@
 :root {
-  --sidebar-bg: #1E1E2E;
+  /* Design tokens retargeted to the BE AI READY palette — warm charcoal +
+     terracotta on a soft off-white (was blue/cool-gray). Shells and every
+     .hub-*/var()-based surface inherit this automatically. */
+  --sidebar-bg: #1c1b1a;
   --sidebar-width: 240px;
-  --sidebar-text: #E2E8F0;
-  --sidebar-text-muted: #94A3B8;
-  --sidebar-hover: #2D2D44;
-  --sidebar-active: #3B3B5C;
-  --content-bg: #F8FAFC;
+  --sidebar-text: #e7e0d8;
+  --sidebar-text-muted: #9a9087;
+  --sidebar-hover: #2a2725;
+  --sidebar-active: #38332f;
+  --content-bg: #f7f4ef;
   --card-bg: #FFFFFF;
-  --text-primary: #1A202C;
-  --text-secondary: #718096;
-  --border-color: #E2E8F0;
-  --accent: #3B82F6;
-  --accent-hover: #2563EB;
+  --text-primary: #1c1b1a;
+  --text-secondary: #6b6359;
+  --border-color: #e4dcd2;
+  --accent: #c75b39;
+  --accent-hover: #b34e2f;
   --danger: #EF4444;
   --danger-hover: #DC2626;
   --success: #10B981;
@@ -19,7 +22,7 @@
   --ai-purple: #7C3AED;
   --ai-purple-bg: #EDE9FE;
   --ai-purple-hover: #6D28D9;
-  --radius: 6px;
+  --radius: 8px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 
   /* ── GROUNDED design tokens (Phase 1) ───────────────────────────────
@@ -189,7 +192,7 @@ input, select, textarea {
 }
 
 .data-table tr:hover td {
-  background: #F8FAFC;
+  background: #efe9e1;
 }
 
 .data-table-clickable tr {
@@ -330,7 +333,7 @@ input, select, textarea {
 .pipeline-column { min-width: 200px; flex: 1; display: flex; flex-direction: column; }
 .pipeline-column-header { padding: 8px 12px; font-size: 13px; font-weight: 600; border-top: 3px solid var(--border-color); background: var(--card-bg); border-radius: var(--radius) var(--radius) 0 0; display: flex; justify-content: space-between; align-items: center; }
 .pipeline-count { background: var(--border-color); color: var(--text-secondary); font-size: 11px; padding: 1px 6px; border-radius: 10px; }
-.pipeline-cards { flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #F8FAFC; border-radius: 0 0 var(--radius) var(--radius); min-height: 100px; }
+.pipeline-cards { flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #efe9e1; border-radius: 0 0 var(--radius) var(--radius); min-height: 100px; }
 .pipeline-card { background: white; border: 1px solid var(--border-color); border-radius: var(--radius); padding: 10px 12px; cursor: pointer; transition: box-shadow 0.15s; }
 .pipeline-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .pipe-move-btn { background: var(--border-color); border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; color: var(--text-secondary); }
@@ -839,13 +842,13 @@ a.fn-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); transform: translateY
   white-space: nowrap;
   border-bottom: 2px solid transparent;
 }
-.product-nav-tab:hover { color: var(--text-primary); background: #F8FAFC; }
+.product-nav-tab:hover { color: var(--text-primary); background: #efe9e1; }
 .product-nav-tab.active { color: var(--text-primary); font-weight: 700; border-bottom-color: var(--accent, var(--text-primary)); }
 .product-nav-tab .tab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--accent, var(--text-secondary)); }
 
 .product-nav-right { display: flex; gap: var(--space-2); align-items: center; margin-left: auto; }
 .product-nav-link { padding: 7px 12px; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: var(--radius); color: var(--text-secondary); border: 1px solid transparent; cursor: pointer; background: transparent; font-family: inherit; }
-.product-nav-link:hover { color: var(--text-primary); background: #F8FAFC; }
+.product-nav-link:hover { color: var(--text-primary); background: #efe9e1; }
 .product-nav-link.outline { border-color: var(--border-color); }
 .product-nav-link.solid { background: var(--accent); color: #fff; }
 
@@ -873,7 +876,7 @@ a.layer-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); transform: transla
 .hub-btn-solid { background: var(--accent); color: #fff; }
 .hub-btn-solid:hover { background: var(--accent-hover); }
 .hub-btn-ghost { border: 1px solid var(--border-color); color: var(--text-primary); }
-.hub-btn-ghost:hover { background: #F8FAFC; }
+.hub-btn-ghost:hover { background: #efe9e1; }
 .hub-btn-text { display: inline-flex; align-items: center; padding: 10px 6px; font-size: 14px; font-weight: 600; color: var(--text-secondary); text-decoration: none; }
 .hub-btn-text:hover { color: var(--text-primary); }
 
@@ -919,7 +922,7 @@ a.layer-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); transform: transla
   cursor: pointer; font-family: inherit;
 }
 .dir-chip:hover { color: var(--text-primary); border-color: var(--text-secondary); }
-.dir-chip.active { color: var(--text-primary); font-weight: 700; border-color: var(--accent, var(--text-primary)); background: #F8FAFC; }
+.dir-chip.active { color: var(--text-primary); font-weight: 700; border-color: var(--accent, var(--text-primary)); background: #efe9e1; }
 .dir-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent, var(--text-secondary)); }
 .dir-count { margin-left: auto; font-size: 12px; color: var(--text-secondary); }
 

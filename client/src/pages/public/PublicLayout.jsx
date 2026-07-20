@@ -9,13 +9,14 @@ import QuestionBubble from '../../components/QuestionBubble.jsx';
 // once a visitor clicks the 💬 button.
 const PublicChatbot = lazy(() => import('./PublicChatbot.jsx'));
 
+// The header is now the BE AI READY charcoal chrome, so nav links are light-on-dark.
 const navStyle = ({ isActive }) => ({
   padding: '8px 12px',
   borderRadius: 'var(--radius)',
   fontSize: 14,
   fontWeight: isActive ? 600 : 500,
-  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-  background: isActive ? '#EEF2FF' : 'transparent',
+  color: isActive ? '#fff' : '#e7e0d8',
+  background: isActive ? 'rgba(255,255,255,0.10)' : 'transparent',
   textDecoration: 'none',
 });
 
@@ -77,7 +78,7 @@ function NavDropdown({ label, items, activeWhen }) {
           ...navStyle({ isActive: active }),
           display: 'flex', alignItems: 'center', gap: 4,
           border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-          background: active || open ? '#EEF2FF' : 'transparent',
+          background: active || open ? 'rgba(255,255,255,0.10)' : 'transparent',
         }}
       >
         {label} <span style={{ fontSize: 10 }}>▾</span>
@@ -93,7 +94,7 @@ function NavDropdown({ label, items, activeWhen }) {
             <a key={it.to} href={it.to} style={dropItemStyle} onClick={() => setOpen(false)}>{it.label}</a>
           ) : (
             <NavLink key={it.to} to={it.to} onClick={() => setOpen(false)}
-                     style={({ isActive }) => ({ ...dropItemStyle, background: isActive ? '#EEF2FF' : 'transparent', fontWeight: isActive ? 600 : 500 })}>
+                     style={({ isActive }) => ({ ...dropItemStyle, background: isActive ? '#efe9e1' : 'transparent', fontWeight: isActive ? 600 : 500 })}>
               {it.label}
             </NavLink>
           ))}
@@ -132,17 +133,18 @@ export default function PublicLayout() {
       background: 'var(--content-bg)', color: 'var(--text-primary)',
     }}>
       <header style={{
-        borderBottom: '1px solid var(--border-color)', background: 'var(--card-bg)',
+        background: 'linear-gradient(180deg, #1c1b1a 0%, #232120 100%)',
+        borderBottom: '2px solid #c75b39',
         position: 'sticky', top: 0, zIndex: 10,
       }}>
         <div style={{
           maxWidth: 1200, margin: '0 auto', padding: '14px 24px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
         }}>
-          <Link to="/" style={{ textDecoration: 'none', color: 'var(--text-primary)' }}>
+          <Link to="/" style={{ textDecoration: 'none' }}>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>Grounded</span>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.01em', color: '#fff' }}>Grounded</span>
+              <span style={{ fontSize: 11, color: '#c75b39', fontWeight: 600 }}>
                 Newsroom-owned AI &middot; by Develop&nbsp;AI
               </span>
             </div>
@@ -161,14 +163,14 @@ export default function PublicLayout() {
                       style={{ ...inactiveStyle, fontWeight: 600, color: 'white', background: 'var(--accent)' }}>
                   {user.role === 'admin' ? 'Admin' : 'Open app'}
                 </Link>
-                <span style={{ ...inactiveStyle, color: 'var(--text-primary)', fontWeight: 600 }}>Hi, {firstName}</span>
+                <span style={{ ...inactiveStyle, color: '#f2ede7', fontWeight: 600 }}>Hi, {firstName}</span>
                 <button onClick={async () => { await logout(); window.location.reload(); }}
-                        style={{ ...inactiveStyle, background: 'transparent', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                        style={{ ...inactiveStyle, background: 'transparent', border: '1px solid rgba(231,224,216,0.35)', cursor: 'pointer' }}>
                   Sign out
                 </button>
               </>
             ) : (
-              <a href={`/login?next=${nextParam}`} style={{ ...inactiveStyle, border: '1px solid var(--border-color)' }}>
+              <a href={`/login?next=${nextParam}`} style={{ ...inactiveStyle, color: '#fff', border: '1px solid #c75b39' }}>
                 Sign&nbsp;in&nbsp;/&nbsp;Register
               </a>
             )}
@@ -188,15 +190,15 @@ export default function PublicLayout() {
       <QuestionBubble />
 
       <footer style={{
-        borderTop: '1px solid var(--border-color)', background: 'var(--card-bg)',
+        background: '#1c1b1a', color: '#9a9087',
         padding: '20px 24px', marginTop: 48,
       }}>
         <div style={{
           maxWidth: 1200, margin: '0 auto',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
-          fontSize: 12, color: 'var(--text-secondary)',
+          fontSize: 12, color: '#9a9087',
         }}>
-          <span>© Grounded · <a href="https://grounded.developai.co.za" style={{ color: 'var(--text-secondary)' }}>grounded.developai.co.za</a></span>
+          <span>© Grounded · <a href="https://grounded.developai.co.za" style={{ color: '#c75b39' }}>grounded.developai.co.za</a></span>
           <span>Newsroom-owned AI tools · an open tracker of AI in law · by Develop AI</span>
         </div>
       </footer>
