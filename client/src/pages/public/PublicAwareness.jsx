@@ -195,7 +195,7 @@ function Resources({ items }) {
           <a key={it.id} href={it.url || '#'} target="_blank" rel="noreferrer"
              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              {it.item_type && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5, background: '#E2E8F0', color: '#334155', textTransform: 'capitalize' }}>{it.item_type}</span>}
+              {it.item_type && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5, background: '#e4dcd2', color: '#334155', textTransform: 'capitalize' }}>{it.item_type}</span>}
               <span style={{ fontSize: 13.5, fontWeight: 600 }}>{it.title}</span>
               {it.source_name && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>· {it.source_name}</span>}
             </div>

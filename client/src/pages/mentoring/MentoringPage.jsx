@@ -151,7 +151,7 @@ export default function MentoringPage() {
                       <td>{j.status}</td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ width: 60, height: 6, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: 60, height: 6, background: '#e4dcd2', borderRadius: 3, overflow: 'hidden' }}>
                             <div style={{ width: `${j.overall_progress || 0}%`, height: '100%', background: 'var(--accent)', borderRadius: 3 }} />
                           </div>
                           <span style={{ fontSize: 11 }}>{j.overall_progress || 0}%</span>

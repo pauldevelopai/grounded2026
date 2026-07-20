@@ -146,7 +146,7 @@ export default function JourneyDetail() {
 
                 {/* Submission */}
                 {t.submission_text && (
-                  <div style={{ marginTop: 8, padding: 10, background: '#F8FAFC', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
+                  <div style={{ marginTop: 8, padding: 10, background: '#efe9e1', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Submission</div>
                     <div style={{ fontSize: 13 }}>{t.submission_text}</div>
                     {t.submission_url && <a href={t.submission_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>{t.submission_url}</a>}

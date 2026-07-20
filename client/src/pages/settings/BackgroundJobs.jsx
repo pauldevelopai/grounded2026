@@ -230,7 +230,7 @@ export default function BackgroundJobs() {
           {selectedRun.error && (
             <div className="login-error" style={{ marginBottom: 12 }}>{selectedRun.error}</div>
           )}
-          <div style={{ maxHeight: 400, overflowY: 'auto', padding: 12, background: '#F8FAFC', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
+          <div style={{ maxHeight: 400, overflowY: 'auto', padding: 12, background: '#efe9e1', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
             {renderMarkdown(selectedRun.result || 'No output')}
           </div>
         </Modal>

@@ -165,7 +165,7 @@ function Result({ result }) {
             {result.suggestions.map((s, i) => (
               <div key={i}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>
-                  {s.area && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5, background: '#EEF2FF', color: '#4F46E5', textTransform: 'capitalize', marginRight: 6 }}>{s.area}</span>}
+                  {s.area && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5, background: '#efe9e1', color: '#4F46E5', textTransform: 'capitalize', marginRight: 6 }}>{s.area}</span>}
                   {s.point}
                 </div>
                 {s.why && <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{s.why}</div>}

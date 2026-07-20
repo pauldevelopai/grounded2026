@@ -185,7 +185,7 @@ export default function PublicLawsuitsList({ mode = 'list', caseId: caseIdProp }
                       style={{
                         cursor: 'pointer', fontSize: 12, padding: '7px 12px', borderRadius: 6,
                         border: `1.5px solid ${isOpen ? '#6366F1' : 'var(--border-color)'}`,
-                        background: isOpen ? '#EEF2FF' : 'var(--card-bg)',
+                        background: isOpen ? '#efe9e1' : 'var(--card-bg)',
                         transition: 'all 0.15s', maxWidth: 240,
                       }}>
                       <div style={{ fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -319,7 +319,7 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, hideExpandHin
             return (
               <div style={{
                 marginTop: 6, marginBottom: 6, padding: '6px 10px',
-                background: '#EEF2FF', borderLeft: '2px solid #6366F1', borderRadius: 4,
+                background: '#efe9e1', borderLeft: '2px solid #6366F1', borderRadius: 4,
                 fontSize: 12, lineHeight: 1.4,
               }}>
                 <span style={{ fontWeight: 700, color: '#4F46E5' }}>
@@ -384,8 +384,8 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, hideExpandHin
           </div>
 
           {c.next_deadline && (
-            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8' }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#efe9e1', border: '1px solid #e4c9bd' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
                 Next: {c.next_deadline_notes || 'Deadline'} — {formatDate(c.next_deadline)}
               </span>
             </div>

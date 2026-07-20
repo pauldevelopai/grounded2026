@@ -84,7 +84,7 @@ function ExpandedReg({ r, isAdmin, onChanged }) {
         <div style={{ textAlign: 'right', flexShrink: 0, fontSize: 11, color: 'var(--text-secondary)' }}>
           {r.effective_date && <div>Effective {formatDate(r.effective_date)}</div>}
           {r.enforcement_date && <div style={{ marginTop: 2 }}>Enforcement {formatDate(r.enforcement_date)}</div>}
-          {r.next_milestone && <div style={{ marginTop: 2, color: '#1D4ED8', fontWeight: 600 }}>Next {formatDate(r.next_milestone)}</div>}
+          {r.next_milestone && <div style={{ marginTop: 2, color: 'var(--accent)', fontWeight: 600 }}>Next {formatDate(r.next_milestone)}</div>}
           {r.updated_at && <div style={{ marginTop: 2 }}>Updated {timeAgo(r.updated_at)}</div>}
           <WatchButton entityKind="regulation" entityId={r.id} label="Watch this regulation" />
         </div>
@@ -134,8 +134,8 @@ function ExpandedReg({ r, isAdmin, onChanged }) {
         </div>
 
         {r.next_milestone && (
-          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8' }}>
+          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#efe9e1', border: '1px solid #e4c9bd' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
               Next: {r.next_milestone_notes || 'Milestone'} — {formatDate(r.next_milestone)}
             </span>
           </div>

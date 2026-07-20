@@ -56,7 +56,7 @@ export function CopyBlock({ label, text, mono }) {
         </button>
       </div>
       <pre style={{
-        margin: 0, padding: 12, background: 'var(--bg-secondary, #f8fafc)',
+        margin: 0, padding: 12, background: 'var(--bg-secondary, #efe9e1)',
         border: '1px solid var(--border-color)', borderRadius: 8, whiteSpace: 'pre-wrap',
         fontFamily: mono ? 'ui-monospace, monospace' : 'inherit', fontSize: 13, lineHeight: 1.5,
       }}>{text || '—'}</pre>

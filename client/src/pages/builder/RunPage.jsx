@@ -61,7 +61,7 @@ export default function RunPage() {
                   <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 6 }}>Result · {result.status}</div>
                   {result.error
                     ? <div style={{ color: '#991B1B', fontSize: 13 }}>{result.error}</div>
-                    : <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 400, overflow: 'auto', background: '#f8fafc', padding: 12, borderRadius: 6 }}>{JSON.stringify(result.output, null, 2)}</pre>}
+                    : <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 400, overflow: 'auto', background: '#efe9e1', padding: 12, borderRadius: 6 }}>{JSON.stringify(result.output, null, 2)}</pre>}
                 </div>
               )}
             </div>

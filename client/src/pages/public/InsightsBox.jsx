@@ -140,7 +140,7 @@ function InsightCard({ ins, subjectKind, subjectId, canEdit, onChanged }) {
                     to={c.kind === 'lawsuit' ? `/legal/lawsuits/${c.id}` : `/legal/regulations/${c.id}`}
                     style={{
                       fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                      background: c.kind === 'lawsuit' ? '#EEF2FF' : '#D1FAE5',
+                      background: c.kind === 'lawsuit' ? '#efe9e1' : '#D1FAE5',
                       color: c.kind === 'lawsuit' ? '#4F46E5' : '#065F46',
                       textDecoration: 'none', fontWeight: 600,
                     }}>
@@ -185,7 +185,7 @@ function renderWithCitations(text, citations) {
           style={{
             fontSize: 10, padding: '0 5px', borderRadius: 6,
             verticalAlign: 'super', lineHeight: 1.2,
-            background: c.kind === 'lawsuit' ? '#EEF2FF' : '#D1FAE5',
+            background: c.kind === 'lawsuit' ? '#efe9e1' : '#D1FAE5',
             color: c.kind === 'lawsuit' ? '#4F46E5' : '#065F46',
             textDecoration: 'none', fontWeight: 700,
           }}

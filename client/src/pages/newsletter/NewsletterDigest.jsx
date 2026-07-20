@@ -501,7 +501,7 @@ function NewsItem({ item, onPromote, onToggle, onReject }) {
 
           {/* Curriculum reason */}
           {item.curriculum_relevance_reason && (
-            <div style={{ fontSize: 12, marginTop: 4, padding: '4px 8px', background: '#EEF2FF', borderRadius: 4, color: 'var(--accent)' }}>
+            <div style={{ fontSize: 12, marginTop: 4, padding: '4px 8px', background: '#efe9e1', borderRadius: 4, color: 'var(--accent)' }}>
               {item.curriculum_relevance_reason}
             </div>
           )}
@@ -519,7 +519,7 @@ function NewsItem({ item, onPromote, onToggle, onReject }) {
 
           {/* Tag picker */}
           {tagging && (
-            <div style={{ marginTop: 10, padding: '10px 12px', background: '#F8FAFC', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+            <div style={{ marginTop: 10, padding: '10px 12px', background: '#efe9e1', borderRadius: 6, border: '1px solid var(--border-color)' }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Select knowledge tags:</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
                 {KNOWLEDGE_TAGS.map(tag => (

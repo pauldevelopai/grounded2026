@@ -68,7 +68,7 @@ export default function UseCasesAdmin() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#EEF2FF', color: '#4F46E5', textTransform: 'uppercase' }}>{u.firm_type || 'other'}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#efe9e1', color: '#4F46E5', textTransform: 'uppercase' }}>{u.firm_type || 'other'}</span>
                   {u.jurisdiction && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: '#F1F5F9', color: '#475569' }}>{u.jurisdiction}</span>}
                   {!u.is_published && <span style={{ fontSize: 10, fontWeight: 700, color: '#991B1B' }}>UNPUBLISHED</span>}
                 </div>

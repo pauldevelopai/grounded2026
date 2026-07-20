@@ -168,7 +168,7 @@ export default function PublicRegulationsList({ mode = 'list', regId: regIdProp 
                       style={{
                         cursor: 'pointer', fontSize: 12, padding: '7px 12px', borderRadius: 6,
                         border: `1.5px solid ${isOpen ? '#6366F1' : 'var(--border-color)'}`,
-                        background: isOpen ? '#EEF2FF' : 'var(--card-bg)',
+                        background: isOpen ? '#efe9e1' : 'var(--card-bg)',
                         transition: 'all 0.15s', maxWidth: 260,
                       }}>
                       <div style={{ fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -285,7 +285,7 @@ function RegCard({ reg: r, selected, events, onSelect, cardRef, hideExpandHint }
             return (
               <div style={{
                 marginTop: 6, marginBottom: 6, padding: '6px 10px',
-                background: '#EEF2FF', borderLeft: '2px solid #6366F1', borderRadius: 4,
+                background: '#efe9e1', borderLeft: '2px solid #6366F1', borderRadius: 4,
                 fontSize: 12, lineHeight: 1.4,
               }}>
                 <span style={{ fontWeight: 700, color: '#4F46E5' }}>
@@ -315,7 +315,7 @@ function RegCard({ reg: r, selected, events, onSelect, cardRef, hideExpandHint }
         <div style={{ textAlign: 'right', flexShrink: 0, fontSize: 11, color: 'var(--text-secondary)' }}>
           {r.effective_date && <div>Effective {formatDate(r.effective_date)}</div>}
           {r.enforcement_date && <div style={{ marginTop: 2 }}>Enforcement {formatDate(r.enforcement_date)}</div>}
-          {r.next_milestone && <div style={{ marginTop: 2, color: '#1D4ED8', fontWeight: 600 }}>Next {formatDate(r.next_milestone)}</div>}
+          {r.next_milestone && <div style={{ marginTop: 2, color: 'var(--accent)', fontWeight: 600 }}>Next {formatDate(r.next_milestone)}</div>}
           {(r.latest_event_date || r.updated_at) && (
             <div style={{ marginTop: 2 }}>Updated {timeAgo(r.latest_event_date || r.updated_at)}</div>
           )}
@@ -360,8 +360,8 @@ function RegCard({ reg: r, selected, events, onSelect, cardRef, hideExpandHint }
           </div>
 
           {r.next_milestone && (
-            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8' }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#efe9e1', border: '1px solid #e4c9bd' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
                 Next: {r.next_milestone_notes || 'Milestone'} — {formatDate(r.next_milestone)}
               </span>
             </div>

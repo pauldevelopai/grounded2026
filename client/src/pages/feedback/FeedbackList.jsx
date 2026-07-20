@@ -83,7 +83,7 @@ export default function FeedbackList() {
               <button onClick={() => setMasterPrompt('')} className="btn btn-secondary btn-small">Dismiss</button>
             </div>
           </div>
-          <pre style={{ fontSize: 13, whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'monospace', lineHeight: 1.6, background: '#F8FAFC', padding: 16, borderRadius: 6, maxHeight: 400, overflowY: 'auto' }}>
+          <pre style={{ fontSize: 13, whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'monospace', lineHeight: 1.6, background: '#efe9e1', padding: 16, borderRadius: 6, maxHeight: 400, overflowY: 'auto' }}>
             {masterPrompt}
           </pre>
         </div>

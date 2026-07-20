@@ -284,7 +284,7 @@ function CandidateRow({ row, onPromote, onReject }) {
           {proposed.tools_used?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
               {proposed.tools_used.map(t => (
-                <span key={t} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: '#EEF2FF', color: '#4F46E5' }}>{t}</span>
+                <span key={t} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: '#efe9e1', color: '#6b6359' }}>{t}</span>
               ))}
             </div>
           )}
@@ -431,7 +431,7 @@ function SubmissionsTab() {
         {rows.map(s => (
           <div key={s.id} className="card" style={{ padding: 14 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#EEF2FF', color: '#4F46E5', textTransform: 'uppercase' }}>{s.submission_kind}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#efe9e1', color: '#6b6359', textTransform: 'uppercase' }}>{s.submission_kind}</span>
               {s.jurisdiction && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#F1F5F9', color: '#475569' }}>{s.jurisdiction}</span>}
               <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{new Date(s.created_at).toLocaleString('en-GB')}</span>
             </div>
@@ -537,7 +537,7 @@ function SourcesTab({ onStatsChange }) {
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: (KIND_COLORS[s.kind] || '#94A3B8') + '20', color: KIND_COLORS[s.kind] || '#94A3B8', textTransform: 'uppercase' }}>{s.kind}</span>
                   {s.jurisdiction && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: '#F1F5F9', color: '#475569' }}>{s.jurisdiction}</span>}
                   {(s.tags || []).slice(0, 4).map(t => (
-                    <span key={t} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, background: '#EEF2FF', color: '#4F46E5' }}>{t}</span>
+                    <span key={t} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, background: '#efe9e1', color: '#6b6359' }}>{t}</span>
                   ))}
                   {!s.active && <span style={{ fontSize: 10, color: '#991B1B', fontWeight: 600 }}>DISABLED</span>}
                 </div>

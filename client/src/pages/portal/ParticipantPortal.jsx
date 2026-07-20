@@ -48,7 +48,7 @@ export default function ParticipantPortal() {
   }
 
   if (!token) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#F8FAFC' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#efe9e1' }}>
       <div style={{ textAlign: 'center', padding: 40 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Tracker Learning Portal</h1>
         <p style={{ color: '#64748B' }}>Access token required. Please use the link provided by your trainer.</p>
@@ -57,7 +57,7 @@ export default function ParticipantPortal() {
   );
 
   if (error) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#F8FAFC' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#efe9e1' }}>
       <div style={{ textAlign: 'center', padding: 40 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8, color: '#EF4444' }}>Access Denied</h1>
         <p style={{ color: '#64748B' }}>{error}</p>
@@ -69,9 +69,9 @@ export default function ParticipantPortal() {
   const completedTasks = tasks.filter(t => t.status === 'approved');
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC' }}>
+    <div style={{ minHeight: '100vh', background: '#efe9e1' }}>
       {/* Header */}
-      <div style={{ background: '#1E1E2E', color: 'white', padding: '20px 32px' }}>
+      <div style={{ background: '#1c1b1a', color: 'white', padding: '20px 32px' }}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           <div style={{ fontSize: 12, color: '#94A3B8', marginBottom: 4 }}>Tracker Learning Portal · Develop AI</div>
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>Welcome, {profile?.name || 'Participant'}</h1>
@@ -131,13 +131,13 @@ export default function ParticipantPortal() {
 
                   {/* Submission area */}
                   {submitting === t.id ? (
-                    <div style={{ marginTop: 10, padding: 12, background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0' }}>
+                    <div style={{ marginTop: 10, padding: 12, background: '#efe9e1', borderRadius: 6, border: '1px solid #e4dcd2' }}>
                       <textarea value={submitForm.text} onChange={e => setSubmitForm(prev => ({ ...prev, text: e.target.value }))}
                         placeholder="Describe what you did, paste your work, or explain your approach..."
-                        rows={4} style={{ width: '100%', padding: 10, border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 14, resize: 'vertical' }} />
+                        rows={4} style={{ width: '100%', padding: 10, border: '1px solid #e4dcd2', borderRadius: 6, fontSize: 14, resize: 'vertical' }} />
                       <input value={submitForm.url} onChange={e => setSubmitForm(prev => ({ ...prev, url: e.target.value }))}
                         placeholder="Link to your work (optional)"
-                        style={{ width: '100%', padding: 8, border: '1px solid #E2E8F0', borderRadius: 6, fontSize: 13, marginTop: 8 }} />
+                        style={{ width: '100%', padding: 8, border: '1px solid #e4dcd2', borderRadius: 6, fontSize: 13, marginTop: 8 }} />
                       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                         <button onClick={() => handleSubmit(t.id)}
                           style={{ padding: '8px 16px', background: '#6366F1', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}>

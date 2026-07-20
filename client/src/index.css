@@ -28,12 +28,15 @@
   /* ── GROUNDED design tokens (Phase 1) ───────────────────────────────
      Section accents — one per concept-note section + a neutral for the
      three strategic layers. Used by the nav, section pages and the Hub. */
-  --sec-content:   #0D9488; /* Content Production — teal */
-  --sec-sustain:   #059669; /* Sustainability — emerald */
-  --sec-training:  #B45309; /* AI Training — amber */
-  --sec-gov:       #1D4ED8; /* AI Governance — blue */
-  --sec-lang:      #7C3AED; /* African Languages — violet */
-  --sec-strategic: #475569; /* Strategic layers — slate */
+  /* Section accents flattened to the single terracotta brand accent for a
+     uniform BE AI READY look (were teal/emerald/amber/blue/violet); the
+     strategic layers keep a warm-neutral to stay distinct from operational. */
+  --sec-content:   #c75b39;
+  --sec-sustain:   #c75b39;
+  --sec-training:  #c75b39;
+  --sec-gov:       #c75b39;
+  --sec-lang:      #c75b39;
+  --sec-strategic: #8a8076;
 
   /* Status accents (live / in-progress / in-development) */
   --status-live:    #10B981;

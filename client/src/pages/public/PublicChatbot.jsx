@@ -242,12 +242,12 @@ function renderAssistantText(text) {
 // Per-kind citation chip: lawsuits/regulations link to their tracker page;
 // resource items (tool/ethics/monetisation/data-security) link out to the source.
 const CITE_STYLE = {
-  lawsuit:      { icon: '⚖ ', bg: '#EEF2FF', fg: '#4F46E5' },
+  lawsuit:      { icon: '⚖ ', bg: '#efe9e1', fg: '#b34e2f' },
   regulation:   { icon: '📜 ', bg: '#D1FAE5', fg: '#065F46' },
   tool:         { icon: '🛠 ', bg: '#FEF3C7', fg: '#92400E' },
   ethics:       { icon: '🧭 ', bg: '#F3E8FF', fg: '#6B21A8' },
   monetisation: { icon: '💰 ', bg: '#CCFBF1', fg: '#0F766E' },
-  datasecurity: { icon: '🔒 ', bg: '#E2E8F0', fg: '#334155' },
+  datasecurity: { icon: '🔒 ', bg: '#e4dcd2', fg: '#334155' },
 };
 function CitationChip({ c }) {
   const s = CITE_STYLE[c.kind] || CITE_STYLE.tool;

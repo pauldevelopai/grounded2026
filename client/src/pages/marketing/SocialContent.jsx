@@ -187,7 +187,7 @@ function PostForm({ post, sectors, selectedSectorId, onClose, onSaved }) {
         </div>
 
         {/* AI Generate section */}
-        <div style={{ padding: 12, background: '#F8FAFC', borderRadius: 'var(--radius)', marginBottom: 12, borderLeft: '3px solid var(--accent)' }}>
+        <div style={{ padding: 12, background: '#efe9e1', borderRadius: 'var(--radius)', marginBottom: 12, borderLeft: '3px solid var(--accent)' }}>
           <div className="form-group" style={{ marginBottom: 8 }}>
             <label style={{ fontSize: 13 }}>Topic or theme (for AI generation)</label>
             <input value={form.topic} onChange={set('topic')} placeholder="e.g. AI contract review, ethical AI in newsrooms..." />

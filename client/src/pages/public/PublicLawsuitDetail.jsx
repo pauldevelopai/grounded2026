@@ -132,8 +132,8 @@ function ExpandedCase({ c, isAdmin, onChanged }) {
         </div>
 
         {c.next_deadline && (
-          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8' }}>
+          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#efe9e1', border: '1px solid #e4c9bd' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>
               Next: {c.next_deadline_notes || 'Deadline'} — {formatDate(c.next_deadline)}
             </span>
           </div>
