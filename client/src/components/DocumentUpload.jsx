@@ -72,7 +72,7 @@ export default function DocumentUpload({ entityType, entityId, sectorId, onUploa
         style={{
           border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border-color)'}`,
           borderRadius: 'var(--radius)', padding: '20px', textAlign: 'center',
-          cursor: 'pointer', background: dragOver ? '#EEF2FF' : 'var(--card-bg)',
+          cursor: 'pointer', background: dragOver ? '#efe9e1' : 'var(--card-bg)',
           marginBottom: 12, transition: 'all 0.15s',
         }}
       >

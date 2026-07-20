@@ -20,7 +20,7 @@ const PIPELINE_COLOURS = { prospect: '#94A3B8', contacted: '#60A5FA', meeting: '
 const PRIORITY_STYLES = {
   urgent: { bg: '#FEE2E2', color: '#991B1B', border: '#FECACA' },
   high: { bg: '#FEF3C7', color: '#92400E', border: '#FDE68A' },
-  medium: { bg: '#DBEAFE', color: '#1E40AF', border: '#BFDBFE' },
+  medium: { bg: '#DBEAFE', color: '#1E40AF', border: '#e4c9bd' },
   low: { bg: '#F3F4F6', color: '#6B7280', border: '#E5E7EB' },
 };
 

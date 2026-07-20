@@ -97,9 +97,9 @@ function ScanBanner({ scanStatus, elapsed, onDismiss }) {
     ? Math.round((scanStatus.articlesDone / scanStatus.articlesTotal) * 100)
     : null;
 
-  const bg    = isDone ? '#D1FAE5' : isError ? '#FEE2E2' : '#EFF6FF';
-  const border= isDone ? '#6EE7B7' : isError ? '#FECACA' : '#BFDBFE';
-  const color = isDone ? '#065F46' : isError ? '#991B1B' : '#1D4ED8';
+  const bg    = isDone ? '#D1FAE5' : isError ? '#FEE2E2' : '#efe9e1';
+  const border= isDone ? '#6EE7B7' : isError ? '#FECACA' : '#e4c9bd';
+  const color = isDone ? '#065F46' : isError ? '#991B1B' : '#b34e2f';
 
   return (
     <div style={{
@@ -113,7 +113,7 @@ function ScanBanner({ scanStatus, elapsed, onDismiss }) {
             {isRunning && (
               <span style={{
                 display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
-                background: '#3B82F6', animation: 'pulse 1.2s ease-in-out infinite',
+                background: 'var(--accent)', animation: 'pulse 1.2s ease-in-out infinite',
               }} />
             )}
             {isDone && <span style={{ fontSize: 15 }}>✓</span>}
@@ -137,9 +137,9 @@ function ScanBanner({ scanStatus, elapsed, onDismiss }) {
                 <span>Source {scanStatus.articlesDone} of {scanStatus.articlesTotal}</span>
                 <span>{progress}%</span>
               </div>
-              <div style={{ background: '#BFDBFE', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+              <div style={{ background: '#e4dcd2', borderRadius: 4, height: 6, overflow: 'hidden' }}>
                 <div style={{
-                  height: '100%', borderRadius: 4, background: '#3B82F6',
+                  height: '100%', borderRadius: 4, background: 'var(--accent)',
                   width: `${progress}%`, transition: 'width 0.5s ease',
                 }} />
               </div>
@@ -369,7 +369,7 @@ export default function LawsuitTracker() {
                   style={{
                     cursor: 'pointer', fontSize: 12, padding: '7px 12px', borderRadius: 6,
                     border: `1.5px solid ${isOpen ? '#6366F1' : 'var(--border-color)'}`,
-                    background: isOpen ? '#EEF2FF' : 'var(--card-bg)',
+                    background: isOpen ? '#efe9e1' : 'var(--card-bg)',
                     transition: 'all 0.15s', maxWidth: 240,
                   }}
                 >
@@ -675,7 +675,7 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, onCaseUpdate 
           </div>
 
           {c.next_deadline && (
-            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#efe9e1', border: '1px solid #e4c9bd' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8' }}>
                 Next: {c.next_deadline_notes || 'Deadline'} — {formatDate(c.next_deadline)}
               </span>
@@ -683,7 +683,7 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, onCaseUpdate 
           )}
 
           {c.curriculum_relevance && (
-            <div style={{ fontSize: 12, padding: '8px 10px', background: '#EEF2FF', borderRadius: 6, color: 'var(--accent)', marginBottom: 12, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, padding: '8px 10px', background: '#efe9e1', borderRadius: 6, color: 'var(--accent)', marginBottom: 12, lineHeight: 1.5 }}>
               <strong>Why this matters for AI training:</strong> {c.curriculum_relevance}
             </div>
           )}
@@ -828,7 +828,7 @@ function SourcesPanel({ sources }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
         {sources.sources.map(s => (
-          <div key={s.url} style={{ display: 'flex', gap: 8, padding: '8px 10px', borderRadius: 6, background: 'var(--bg-secondary, #F8FAFC)', border: '1px solid var(--border-color)' }}>
+          <div key={s.url} style={{ display: 'flex', gap: 8, padding: '8px 10px', borderRadius: 6, background: 'var(--bg-secondary, #efe9e1)', border: '1px solid var(--border-color)' }}>
             <div style={{ flexShrink: 0, marginTop: 1 }}>
               <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: typeColors[s.type] + '20', color: typeColors[s.type] }}>
                 {typeLabels[s.type] || s.type.toUpperCase()}

@@ -104,7 +104,7 @@ export default function NotificationBell() {
                   background: n.is_read ? 'white' : '#FAFAFE',
                   transition: 'background 0.1s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                onMouseEnter={e => e.currentTarget.style.background = '#efe9e1'}
                 onMouseLeave={e => e.currentTarget.style.background = n.is_read ? 'white' : '#FAFAFE'}
               >
                 <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>

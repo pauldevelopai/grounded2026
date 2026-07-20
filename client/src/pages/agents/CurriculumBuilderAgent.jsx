@@ -113,7 +113,7 @@ export default function CurriculumBuilderAgent() {
                 {generatedStructure.modules?.length} modules • {generatedStructure.delivery_type}
               </div>
               {generatedStructure.modules?.map((m, i) => (
-                <div key={i} style={{ padding: '8px 12px', marginBottom: 4, background: '#F8FAFC', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
+                <div key={i} style={{ padding: '8px 12px', marginBottom: 4, background: '#efe9e1', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{i + 1}. {m.title}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{m.duration_minutes} min — {m.description}</div>
                 </div>

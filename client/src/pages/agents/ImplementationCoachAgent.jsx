@@ -213,7 +213,7 @@ export default function ImplementationCoachAgent() {
                 {generatedTasks.saved_count} tasks created and assigned
               </div>
               {generatedTasks.tasks?.map((t, i) => (
-                <div key={i} style={{ padding: '8px 12px', marginBottom: 4, background: '#F8FAFC', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
+                <div key={i} style={{ padding: '8px 12px', marginBottom: 4, background: '#efe9e1', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)' }}>
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{t.title}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t.task_type} • {t.difficulty}{t.estimated_minutes ? ` • ${t.estimated_minutes} min` : ''}</div>
                 </div>

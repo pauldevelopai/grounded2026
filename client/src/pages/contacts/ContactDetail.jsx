@@ -234,7 +234,7 @@ export default function ContactDetail() {
                       {' '}{email.from}
                     </div>
                     {email.snippet && (
-                      <div style={{ fontSize: 12, color: '#666', lineHeight: 1.5, marginTop: 4, padding: '6px 10px', background: '#F8FAFC', borderRadius: 4 }}>
+                      <div style={{ fontSize: 12, color: '#666', lineHeight: 1.5, marginTop: 4, padding: '6px 10px', background: '#efe9e1', borderRadius: 4 }}>
                         {email.snippet}...
                       </div>
                     )}

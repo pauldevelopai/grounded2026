@@ -266,7 +266,7 @@ export default function EngagementDetail() {
           {engagement.assessment_analysis && (
             <div style={{ marginTop: 16 }}>
               <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Linked Needs Assessment Analysis</h4>
-              <div style={{ padding: 12, background: '#F8FAFC', borderRadius: 'var(--radius)', fontSize: 13, whiteSpace: 'pre-wrap' }}>
+              <div style={{ padding: 12, background: '#efe9e1', borderRadius: 'var(--radius)', fontSize: 13, whiteSpace: 'pre-wrap' }}>
                 {engagement.assessment_analysis}
               </div>
             </div>

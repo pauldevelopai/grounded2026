@@ -121,7 +121,7 @@ function ReviewTab({ domain, onChange }) {
         return (
           <div key={it.id} className="card" style={{ padding: 14, marginBottom: 8 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-              {tags.filter(Boolean).map((t, i) => <span key={i} style={tag(i === 0 ? '#EEF2FF' : '#F3F4F6', i === 0 ? '#4F46E5' : '#374151')}>{t}</span>)}
+              {tags.filter(Boolean).map((t, i) => <span key={i} style={tag(i === 0 ? '#efe9e1' : '#F3F4F6', i === 0 ? '#4F46E5' : '#374151')}>{t}</span>)}
               {it.rag_synced && <span style={tag('#F5F3FF', '#7C3AED')}>in RAG</span>}
               {it.source_name && <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{it.source_name}</span>}
             </div>

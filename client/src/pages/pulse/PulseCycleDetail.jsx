@@ -227,7 +227,7 @@ function ResponseCard({ response }) {
     <div className="card" style={{ padding: 16, marginBottom: 12 }}>
       <div style={{ fontWeight: 600, marginBottom: 8 }}>Newsroom response {f['Respondent name'] ? `· ${f['Respondent name']}${f['Respondent role'] ? `, ${f['Respondent role']}` : ''}` : ''}</div>
       {['Answer 1', 'Answer 2', 'Answer 3'].map((a) => f[a] && <div key={a} style={muted}>{a}: {f[a]}</div>)}
-      {f['Open feedback'] && <div style={{ marginTop: 8, padding: 10, background: 'var(--bg-secondary, #f8fafc)', borderRadius: 8, fontSize: 13, whiteSpace: 'pre-wrap' }}>{f['Open feedback']}</div>}
+      {f['Open feedback'] && <div style={{ marginTop: 8, padding: 10, background: 'var(--bg-secondary, #efe9e1)', borderRadius: 8, fontSize: 13, whiteSpace: 'pre-wrap' }}>{f['Open feedback']}</div>}
     </div>
   );
 }
@@ -245,7 +245,7 @@ function PlanCard({ plan }) {
       {Array.isArray(f['Risk flags']) && f['Risk flags'].length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
           {f['Risk flags'].map((r) => (
-            <span key={r.name || r} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (r.name || r) === 'Election-sensitive' ? '#FEE2E2' : '#EEF2FF', color: (r.name || r) === 'Election-sensitive' ? '#B91C1C' : '#4338CA' }}>{r.name || r}</span>
+            <span key={r.name || r} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: (r.name || r) === 'Election-sensitive' ? '#FEE2E2' : '#efe9e1', color: (r.name || r) === 'Election-sensitive' ? '#B91C1C' : '#4338CA' }}>{r.name || r}</span>
           ))}
         </div>
       )}

@@ -126,7 +126,7 @@ export default function PublicUseCases({ mode = 'list' }) {
                       style={{
                         cursor: 'pointer', fontSize: 12, padding: '7px 12px', borderRadius: 6,
                         border: `1.5px solid ${isOpen ? '#6366F1' : 'var(--border-color)'}`,
-                        background: isOpen ? '#EEF2FF' : 'var(--card-bg)',
+                        background: isOpen ? '#efe9e1' : 'var(--card-bg)',
                         transition: 'all 0.15s', maxWidth: 260,
                       }}>
                       <div style={{ fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -105,7 +105,7 @@ export default function IntelligenceList() {
 
                 {/* Inline tag picker */}
                 {taggingId === item.id && (
-                  <div style={{ marginTop: 10, padding: '10px 12px', background: '#F8FAFC', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                  <div style={{ marginTop: 10, padding: '10px 12px', background: '#efe9e1', borderRadius: 6, border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Select knowledge tags:</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
                       {KNOWLEDGE_TAGS.map(tag => (

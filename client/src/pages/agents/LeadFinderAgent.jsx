@@ -97,7 +97,7 @@ export default function LeadFinderAgent() {
             <button className="btn btn-secondary btn-small" onClick={() => setDraft(null)}>Dismiss</button>
           </div>
           {draft.subject && <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Subject: {draft.subject}</div>}
-          <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', background: '#F8FAFC', padding: 12, borderRadius: 'var(--radius)' }}>
+          <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', background: '#efe9e1', padding: 12, borderRadius: 'var(--radius)' }}>
             {draft.body || draft.message}
           </div>
           {draft.contact_name && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>For: {draft.contact_name}</div>}

@@ -184,7 +184,7 @@ function Inner() {
           })}
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '12px 0 4px' }}>Saved</div>
           {workflows.map((w) => (
-            <button key={w.id} onClick={() => load(w.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 8px', marginBottom: 3, border: 'none', background: wf.id === w.id ? '#EEF2FF' : 'transparent', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>{w.name}</button>
+            <button key={w.id} onClick={() => load(w.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 8px', marginBottom: 3, border: 'none', background: wf.id === w.id ? '#efe9e1' : 'transparent', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>{w.name}</button>
           ))}
         </div>
 
