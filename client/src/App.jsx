@@ -565,6 +565,10 @@ export default function App() {
               </Route>
             </Route>
           </Route>
+
+          {/* Catch-all: any unmatched path on the Grounded door lands on the public
+              home instead of rendering blank (the beaiready door has its own). */}
+          <Route path="*" element={<Navigate to="/" replace />} />
           </>)}
         </Routes>
         </AiAssistantProvider>
