@@ -5,6 +5,7 @@
 // No new engine; the live, dated legal text lives in the tracker (/regulations).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 
 // Mirror the register's tier colours so the two views read as one system.
@@ -40,7 +41,7 @@ export default function BusinessLegalFramework() {
         logged. Reference guidance, not legal advice.
       </p>
       <p style={{ marginBottom: 20 }}>
-        <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
+        <Link to={bizHome()}>← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/security">AI System Register</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance">Your AI policy</Link> &nbsp;·&nbsp;
         <Link to="/tracker">Legal &amp; Regulation tracker</Link>

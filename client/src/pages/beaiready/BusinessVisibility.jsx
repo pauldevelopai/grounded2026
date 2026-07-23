@@ -5,6 +5,7 @@
 // are added. Scoped to the tenant.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 
 const SENTIMENT = {
@@ -42,7 +43,7 @@ export default function BusinessVisibility() {
           v1 queries <b>Claude</b>. ChatGPT and Gemini are added once their API keys are configured.
         </span>
       </p>
-      <p style={{ marginBottom: 20 }}><Link to="/dashboard">← Back to dashboard</Link></p>
+      <p style={{ marginBottom: 20 }}><Link to={bizHome()}>← Back to dashboard</Link></p>
 
       {err && <div style={{ background: '#FEF2F2', color: '#B91C1C', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{err}</div>}
 

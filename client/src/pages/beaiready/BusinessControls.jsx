@@ -4,6 +4,7 @@
 // Scoped to the tenant. (manual Component 3)
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 import EvidencePanel from './EvidencePanel.jsx';
 
@@ -85,7 +86,7 @@ export default function BusinessControls() {
         framework-backed starters, get suggestions grounded in current governance sources, and add your own.
       </p>
       <p style={{ marginBottom: 18 }}>
-        <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
+        <Link to={bizHome()}>← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/security">AI System Register &amp; Risk</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance/review">Roles &amp; review</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance">Your AI policy</Link>

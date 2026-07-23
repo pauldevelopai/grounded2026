@@ -5,6 +5,7 @@
 // judged — user-owned, versioned). Tenant-scoped by the login (Wall 1).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 
 const BAND = {
@@ -337,7 +338,7 @@ function CriteriaTab() {
       </section>
       <button onClick={save} style={btn}>Save as new version</button>
       {msg && <span style={{ marginLeft: 10, fontSize: 13, color: '#166534' }}>{msg}</span>}
-      <p style={{ marginTop: 18 }}><Link to="/dashboard">← Back to dashboard</Link></p>
+      <p style={{ marginTop: 18 }}><Link to={bizHome()}>← Back to dashboard</Link></p>
     </div>
   );
 }

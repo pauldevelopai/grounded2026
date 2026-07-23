@@ -4,6 +4,7 @@
 // the register from going stale. Scoped to the tenant. (manual Components 5 + 7)
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 import EvidencePanel from './EvidencePanel.jsx';
 
@@ -77,7 +78,7 @@ export default function BusinessReview() {
         incidents — the routine that stops your register and controls going stale.
       </p>
       <p style={{ marginBottom: 18 }}>
-        <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
+        <Link to={bizHome()}>← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/security">AI System Register</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance/controls">Controls library</Link>
       </p>

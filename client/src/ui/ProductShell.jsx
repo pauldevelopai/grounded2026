@@ -56,13 +56,16 @@ export default function ProductShell() {
 
           <div className="product-nav-right">
             <NavLink to="/functions" className="product-nav-link">Functions</NavLink>
+            {/* BE AI READY client tools (dashboard, governance, security, KnowHow,
+                LeadFinder, prompts…) — open to all authed users. */}
+            <NavLink to="/business" className="product-nav-link">Be AI Ready</NavLink>
             <NavLink to="/settings/newsroom-profile" className="product-nav-link">Profile</NavLink>
             {/* Operator entries — running the product (Admin) and Develop AI's
                 own back-office (Studio) — admins only. The switcher lets an
                 admin use the product AS a chosen newsroom (dogfooding). */}
             {isAdmin && <NewsroomSwitcher />}
             {isAdmin && <NavLink to="/admin" className="product-nav-link outline">Admin</NavLink>}
-            {isAdmin && <NavLink to="/business-admin" className="product-nav-link outline">Be AI Ready</NavLink>}
+            {isAdmin && <NavLink to="/business-admin" className="product-nav-link outline">Be AI Ready admin</NavLink>}
             {isAdmin && <NavLink to="/dashboard" className="product-nav-link outline">Studio</NavLink>}
             {user ? (
               <button

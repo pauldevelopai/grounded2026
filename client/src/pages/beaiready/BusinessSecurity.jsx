@@ -5,6 +5,7 @@
 // Scoped to the tenant.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 
 // Data-safety ruling (is this tool safe to put our data in?) — distinct from risk tier.
@@ -108,7 +109,7 @@ export default function BusinessSecurity() {
         Plus a data-safety ruling per tool.
       </p>
       <p style={{ marginBottom: 18 }}>
-        <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
+        <Link to={bizHome()}>← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance/controls">Controls library</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance">Your AI policy</Link> &nbsp;·&nbsp;
         <Link to="/tracker">Legal &amp; regulation tracker</Link>

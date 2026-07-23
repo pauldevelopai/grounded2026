@@ -5,6 +5,7 @@
 // Server-scoped to the member's own uploads within their tenant.
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 
 const STATUS_LABEL = { pending: 'queued', extracting: 'reading…', extracted: 'read', failed: 'failed' };
@@ -51,7 +52,7 @@ export default function BusinessExtraction() {
         and the key facts pulled out. This space is <b>private to you</b>; nothing here feeds the company's AI
         unless your Be AI Ready consultant chooses to add it.
       </p>
-      <p style={{ marginBottom: 16 }}><Link to="/dashboard">← Back to dashboard</Link></p>
+      <p style={{ marginBottom: 16 }}><Link to={bizHome()}>← Back to dashboard</Link></p>
 
       {err && <div style={banner}>{err}</div>}
 

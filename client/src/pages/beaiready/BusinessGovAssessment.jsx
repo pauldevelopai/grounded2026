@@ -5,6 +5,7 @@
 // redundant. Extends the bair.audits engine behind the scenes (see docs/BUILD_…md).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 
@@ -79,7 +80,7 @@ export default function BusinessGovAssessment() {
         <strong> not an accredited certification</strong>.
       </p>
       <p style={{ marginBottom: 20 }}>
-        <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
+        <Link to={bizHome()}>← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance">Your AI policy</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance/controls">Controls</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance/review">Roles &amp; review</Link>

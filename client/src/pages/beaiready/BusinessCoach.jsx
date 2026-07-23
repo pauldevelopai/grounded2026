@@ -5,6 +5,7 @@
 // hasn't captured something yet. Server-scoped to the caller's own company.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 
 export default function BusinessCoach() {
@@ -33,7 +34,7 @@ export default function BusinessCoach() {
         procedure step by step. If something hasn't been captured yet, it'll tell you to ask your manager rather
         than guess.
       </p>
-      <p style={{ marginBottom: 16 }}><Link to="/dashboard">← Back to dashboard</Link> · <Link to="/dashboard/knowhow">My knowledge &amp; workflows →</Link></p>
+      <p style={{ marginBottom: 16 }}><Link to={bizHome()}>← Back to dashboard</Link> · <Link to="/dashboard/knowhow">My knowledge &amp; workflows →</Link></p>
 
       {err && <div style={banner}>{err}</div>}
 

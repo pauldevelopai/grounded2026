@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { isBeAIReadyDoor } from './bizNav.js';
 
 const METRICS = [
   ['deliverables', 'Deliverables'],
@@ -26,7 +27,7 @@ const METRICS = [
 // `absorbs` lists legacy recommendation pillar keys this card should also show, so
 // recs authored before the re-map still surface under their new home.
 const PILLARS = [
-  { key: 'knowledge', label: 'Knowledge', to: '/dashboard/visibility', cta: 'How AI sees your business', absorbs: ['visibility'] },
+  { key: 'knowledge', label: 'Knowledge', to: '/dashboard/visibility', cta: 'How AI sees your organisation', absorbs: ['visibility'] },
   { key: 'training', label: 'Training', to: '/training', cta: 'Agenda & materials' },
   { key: 'governance', label: 'Governance', to: '/dashboard/governance', cta: 'Policy & law tracker' },
   { key: 'data-security', label: 'Cyber Security', to: '/dashboard/security', cta: 'AI systems, data safety & acceptable use', absorbs: ['data-security'] },
@@ -42,6 +43,9 @@ const PRIORITY_STYLE = {
 
 export default function BusinessDashboard() {
   const { user } = useAuth();
+  // Same component serves both doors — swap the business/newsroom framing by host.
+  const biz = isBeAIReadyDoor();
+  const org = biz ? 'business' : 'newsroom';
   const [recs, setRecs] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [policy, setPolicy] = useState(undefined);
@@ -62,14 +66,14 @@ export default function BusinessDashboard() {
 
   return (
     <div className="hub hub-beaiready">
-      <div className="hub-eyebrow">Be AI Ready · your dashboard</div>
+      <div className="hub-eyebrow">{biz ? 'Be AI Ready · your dashboard' : 'Your AI dashboard'}</div>
       <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', margin: '4px 0 6px' }}>
-        {user?.newsroom_name || 'Your business'}
+        {user?.newsroom_name || (biz ? 'Your business' : 'Your newsroom')}
       </h1>
       <p style={{ color: '#6b6359', marginBottom: 24, maxWidth: '64ch' }}>
-        Your living Be AI Ready dashboard — your pillars with the recommendations from your audit, your
+        Your living AI dashboard — your pillars with the recommendations from your audit, your
         training and strategy, the live AI toolbox, and the law &amp; regulation tracker. Updated as your
-        engagement progresses.
+        {biz ? ' engagement' : ' work'} progresses.
       </p>
 
       {/* ── The five productivity metrics (entered-only; em-dash otherwise) ── */}
@@ -155,16 +159,16 @@ export default function BusinessDashboard() {
       {/* ── What works for businesses like yours — anonymised cross-business patterns ── */}
       {insights && insights.length > 0 && (
         <>
-          <div className="hub-section-label">What works for businesses like yours</div>
+          <div className="hub-section-label">What works for {org}s like yours</div>
           <p style={{ color: '#8a8076', fontSize: 13, margin: '-2px 0 10px', maxWidth: '64ch' }}>
-            Patterns learned across similar businesses that chose to share — anonymised, never traceable to any one company.
+            Patterns learned across similar {org}s that chose to share — anonymised, never traceable to any one {org}.
           </p>
           <section style={{ display: 'grid', gap: 8, marginBottom: 24 }}>
             {insights.slice(0, 5).map((it) => (
               <div key={it.id} style={{ background: '#fff', border: '1px solid #eee5da', borderRadius: 10, padding: '12px 14px' }}>
                 <strong style={{ fontSize: 14 }}>{it.title}</strong>
                 <p style={{ fontSize: 13, color: '#5b5249', margin: '4px 0 0', lineHeight: 1.5 }}>{it.insight}</p>
-                <div style={{ fontSize: 11, color: '#a89e92', marginTop: 4 }}>from {it.supporting_orgs} similar businesses</div>
+                <div style={{ fontSize: 11, color: '#a89e92', marginTop: 4 }}>from {it.supporting_orgs} similar {org}s</div>
               </div>
             ))}
           </section>

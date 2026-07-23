@@ -5,6 +5,7 @@
 // save. Not a brief: the policy is the readable summary of what the business runs.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 import EvidencePanel from './EvidencePanel.jsx';
 import { findPillar, STATUS_LABEL } from './pillars.js';
@@ -69,7 +70,7 @@ export default function BusinessGovernance() {
         the AI systems you've logged, their risk tiers, the controls you've adopted and your accountable
         owner. Grounded in current law &amp; frameworks, and cited.
       </p>
-      <p style={{ marginBottom: 18 }}><Link to="/dashboard">← Back to dashboard</Link></p>
+      <p style={{ marginBottom: 18 }}><Link to={bizHome()}>← Back to dashboard</Link></p>
 
       {/* The governance toolkit — the tools that used to sit on the pillar page,
           now reached as panels from here. They build the data the policy is

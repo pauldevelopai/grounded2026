@@ -33,6 +33,9 @@ export const SECTIONS = [
       { name: 'Archivist',              key: 'archivist',   status: 'partial', runs: 'local',  to: null, blurb: 'Semantic search over the newsroom’s own archive. Embeddings infra exists; per-newsroom index in progress.' },
       { name: 'Translator',             key: 'translator',  status: 'soon',    runs: 'local',  to: null, blurb: 'English ↔ African languages with a per-newsroom glossary that compounds with every edit.' },
       { name: 'Audio & Video Producer', key: 'producer',    status: 'partial', runs: 'both',   to: null, href: '/nodes/', blurb: 'Radio scripts, podcasts, audiograms and vertical video. Podcast Studio node exists; video path in progress.' },
+      { name: 'Team AI Workspace',      key: 'workspace',   status: 'live',    runs: 'online', to: '/dashboard/workspace', blurb: 'Your newsroom’s shared AI — ask anything grounded in your own knowledge, and every answer is pooled so the newsroom builds on it instead of losing it.' },
+      { name: 'Your Documents',         key: 'extraction',  status: 'live',    runs: 'online', to: '/dashboard/extraction', blurb: 'Drop in a contract, report or spreadsheet and get the text, a plain-language summary and the key facts pulled out — private to you.' },
+      { name: 'Prompt Library',         key: 'prompts',     status: 'live',    runs: 'online', to: '/dashboard/prompts', blurb: 'Proven prompts for the AI model your team uses — copy, rate, and save your own.' },
     ],
   },
   {
@@ -46,6 +49,10 @@ export const SECTIONS = [
       { name: 'AI-Ready Archive',  key: 'airready',     status: 'live', runs: 'both',   to: null, href: '/nodes/', blurb: 'Turn your archive into AI-discoverable formats and control what crawlers and LLMs can see.' },
       { name: 'Fundraiser',        key: 'fundraiser',   status: 'partial', runs: 'online', to: '/tool/tool-fundraiser', blurb: 'A live funder library + grant-draft scaffolding. Newsroom-facing version in development (real funders only).' },
       { name: 'Operations Manager',key: 'operations',   status: 'partial', runs: 'online', to: '/tool/tool-operations', blurb: 'Editorial calendar, freelancer coordination, logistics — AI across the whole organisation.' },
+      { name: 'LeadFinder',        key: 'leadfinder',   status: 'partial', runs: 'online', to: '/leadfinder', blurb: 'An overnight scan of public tenders and opportunities, qualified against your own criteria — a funding/RFP pipeline for the newsroom.' },
+      { name: 'Productivity & impact', key: 'productivity', status: 'partial', runs: 'online', to: '/dashboard/productivity', blurb: 'Track the time AI saves and the outcomes it drives — goals and results for the newsroom in one place.' },
+      { name: 'Strategy & roadmap',key: 'strategy',     status: 'partial', runs: 'online', to: '/dashboard/strategy', blurb: 'Turn goals into an AI automation roadmap for the newsroom.' },
+      { name: 'AI visibility check',key: 'visibility',  status: 'partial', runs: 'online', to: '/dashboard/visibility', blurb: 'See how AI assistants describe your newsroom — and what to fix so they get it right.' },
     ],
   },
   {
@@ -57,7 +64,9 @@ export const SECTIONS = [
     functions: [
       { name: 'Pulse',              key: 'pulse',      status: 'partial', runs: 'online', to: '/admin/pulse', blurb: 'Quick check-in questions to each newsroom; surfaces real needs and feeds active development.' },
       { name: 'Courses & Manuals',  key: 'courses',    status: 'soon',    runs: 'online', to: null, blurb: 'A newsroom-facing library of manuals and video courses for AI implementation, ethics and management.' },
-      { name: 'KnowHow',            key: 'knowhow',    status: 'soon',    runs: 'online', to: null, blurb: 'Capture the institutional knowledge in your team’s heads into a living, consent-scoped corpus — then an AI guide that coaches juniors. (Replaces BetterBoss; capture engine is live, GROUNDED surface next.)' },
+      { name: 'KnowHow',            key: 'knowhow',    status: 'partial', runs: 'online', to: '/dashboard/knowhow', blurb: 'Capture the institutional knowledge in your team’s heads into a living, consent-scoped corpus — then an AI guide that coaches new staff.' },
+      { name: 'New-staff Coach',    key: 'coach',      status: 'partial', runs: 'online', to: '/dashboard/coach', blurb: 'An AI guide grounded in your newsroom’s shared know-how that helps new staff learn the ropes.' },
+      { name: 'Staff AI Needs',     key: 'staff-needs',status: 'partial', runs: 'online', to: '/dashboard/staff-needs', blurb: 'Capture where each person needs AI help, so training targets the real gaps in your team.' },
     ],
   },
   {
@@ -71,6 +80,9 @@ export const SECTIONS = [
       { name: 'Awareness',                          key: 'awareness', status: 'live',    runs: 'online', to: '/awareness', blurb: 'Data-security essentials for newsrooms — source protection, devices, accounts, surveillance.' },
       { name: 'Policy Builder',                     key: 'policy',    status: 'partial', runs: 'online', to: '/legal/ethics-builder', blurb: 'Build a newsroom AI-governance framework grounded in your own implementations, not a generic policy.' },
       { name: 'Digital Security Audit',             key: 'audit',     status: 'partial', runs: 'online', to: '/tool/tool-security-audit', blurb: 'Inventory external tools and score each against your jurisdiction pack; a prioritised fix list.' },
+      { name: 'AI Governance & Policy',             key: 'governance',status: 'partial', runs: 'online', to: '/dashboard/governance', blurb: 'Draft and maintain your newsroom’s AI policy, controls, review cadence and evidence — grounded in your own use, not a generic template.' },
+      { name: 'AI System Register',                 key: 'register',  status: 'partial', runs: 'online', to: '/dashboard/security', blurb: 'Register the AI systems the newsroom uses and track data-safety, risk and acceptable use.' },
+      { name: 'Governance readiness',               key: 'gov-assessment', status: 'partial', runs: 'online', to: '/dashboard/governance/assessment', blurb: 'Score your newsroom’s AI-governance readiness and see what to shore up next.' },
     ],
   },
   {
