@@ -125,6 +125,53 @@ export async function listNewsrooms() {
   return listAll(TABLES.NEWSROOMS, { fields: ['Name', 'Country', 'Type', 'Cohort Name'] });
 }
 
+// ── MediaMap: the Africa-wide directory + AI-journey overlay ────────────────
+// One row per media organisation in the Newsrooms table, folded together with
+// its Pulse cycle activity (grouped by the "Newsroom record ID" back-reference
+// on Cycles). Newsrooms are fetched with ALL fields — never a `fields[]` filter —
+// so a renamed or absent journey column can never 422 the whole map; we just
+// read what's there. This is the read behind GET /beaiready/admin/mediamap.
+export async function mediamapNewsrooms() {
+  const [rooms, cycles] = await Promise.all([
+    listAll(TABLES.NEWSROOMS),
+    listAll(TABLES.CYCLES, { fields: ['Newsroom record ID', 'Status', 'Triggered date'] }),
+  ]);
+  // Airtable values: singleSelect → {name}, multi/linked → [{name}|string], else text.
+  const pick = (v) => (v == null ? ''
+    : Array.isArray(v) ? v.map((x) => (x && x.name) || x).filter(Boolean).join(', ')
+    : (v && v.name) || v);
+
+  const byRoom = new Map();
+  for (const c of cycles) {
+    const rid = c.fields?.['Newsroom record ID'];
+    if (!rid) continue;
+    if (!byRoom.has(rid)) byRoom.set(rid, []);
+    byRoom.get(rid).push(c);
+  }
+
+  return rooms.map((r) => {
+    const f = r.fields || {};
+    const cs = (byRoom.get(r.id) || []).slice().sort((a, b) =>
+      String(b.fields?.['Triggered date'] || '').localeCompare(String(a.fields?.['Triggered date'] || '')));
+    const latest = cs[0];
+    return {
+      id: r.id,
+      name: pick(f.Name),
+      country: pick(f.Country),
+      type: pick(f.Type),
+      cohort: pick(f['Cohort Name']),
+      languages: pick(f.Languages),
+      aiTools: pick(f['AI tools used']),
+      who: pick(f['Who are they?']),
+      journeyStatus: pick(f['AI Journey Status']),
+      notes: pick(f.Notes),
+      cyclesRun: cs.length,
+      latestCycleStatus: latest ? pick(latest.fields?.Status) : '',
+      latestCycleDate: latest ? (latest.fields?.['Triggered date'] || '') : '',
+    };
+  }).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
 export async function listNodeInstalls() {
   return listAll(TABLES.NODE_INSTALLS);
 }

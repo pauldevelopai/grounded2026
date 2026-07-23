@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
 import { SECTIONS, LAYERS } from '../../ui/sections.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import TodayInAI from '../../components/TodayInAI.jsx';
 
 export default function PublicHome() {
   const { user } = useAuth();
@@ -61,6 +62,12 @@ export default function PublicHome() {
           )}
         </div>
       </section>
+
+      {/* ── Today in AI — the daily newsroom (shared with the BE AI READY door):
+          lead story + two shorter reads, from the three public briefings. Renders
+          nothing until a briefing exists. Tracker links go to the public legal
+          dashboard. ── */}
+      <TodayInAI trackerTo="/legal/dashboard" />
 
       {/* ── What's inside (real counts) ── */}
       <section className="hub-stats">

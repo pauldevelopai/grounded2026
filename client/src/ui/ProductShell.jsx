@@ -62,6 +62,7 @@ export default function ProductShell() {
                 admin use the product AS a chosen newsroom (dogfooding). */}
             {isAdmin && <NewsroomSwitcher />}
             {isAdmin && <NavLink to="/admin" className="product-nav-link outline">Admin</NavLink>}
+            {isAdmin && <NavLink to="/business-admin" className="product-nav-link outline">Be AI Ready</NavLink>}
             {isAdmin && <NavLink to="/dashboard" className="product-nav-link outline">Studio</NavLink>}
             {user ? (
               <button

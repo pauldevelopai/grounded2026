@@ -19,6 +19,8 @@ import { ingestGovernanceDocument } from '../services/governance-ingest.js';
 import { computeAndSaveScore } from './bair-score.js';
 import { loadAssessment, submitAnswers, computeGovernanceScorecard, resolveOrCreateAudit, AssessmentError } from '../services/gov-assessment.js';
 import { listStorefrontNodes } from '../services/node-catalogue.js';
+import config from '../config.js';
+import * as pulseAirtable from '../pulse/airtable.js';
 
 function slugify(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -1374,9 +1376,26 @@ router.get('/admin/clients', requireRole('admin'), async (req, res) => {
 // fabricated number, and no derived "stage" (raw signals only, Paul 2026-07-13).
 // bair.audits + engagements are keyed by organisation_id, so they join via
 // newsrooms.organisation_id (NOT newsrooms.id) like the rest of BAIR.
+// MediaMap = the operator's map of media organisations and where each stands on
+// its AI journey. Two lenses, one payload:
+//   • newsrooms — the Africa-wide directory + AI-journey overlay, read LIVE from
+//     the "MediaMap" Airtable base (only when PULSE_ENABLED; empty + directoryError
+//     otherwise, so the page always renders).
+//   • clients   — the deeper BE AI READY portfolio from our own Postgres, one row
+//     per onboarded business with its real engagement signals.
 router.get('/admin/mediamap', requireRole('admin'), async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    let newsrooms = [];
+    let directoryError = null;
+    if (config.pulseEnabled) {
+      try {
+        newsrooms = await pulseAirtable.mediamapNewsrooms();
+      } catch (e) {
+        directoryError = e.message || 'Airtable read failed';
+        console.error('[beaiready/admin/mediamap] airtable', e);
+      }
+    }
+    const { rows: clients } = await pool.query(
       `SELECT n.id, n.name, n.slug, n.is_active, n.created_at, o.website, o.country, s.name AS sector,
               n.shares_anonymised_insights,
               (SELECT COUNT(*)::int FROM team_members t WHERE t.newsroom_id = n.id) AS user_count,
@@ -1404,7 +1423,7 @@ router.get('/admin/mediamap', requireRole('admin'), async (req, res) => {
         WHERE n.kind = 'business'
         ORDER BY n.created_at`
     );
-    res.json(rows);
+    res.json({ pulseEnabled: config.pulseEnabled, directoryError, newsrooms, clients });
   } catch (err) { console.error('[beaiready/admin/mediamap]', err); res.status(500).json({ message: 'Internal server error' }); }
 });
 

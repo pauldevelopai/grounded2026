@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { apiFetch } from '../../../hooks/useApi.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { PILLAR_FLAGS, pillarDone } from './ClientUserPanels.jsx';
+import { useAdminBase } from './adminBase.js';
 
 const CHARCOAL = '#1c1b1a';
 const TERRACOTTA = '#c75b39';
@@ -80,6 +81,7 @@ function LoadError({ what, message, onRetry }) {
 
 export default function BeAIReadyAdminOverview() {
   const { user } = useAuth();
+  const { p, tracker } = useAdminBase();
   const [data, setData] = useState({ clients: [], tracker: { lawsuit: [], regulation: [] }, feedback: [], suggestions: [], nodes: null, today: null });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState({});      // per-item action spinner: { [key]: true }
@@ -240,10 +242,10 @@ export default function BeAIReadyAdminOverview() {
 
       {/* Summary strip — the three action queues */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
-        <QueueChip label="Tracker items to review" count={pendingTracker.length} to="/admin/tracker" error={errors.tracker} />
+        <QueueChip label="Tracker items to review" count={pendingTracker.length} to={p('/tracker')} error={errors.tracker} />
         <QueueChip label="Open feedback" count={openFeedback.length} error={errors.feedback} />
-        <QueueChip label="Toolbox suggestions" count={pendingSuggestions.length} to="/admin/tools" error={errors.suggestions} />
-        <QueueChip label="New clients (48h)" count={newClients.length} to="/admin/users" error={errors.clients} />
+        <QueueChip label="Toolbox suggestions" count={pendingSuggestions.length} to={p('/tools')} error={errors.suggestions} />
+        <QueueChip label="New clients (48h)" count={newClients.length} to={p('/users')} error={errors.clients} />
       </div>
 
       {/* ═══ NEEDS YOU TODAY ═══ */}
@@ -256,7 +258,7 @@ export default function BeAIReadyAdminOverview() {
           ✓ You’re all caught up — nothing waiting for review, no open feedback, no new tool suggestions.
           {autoAdded.length > 0 && (
             <div style={{ fontSize: 12, color: '#6b8a6b', marginTop: 6 }}>
-              <Link to="/admin/tracker" style={{ color: '#4a7a4a', fontWeight: 600 }}>Tracker review</Link> still lists
+              <Link to={p('/tracker')} style={{ color: '#4a7a4a', fontWeight: 600 }}>Tracker review</Link> still lists
               all {autoAdded.length} auto-added entries — those are already reviewed, kept on the public tracker.
             </div>
           )}
@@ -299,7 +301,7 @@ export default function BeAIReadyAdminOverview() {
             <div style={card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <span style={{ ...kicker, marginBottom: 0 }}>Auto-added tracker entries to check{errors.tracker ? '' : ` · ${pendingTracker.length} pending of ${autoAdded.length} auto-added`}</span>
-                <Link to="/admin/tracker" style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Full review →</Link>
+                <Link to={p('/tracker')} style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Full review →</Link>
               </div>
               {errors.tracker && <LoadError what="the tracker queue" message={errors.tracker} onRetry={load} />}
               {!errors.tracker && pendingTracker.slice(0, 6).map((r) => (
@@ -328,7 +330,7 @@ export default function BeAIReadyAdminOverview() {
             <div style={card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <span style={{ ...kicker, marginBottom: 0 }}>Tool suggestions from users{errors.suggestions ? '' : ` · ${pendingSuggestions.length} pending`}</span>
-                <Link to="/admin/tools" style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Review & approve →</Link>
+                <Link to={p('/tools')} style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Review & approve →</Link>
               </div>
               {errors.suggestions && <LoadError what="tool suggestions" message={errors.suggestions} onRetry={load} />}
               {!errors.suggestions && pendingSuggestions.slice(0, 5).map((s) => (
@@ -353,10 +355,10 @@ export default function BeAIReadyAdminOverview() {
           <span style={kicker}>Today’s governance briefing</span>
           {briefingToday ? (
             <div style={{ fontSize: 13, color: '#2a2622' }}>
-              Generated {timeAgo(briefingToday.generated_at)}. <Link to="/tracker" style={{ color: TERRACOTTA, fontWeight: 600 }}>Open the tracker →</Link>
+              Generated {timeAgo(briefingToday.generated_at)}. <Link to={tracker} style={{ color: TERRACOTTA, fontWeight: 600 }}>Open the tracker →</Link>
             </div>
           ) : (
-            <div style={{ fontSize: 13, color: '#8a8076' }}>Not generated yet today — the daily digest job runs each morning. <Link to="/admin/briefings" style={{ color: TERRACOTTA, fontWeight: 600 }}>Briefings →</Link></div>
+            <div style={{ fontSize: 13, color: '#8a8076' }}>Not generated yet today — the daily digest job runs each morning. <Link to={p('/briefings')} style={{ color: TERRACOTTA, fontWeight: 600 }}>Briefings →</Link></div>
           )}
         </div>
         {/* New clients */}
@@ -449,7 +451,7 @@ export default function BeAIReadyAdminOverview() {
                 );
               })}
             </div>
-            <Link to={`/admin/client?c=${c.id}`} style={{ ...btn(false), textDecoration: 'none', whiteSpace: 'nowrap' }}>Open in Client →</Link>
+            <Link to={p(`/client?c=${c.id}`)} style={{ ...btn(false), textDecoration: 'none', whiteSpace: 'nowrap' }}>Open in Client →</Link>
           </div>
         ))}
       </div>
@@ -477,7 +479,7 @@ export default function BeAIReadyAdminOverview() {
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <span style={{ ...kicker, marginBottom: 0 }}>Clients · {data.clients.length}</span>
-            <Link to="/admin/users" style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Manage →</Link>
+            <Link to={p('/users')} style={{ fontSize: 12, color: TERRACOTTA, fontWeight: 600 }}>Manage →</Link>
           </div>
           {data.clients.length === 0 ? (
             <div style={{ fontSize: 13, color: '#8a8076', marginTop: 8 }}>No client businesses yet.</div>
