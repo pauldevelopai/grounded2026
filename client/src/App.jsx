@@ -385,6 +385,37 @@ export default function App() {
                 <Route path="/admin/pulse/newsrooms/:id" element={<PulseGate><PulseNewsroomDetail /></PulseGate>} />
                 <Route path="/settings/newsroom-profile" element={<NewsroomProfile />} />
               </Route>
+
+              {/* ── BE AI READY client tools, ported into the newsroom product for all
+                    authed users. The tools keep their /dashboard/* paths (free here —
+                    bare /dashboard is Studio); the hub moves to /business, and the pages'
+                    "Back to dashboard" links resolve per-door via bizNav.bizHome(). The
+                    terracotta "hub-beaiready" styling stays for now (reframe later). ── */}
+              <Route path="/business" element={<BusinessDashboard />} />
+              <Route path="/dashboard/governance" element={<BusinessGovernance />} />
+              <Route path="/dashboard/visibility" element={<BusinessVisibility />} />
+              <Route path="/dashboard/security" element={<BusinessSecurity />} />
+              <Route path="/dashboard/governance/controls" element={<BusinessControls />} />
+              <Route path="/dashboard/governance/review" element={<BusinessReview />} />
+              <Route path="/dashboard/governance/legal" element={<BusinessLegalFramework />} />
+              <Route path="/dashboard/governance/assessment" element={<BusinessGovAssessment />} />
+              <Route path="/dashboard/governance/learning" element={<BusinessGovLearning />} />
+              <Route path="/dashboard/productivity" element={<BusinessProductivity />} />
+              <Route path="/dashboard/strategy" element={<BusinessStrategy />} />
+              <Route path="/dashboard/workspace" element={<BusinessWorkspace />} />
+              <Route path="/dashboard/staff-needs" element={<BusinessStaffNeeds />} />
+              <Route path="/dashboard/extraction" element={<BusinessExtraction />} />
+              <Route path="/dashboard/knowhow" element={<BusinessKnowHow />} />
+              <Route path="/dashboard/coach" element={<BusinessCoach />} />
+              <Route path="/dashboard/prompts" element={<BeAIReadyPrompts mode="library" />} />
+              <Route path="/dashboard/prompts/:id" element={<BeAIReadyPrompts mode="detail" />} />
+              <Route path="/dashboard/my-prompts" element={<BeAIReadyMyPrompts />} />
+              <Route path="/leadfinder" element={<BusinessLeadFinder />} />
+              {/* Cross-door links baked into the business pages (/toolbox, /tracker) point
+                    at real surfaces on the beaiready door; on Grounded, redirect to the
+                    newsroom equivalents so the same links resolve. */}
+              <Route path="/toolbox" element={<Navigate to="/functions" replace />} />
+              <Route path="/tracker" element={<Navigate to="/lawsuits" replace />} />
             </Route>
           </Route>
 

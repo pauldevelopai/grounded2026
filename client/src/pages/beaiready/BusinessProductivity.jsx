@@ -3,6 +3,7 @@
 // live AI toolbox link. Scoped to the tenant. (KnowHow lives on the Training tab.)
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 
 const MEASURES = [
@@ -55,7 +56,7 @@ export default function BusinessProductivity() {
         Five measures that matter — tracked at the business level with your own baselines, never used to
         police individuals. Enter a value when you have one; an em-dash just means it's not set yet.
       </p>
-      <p style={{ marginBottom: 18 }}><Link to="/dashboard">← Back to dashboard</Link></p>
+      <p style={{ marginBottom: 18 }}><Link to={bizHome()}>← Back to dashboard</Link></p>
 
       {err && <div style={{ background: '#FEF2F2', color: '#B91C1C', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{err}</div>}
 

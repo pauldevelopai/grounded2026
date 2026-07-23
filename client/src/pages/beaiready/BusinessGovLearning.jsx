@@ -4,6 +4,7 @@
 // is tracked server-side in bair.gov_learning_progress. See docs/BUILD_…md.
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { bizHome } from './bizNav.js';
 import { apiFetch } from '../../hooks/useApi.js';
 import { GOV_LEARNING_UNITS } from './govLearningContent.js';
 
@@ -57,7 +58,7 @@ export default function BusinessGovLearning() {
         This is professional development in AI governance — it is <strong>not the AIGP credential</strong>.
       </p>
       <p style={{ marginBottom: 20 }}>
-        <Link to="/dashboard">← Back to dashboard</Link> &nbsp;·&nbsp;
+        <Link to={bizHome()}>← Back to dashboard</Link> &nbsp;·&nbsp;
         <Link to="/dashboard/governance/assessment">Governance Assessment</Link>
       </p>
 
