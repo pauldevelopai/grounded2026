@@ -28,6 +28,8 @@ const ADMIN_NAV = [
   { to: '/legal-sources',          label: 'Sources',          group: 'AI Legal tracker' },
   { to: '/use-cases-admin',        label: 'Use cases',        group: 'AI Legal tracker' },
   { to: '/node-admin',             label: 'Nodes',            group: 'Nodes' },
+  // The BE AI READY business-edition operator portal (its own shell, /business-admin/*).
+  { to: '/business-admin',         label: 'Be AI Ready admin', group: 'Be AI Ready' },
   { to: '/documents',              label: 'Policies & Security', group: 'Documents' },
   { to: '/feedback',               label: 'Feedback',         group: 'People & access' },
   { to: '/settings/team',          label: 'Team members',     group: 'People & access' },

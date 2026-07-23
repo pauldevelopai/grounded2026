@@ -427,6 +427,39 @@ export default function App() {
             </Route>
           </Route>
 
+          {/* ── BE AI READY admin portal, ported onto the Grounded door. Same shell
+                + pages as the beaiready door, but mounted under /business-admin/* so
+                its routes don't collide with Grounded's own /admin (AdminOverview).
+                The shell + Overview + MediaMap derive their base path from the URL
+                (adminBase.js), so one component tree serves both doors. Admin-gated;
+                reached from the Grounded admin sidebar ("Be AI Ready"). ── */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AdminRoute />}>
+              <Route element={<BeAIReadyAdminShell />}>
+                <Route path="/business-admin" element={<BeAIReadyAdminOverview />} />
+                <Route path="/business-admin/client" element={<BeAIReadyAdminClient />} />
+                <Route path="/business-admin/mediamap" element={<BeAIReadyAdminMediaMap />} />
+                {/* /admin/users was retired on the beaiready door; keep the redirect here too. */}
+                <Route path="/business-admin/users" element={<Navigate to="/business-admin" replace />} />
+                <Route path="/business-admin/tools" element={<BeAIReadyAdminTools />} />
+                <Route path="/business-admin/tracker" element={<BeAIReadyAdminTracker />} />
+                <Route path="/business-admin/governance" element={<BeAIReadyAdminGovernance />} />
+                <Route path="/business-admin/engagement" element={<BeAIReadyAdminEngagement />} />
+                <Route path="/business-admin/nodes" element={<BeAIReadyAdminNodes />} />
+                <Route path="/business-admin/training" element={<BeAIReadyAdminTraining />} />
+                <Route path="/business-admin/strategy" element={<BeAIReadyAdminStrategy />} />
+                <Route path="/business-admin/insights" element={<BeAIReadyAdminInsights />} />
+                <Route path="/business-admin/prompts" element={<BeAIReadyAdminPrompts />} />
+                <Route path="/business-admin/briefings" element={<BeAIReadyAdminBriefings />} />
+                <Route path="/business-admin/knowhow" element={<BeAIReadyAdminKnowHow />} />
+                <Route path="/business-admin/workspace" element={<BeAIReadyAdminWorkspace />} />
+                <Route path="/business-admin/data" element={<BeAIReadyAdminData />} />
+                <Route path="/business-admin/models" element={<BeAIReadyAdminModels />} />
+                <Route path="/business-admin/vantage" element={<BeAIReadyAdminVantage />} />
+              </Route>
+            </Route>
+          </Route>
+
           {/* ── Studio — Develop AI back-office (Phase 1 · step 4). Admin-gated,
                 its own StudioShell. Component code + paths are UNCHANGED (so every
                 internal link and bookmark survives); only the wrapping shell + nav
