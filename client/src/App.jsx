@@ -378,9 +378,12 @@ export default function App() {
           <Route element={<PublicLayout />}>
             <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
             <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
+            {/* The BE AI READY tracker page itself — Law + Regulation + daily briefings,
+                reading the same public feeds. This IS the Governance pillar's "Legal,
+                Ethics & Regulation tracker" (rows link to the legal detail pages). */}
+            <Route path="/tracker" element={<BeAIReadyTracker />} />
           </Route>
           {/* Cross-door destinations baked into pillars.js resolve to Grounded surfaces. */}
-          <Route path="/tracker" element={<Navigate to="/legal/dashboard" replace />} />
           <Route path="/toolbox" element={<Navigate to="/functions" replace />} />
           <Route path="/training/book" element={<Navigate to="/training" replace />} />
           <Route path="/nodes" element={<ExternalRedirect to="/nodes/" />} />
