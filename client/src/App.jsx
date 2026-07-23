@@ -82,7 +82,7 @@ import PulseNewsroomDetail from './pages/pulse/PulseNewsroomDetail.jsx';
 import PulseAnswer from './pages/pulse/PulseAnswer.jsx';
 import KnowHowAnswer from './pages/knowhow/KnowHowAnswer.jsx';
 import KnowHowAsk from './pages/knowhow/KnowHowAsk.jsx';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
 import BeAIReadyLayout from './pages/beaiready/BeAIReadyLayout.jsx';
@@ -172,6 +172,14 @@ function LazyFallback() {
       Loading…
     </div>
   );
+}
+
+// Full-page redirect to a non-SPA path (e.g. the Caddy-served /nodes/ front door).
+// A React-Router <Navigate> would only client-route and hit no match; this does a
+// real navigation so the server/Caddy serves the target.
+function ExternalRedirect({ to }) {
+  useEffect(() => { window.location.replace(to); }, [to]);
+  return <LazyFallback />;
 }
 
 // One app, two doors (BEAIREADY spec Part B). On beaiready.* the public routes
@@ -363,6 +371,20 @@ export default function App() {
           {/* ── The newsroom product / platform-admin / studio surfaces — mounted
                 on the grounded host only (not on the beaiready business door). ── */}
           {!IS_BEAIREADY && (<>
+          {/* ── BE AI READY pillar splash pages + feature gateway, ported to the
+                Grounded public door so a newsroom can browse the full toolset by
+                pillar (the cards route signed-in users straight into the tool, and
+                give everyone else a clean explainer + sign-in — never a dead-end). ── */}
+          <Route element={<PublicLayout />}>
+            <Route path="/pillar/:key" element={<BeAIReadyPillar />} />
+            <Route path="/feature/:slug" element={<BeAIReadyFeature />} />
+          </Route>
+          {/* Cross-door destinations baked into pillars.js resolve to Grounded surfaces. */}
+          <Route path="/tracker" element={<Navigate to="/legal/dashboard" replace />} />
+          <Route path="/toolbox" element={<Navigate to="/functions" replace />} />
+          <Route path="/training/book" element={<Navigate to="/training" replace />} />
+          <Route path="/nodes" element={<ExternalRedirect to="/nodes/" />} />
+
           {/* ── ProductShell — the concept-note-led newsroom product (Phase 1 · steps 2 + 5).
                 The 5 sections + 3 strategic layers + the real product pages: Builder, Run,
                 Awareness, the Tracker (lawsuits + regulations), Pulse and Profile. Login
@@ -411,11 +433,6 @@ export default function App() {
               <Route path="/dashboard/prompts/:id" element={<BeAIReadyPrompts mode="detail" />} />
               <Route path="/dashboard/my-prompts" element={<BeAIReadyMyPrompts />} />
               <Route path="/leadfinder" element={<BusinessLeadFinder />} />
-              {/* Cross-door links baked into the business pages (/toolbox, /tracker) point
-                    at real surfaces on the beaiready door; on Grounded, redirect to the
-                    newsroom equivalents so the same links resolve. */}
-              <Route path="/toolbox" element={<Navigate to="/functions" replace />} />
-              <Route path="/tracker" element={<Navigate to="/lawsuits" replace />} />
             </Route>
           </Route>
 
