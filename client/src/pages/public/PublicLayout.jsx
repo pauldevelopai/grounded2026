@@ -46,8 +46,43 @@ const TRACKER_ITEMS = [
   { label: 'Ethics Policy Builder', to: '/legal/ethics-builder' },
 ];
 const TRAINING_ITEMS = [
-  { label: 'Training', to: '/training' },
+  { label: 'Training & courses', to: '/training' },
+  { label: 'Staff AI needs', to: '/dashboard/staff-needs' },
+  { label: 'New-staff coach', to: '/dashboard/coach' },
   { label: 'Sources', to: '/legal/sources' },
+];
+// ── BE AI READY pillar menus (ported into the Grounded nav). Offline fallback;
+// the server (/api/public/nav) wins at runtime. Tool links are behind sign-in. ──
+const KNOWLEDGE_ITEMS = [
+  { label: 'Your dashboard', to: '/business' },
+  { label: 'KnowHow — capture & ask', to: '/dashboard/knowhow' },
+  { label: 'How AI sees your newsroom', to: '/dashboard/visibility' },
+  { label: 'Your documents', to: '/dashboard/extraction' },
+  { label: 'Team AI workspace', to: '/dashboard/workspace' },
+];
+const GOVERNANCE_ITEMS = [
+  { label: 'AI Policy builder', to: '/dashboard/governance' },
+  { label: 'The rules that apply', to: '/dashboard/governance/legal' },
+  { label: 'Controls Library', to: '/dashboard/governance/controls' },
+  { label: 'Roles & Review', to: '/dashboard/governance/review' },
+  { label: 'Governance Assessment', to: '/dashboard/governance/assessment' },
+  { label: 'Governance Learning', to: '/dashboard/governance/learning' },
+  { label: 'Legal & Regulation tracker', to: '/legal/dashboard' },
+];
+const CYBERSECURITY_ITEMS = [
+  { label: 'AI System Register & Risk', to: '/dashboard/security' },
+  { label: 'Awareness — data security', to: '/awareness' },
+];
+const TOOLS_ITEMS = [
+  { label: 'Nodes', to: '/nodes/', external: true },
+  { label: 'Functions directory', to: '/functions' },
+  { label: 'Prompt library', to: '/dashboard/prompts' },
+  { label: 'LeadFinder', to: '/leadfinder' },
+  { label: 'Productivity & impact', to: '/dashboard/productivity' },
+];
+const STRATEGY_ITEMS = [
+  { label: 'Goals & automation roadmap', to: '/dashboard/strategy' },
+  { label: 'Measurement — goals & results', to: '/dashboard/productivity' },
 ];
 
 const dropItemStyle = {
@@ -115,11 +150,24 @@ export default function PublicLayout() {
 
   // Live menu from the single source of truth (/api/public/nav); the imported
   // constants are the offline fallback shown until/if the fetch resolves.
-  const [menu, setMenu] = useState({ builder: BUILDER_ITEMS, tracker: TRACKER_ITEMS, training: TRAINING_ITEMS });
+  const [menu, setMenu] = useState({
+    builder: BUILDER_ITEMS, tracker: TRACKER_ITEMS, training: TRAINING_ITEMS,
+    knowledge: KNOWLEDGE_ITEMS, governance: GOVERNANCE_ITEMS,
+    cybersecurity: CYBERSECURITY_ITEMS, tools: TOOLS_ITEMS, strategy: STRATEGY_ITEMS,
+  });
   useEffect(() => {
     const map = (arr) => (arr || []).map(i => ({ label: i.label, to: i.href, external: !!i.external }));
     publicFetch('/public/nav')
-      .then(d => { if (d?.builder) setMenu({ builder: map(d.builder), tracker: map(d.tracker), training: map(d.training) }); })
+      .then(d => {
+        if (!d) return;
+        // Merge server groups over the fallback — keep any group the server
+        // doesn't return yet (so a not-yet-deployed nav can't blank a menu).
+        setMenu(prev => {
+          const next = { ...prev };
+          for (const key of Object.keys(prev)) if (Array.isArray(d[key])) next[key] = map(d[key]);
+          return next;
+        });
+      })
       .catch(() => {});
   }, []);
 
@@ -153,7 +201,13 @@ export default function PublicLayout() {
             <NavLink to="/" end style={navStyle}>Home</NavLink>
             <NavDropdown label="Builder" items={menu.builder} activeWhen={p => p.startsWith('/monetisation')} />
             <NavDropdown label="AI Policies" items={menu.tracker} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
-            <NavDropdown label="Training" items={menu.training} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources')} />
+            {/* BE AI READY pillar menus, ported next to the Grounded ones. */}
+            <NavDropdown label="Knowledge" items={menu.knowledge} activeWhen={p => p === '/business' || p.startsWith('/dashboard/knowhow') || p.startsWith('/dashboard/visibility') || p.startsWith('/dashboard/extraction') || p.startsWith('/dashboard/workspace')} />
+            <NavDropdown label="Training" items={menu.training} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources') || p.startsWith('/dashboard/staff-needs') || p.startsWith('/dashboard/coach')} />
+            <NavDropdown label="Governance" items={menu.governance} activeWhen={p => p.startsWith('/dashboard/governance')} />
+            <NavDropdown label="Cyber Security" items={menu.cybersecurity} activeWhen={p => p.startsWith('/dashboard/security') || p.startsWith('/awareness')} />
+            <NavDropdown label="Tools" items={menu.tools} activeWhen={p => p.startsWith('/functions') || p.startsWith('/dashboard/prompts') || p.startsWith('/leadfinder') || p.startsWith('/dashboard/productivity')} />
+            <NavDropdown label="Strategy" items={menu.strategy} activeWhen={p => p.startsWith('/dashboard/strategy')} />
             {user ? (
               <>
                 {/* Logged-in users get a way into the app shell (sidebar +
