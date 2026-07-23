@@ -152,10 +152,8 @@ export default function PublicLayout() {
           </Link>
           <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <NavLink to="/" end style={navStyle}>Home</NavLink>
-            <NavDropdown label="Builder" items={menu.builder} activeWhen={p => p.startsWith('/monetisation')} />
-            <NavDropdown label="AI Policies" items={menu.tracker} activeWhen={p => p.startsWith('/legal/')} />
-            {/* The six BE AI READY pillars as TABS → their splash pages (/pillar/:key),
-                the way into the full toolset. Mirrors the beaiready door. */}
+            {/* The nav is the six pillars only. Builder's items are folded into the
+                Tools pillar and AI Policies' into Governance (see BeAIReadyPillar). */}
             {VISIBLE_PILLARS.map(p => (
               <NavLink key={p.key} to={`/pillar/${p.key}`} style={navStyle}>{p.nav || p.label}</NavLink>
             ))}
