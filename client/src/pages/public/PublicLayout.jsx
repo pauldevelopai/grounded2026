@@ -32,7 +32,7 @@ const inactiveStyle = navStyle({ isActive: false });
 // shared with the Nodes front door — so the two surfaces can't drift. Keep
 // these in sync-ish, but the server wins at runtime.
 const BUILDER_ITEMS = [
-  { label: 'Nodes', to: '/nodes/', external: true },
+  // Nodes lives in the Tools pillar (and its own front door) — not duplicated here.
   { label: 'Tool Search', to: '/tools/', external: true },
   { label: 'Workflow builder', to: '/builder', external: false },
   { label: 'Monetisation', to: '/monetisation', external: false },

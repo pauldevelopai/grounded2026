@@ -14,7 +14,7 @@
 
 export const PUBLIC_NAV = {
   builder: [
-    { label: 'Nodes', href: '/nodes/', external: true },
+    // Nodes lives in the Tools pillar (and its own front door) — not duplicated here.
     { label: 'Tool Search', href: '/tools/', external: true },
     { label: 'Workflow builder', href: '/builder' },
     { label: 'Monetisation', href: '/monetisation' },
