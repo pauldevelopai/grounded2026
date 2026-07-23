@@ -293,13 +293,12 @@ export default function App() {
           {/* ── Training — host-aware: the BE AI READY door gets the business
                 training offer; Grounded keeps the newsroom course library. ── */}
           <Route path="/training" element={<PublicShell />}>
-            {/* On BE AI READY the training page is gated + personalised to the signed-in
-                client (their agenda, materials, sessions). Grounded's stays public. */}
-            <Route index element={IS_BEAIREADY
-              ? <GatedFeature {...GATE_TRAINING}><BeAIReadyTraining /></GatedFeature>
-              : <Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
-            {/* The PUBLIC one-day-training advert ("Book a training") — never gated. */}
-            {IS_BEAIREADY && <Route path="book" element={<BeAIReadyTrainingBook />} />}
+            {/* The BE AI READY training experience on BOTH doors: the gated,
+                per-client training record + agenda/materials here, and the public
+                one-day-training offer (courses, day structure, track record) at
+                /training/book (the "Book a training" card on the Training pillar). */}
+            <Route index element={<GatedFeature {...GATE_TRAINING}><BeAIReadyTraining /></GatedFeature>} />
+            <Route path="book" element={<BeAIReadyTrainingBook />} />
           </Route>
 
           {/* ── BE AI READY business authed area (spec Part C). On the beaiready
@@ -383,9 +382,9 @@ export default function App() {
                 Ethics & Regulation tracker" (rows link to the legal detail pages). */}
             <Route path="/tracker" element={<BeAIReadyTracker />} />
           </Route>
-          {/* Cross-door destinations baked into pillars.js resolve to Grounded surfaces. */}
+          {/* Cross-door destinations baked into pillars.js resolve to Grounded surfaces.
+              (/training/book now renders the real offer page — see the /training route.) */}
           <Route path="/toolbox" element={<Navigate to="/functions" replace />} />
-          <Route path="/training/book" element={<Navigate to="/training" replace />} />
           <Route path="/nodes" element={<ExternalRedirect to="/nodes/" />} />
 
           {/* ── ProductShell — the concept-note-led newsroom product (Phase 1 · steps 2 + 5).
