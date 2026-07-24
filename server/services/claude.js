@@ -182,13 +182,13 @@ export async function classifyInChunks({
 }
 
 // Centralised API call with error handling and retries
-export async function callClaude({ system, userContent, maxTokens = 2000, messages = null, temperature = undefined, model = MODEL }) {
+export async function callClaude({ system, userContent, maxTokens = 2000, messages = null, temperature = undefined }) {
   if (!config.anthropicApiKey) {
     throw new Error('ANTHROPIC_API_KEY not configured. Set it in your .env file.');
   }
 
   const params = {
-    model,
+    model: MODEL,
     max_tokens: maxTokens,
     system,
     messages: messages || [{ role: 'user', content: userContent }],

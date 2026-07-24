@@ -14,13 +14,6 @@ export default {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   knowledgeEncryptionKey: process.env.KNOWLEDGE_ENCRYPTION_KEY || '',  // 32-byte base64/hex; encryption-at-rest is off if unset
   openaiApiKey: process.env.OPENAI_API_KEY || '',
-
-  // ── Daily newsletter pipeline (The Daily System) ──
-  // Fallback recipient for the 05:45 SAST "newsletter draft" email (Component 6).
-  newsletterEmailTo: process.env.NEWSLETTER_EMAIL_TO || process.env.ADMIN_EMAIL || 'paul@developai.co.za',
-  // Timezone the issue is dated in. All pipeline cron runs are wall-clock in this zone.
-  newsletterTz: process.env.NEWSLETTER_TZ || 'Africa/Johannesburg',
-
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/gmail/callback',
