@@ -14,10 +14,6 @@
     "triage": "cd server && node db/scripts/triage-nightly.js",
     "leadfinder": "cd server && node db/scripts/leadfinder-run.js",
     "leadfinder:nightly": "cd server && node db/scripts/leadfinder-nightly.js",
-    "newsletter:classify": "cd server && node db/scripts/newsletter-classify.js",
-    "newsletter:synthesis": "cd server && node db/scripts/newsletter-synthesis.js",
-    "newsletter:email": "cd server && node db/scripts/newsletter-email.js",
-    "newsletter:seed-cyber": "cd server && node db/scripts/seed_cyber_sources.js",
     "seed:prompts": "node server/db/seeds/prompts.mjs",
     "validate-prompts": "cd server && node scripts/validate-prompts.mjs"
   },
