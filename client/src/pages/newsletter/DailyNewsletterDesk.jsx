@@ -144,9 +144,9 @@ export default function DailyNewsletterDesk() {
   return (
     <div style={{ ...card, borderColor: '#6366F1' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 17, fontWeight: 700 }}>Today’s Newsletter</span>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>The Daily System · cyber · governance · legal</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+          <span style={{ fontSize: 18, fontWeight: 800 }}>{data?.newsletterName || 'Develop AI'}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Today’s newsletter · cyber · governance · legal</span>
         </div>
         <input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)}
           style={{ ...inputStyle, width: 'auto' }} />

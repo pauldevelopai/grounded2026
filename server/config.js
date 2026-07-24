@@ -16,6 +16,8 @@ export default {
   openaiApiKey: process.env.OPENAI_API_KEY || '',
 
   // ── Daily newsletter pipeline (The Daily System) ──
+  // The newsletter's masthead name (Substack masthead + review desk + email).
+  newsletterName: process.env.NEWSLETTER_NAME || 'Develop AI',
   // Fallback recipient for the 05:45 SAST "newsletter draft" email (Component 6).
   newsletterEmailTo: process.env.NEWSLETTER_EMAIL_TO || process.env.ADMIN_EMAIL || 'paul@developai.co.za',
   // Timezone the issue is dated in. All pipeline cron runs are wall-clock in this zone.

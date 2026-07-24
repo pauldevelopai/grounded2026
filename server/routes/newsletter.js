@@ -2,6 +2,7 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import pool from '../db/pool.js';
+import config from '../config.js';
 import { createKnowledgeEntry } from '../services/knowledge.js';
 import { generateDailyDigest, classifyNewsletterContent } from '../services/claude.js';
 import { scrapeSectorNews } from '../services/web-scraper.js';
@@ -419,6 +420,7 @@ router.get('/daily/:date?', async (req, res) => {
     res.json({
       date,
       exists: true,
+      newsletterName: config.newsletterName,
       status: row.status,
       subject: row.subject || issue?.subject || '',
       newsMarkdown,

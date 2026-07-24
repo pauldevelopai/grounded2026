@@ -50,7 +50,8 @@ export async function sendIssueEmail({ date, log = console.log } = {}) {
   } else {
     const obj = typeof issue.issue_json === 'string' ? JSON.parse(issue.issue_json) : issue.issue_json;
     subject = obj?.subject ? `${obj.subject}` : subjectPrefix;
-    const banner = `<p style="color:#888;font-size:13px;">Draft for ${issueDate}. Review, sharpen, and paste into Substack from the briefing page. Header image is on the review desk (not attached).${issue.image_error ? ` (Image note: ${esc(issue.image_error)})` : ''}</p><hr/>`;
+    const banner = `<p style="font-size:13px;color:#666;margin:0 0 2px;"><strong>${esc(config.newsletterName)}</strong> — daily newsletter</p>`
+      + `<p style="color:#888;font-size:13px;margin:0 0 8px;">Draft for ${issueDate}. Review, sharpen, and paste into Substack from the briefing page. Header image is on the review desk (not attached).${issue.image_error ? ` (Image note: ${esc(issue.image_error)})` : ''}</p><hr/>`;
     html = banner + toHtml(obj, issue.develop_ai_block);
     text = `Draft for ${issueDate}\n\n${toPlainText(obj, issue.develop_ai_block)}`;
   }
