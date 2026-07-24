@@ -17,3 +17,7 @@ logs/
 # (Keep the folder + its README; ignore everything else inside.)
 server/fixtures/real/*
 !server/fixtures/real/README.md
+
+# The Daily System — generated newsletter issues + header images (runtime output)
+server/newsletter/archive/*
+!server/newsletter/archive/.gitkeep
