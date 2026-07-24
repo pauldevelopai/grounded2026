@@ -1,8 +1,15 @@
 import { Router } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
 import pool from '../db/pool.js';
 import { createKnowledgeEntry } from '../services/knowledge.js';
 import { generateDailyDigest, classifyNewsletterContent } from '../services/claude.js';
 import { scrapeSectorNews } from '../services/web-scraper.js';
+// The Daily System (governance/cyber/legal newsletter) review-desk helpers.
+import { runSynthesis, issueDateFor } from '../newsletter/lib/pipeline.js';
+import { toNewsMarkdown, toCopyHtml } from '../newsletter/lib/render.js';
+import { newsletterImageDir } from '../newsletter/lib/image.js';
+import { appendSentIssueToCorpus } from '../newsletter/lib/corpus.js';
 
 const router = Router();
 
@@ -373,6 +380,142 @@ router.get('/archive', async (req, res) => {
 
 router.get('/settings', async (req, res) => {
   res.json({ label: process.env.NEWSLETTER_LABEL || 'CATEGORY_FORUMS' });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE DAILY SYSTEM — governance/cyber/legal newsletter review desk.
+// Namespaced under /daily/* to keep it separate from the legacy digest above.
+// All admin-only (this whole router is mounted behind requireAuth+admin).
+// ════════════════════════════════════════════════════════════════════════════
+
+// Load an issue row and hydrate the parts the review desk needs.
+async function loadDailyIssue(date) {
+  const { rows } = await pool.query('SELECT * FROM newsletter_issues WHERE issue_date = $1', [date]);
+  const row = rows[0];
+  if (!row) return null;
+  const issue = row.issue_json
+    ? (typeof row.issue_json === 'string' ? JSON.parse(row.issue_json) : row.issue_json)
+    : null;
+  // Seed the editable news markdown on first open (never overwrite Paul's edits).
+  let newsMarkdown = row.edited_markdown;
+  if ((newsMarkdown == null) && issue) newsMarkdown = toNewsMarkdown(issue);
+  const sources = row.sources
+    ? (typeof row.sources === 'string' ? JSON.parse(row.sources) : row.sources)
+    : [];
+  const hasImage = row.image_path
+    ? fs.existsSync(path.join(newsletterImageDir(), `${date}-header.png`))
+    : false;
+  return { row, issue, newsMarkdown: newsMarkdown || '', sources, hasImage };
+}
+
+// GET today's (or a given date's) issue for the review desk.
+router.get('/daily/:date?', async (req, res) => {
+  try {
+    const date = req.params.date || issueDateFor();
+    const data = await loadDailyIssue(date);
+    if (!data) return res.json({ date, status: 'none', exists: false });
+    const { row, issue, newsMarkdown, sources, hasImage } = data;
+    const developBlock = row.develop_ai_block || '';
+    res.json({
+      date,
+      exists: true,
+      status: row.status,
+      subject: row.subject || issue?.subject || '',
+      newsMarkdown,
+      developBlock,
+      sources,
+      hasImage,
+      imageError: row.image_error,
+      error: row.error,
+      runLog: row.run_log,
+      sentAt: row.sent_at,
+      updatedAt: row.updated_at,
+      copyHtml: toCopyHtml({ subject: row.subject || issue?.subject || '', newsMarkdown, developBlock }),
+    });
+  } catch (err) {
+    console.error('[newsletter/daily GET]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Autosave edits (subject / news markdown / develop AI block). Any subset.
+router.patch('/daily/:date', async (req, res) => {
+  try {
+    const date = req.params.date;
+    const { subject, newsMarkdown, developBlock } = req.body || {};
+    const { rowCount } = await pool.query(
+      `UPDATE newsletter_issues
+          SET subject = COALESCE($1, subject),
+              edited_markdown = COALESCE($2, edited_markdown),
+              develop_ai_block = COALESCE($3, develop_ai_block),
+              updated_at = NOW()
+        WHERE issue_date = $4`,
+      [subject ?? null, newsMarkdown ?? null, developBlock ?? null, date],
+    );
+    if (!rowCount) return res.status(404).json({ message: 'No issue for that date' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[newsletter/daily PATCH]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Serve the header image (admin; the review desk previews + downloads it).
+router.get('/daily/:date/image', (req, res) => {
+  const date = String(req.params.date || '').replace(/[^0-9-]/g, '');
+  const p = path.join(newsletterImageDir(), `${date}-header.png`);
+  if (!date || !fs.existsSync(p)) return res.status(404).end();
+  res.set('Cache-Control', 'no-store');
+  res.type('image/png');
+  return res.sendFile(p);
+});
+
+// Regenerate the draft for a date (manual button; runs the full pipeline).
+router.post('/daily/:date/regenerate', async (req, res) => {
+  try {
+    const date = req.params.date;
+    const skipImage = req.body?.skipImage === true;
+    const result = await runSynthesis({ date, skipImage });
+    res.json(result);
+  } catch (err) {
+    console.error('[newsletter/daily regenerate]', err);
+    res.status(500).json({ message: err.message || 'Regeneration failed' });
+  }
+});
+
+// Mark as sent -> save the final NEWS body to the voice corpus (Component 5).
+router.post('/daily/:date/mark-sent', async (req, res) => {
+  try {
+    const date = req.params.date;
+    const data = await loadDailyIssue(date);
+    if (!data) return res.status(404).json({ message: 'No issue for that date' });
+    // Persist any last-second edits sent with the request.
+    const { subject, newsMarkdown, developBlock } = req.body || {};
+    if (subject != null || newsMarkdown != null || developBlock != null) {
+      await pool.query(
+        `UPDATE newsletter_issues SET subject = COALESCE($1, subject),
+           edited_markdown = COALESCE($2, edited_markdown),
+           develop_ai_block = COALESCE($3, develop_ai_block), updated_at = NOW()
+         WHERE issue_date = $4`,
+        [subject ?? null, newsMarkdown ?? null, developBlock ?? null, date],
+      );
+    }
+    const finalNews = (newsMarkdown ?? data.newsMarkdown) || '';
+    let corpusChunks = null;
+    try {
+      corpusChunks = appendSentIssueToCorpus({ date, newsMarkdown: finalNews });
+    } catch (e) {
+      console.error('[newsletter/daily mark-sent] corpus append failed:', e.message);
+    }
+    await pool.query(
+      `UPDATE newsletter_issues SET status = 'sent', sent_at = NOW(), updated_at = NOW() WHERE issue_date = $1`,
+      [date],
+    );
+    res.json({ ok: true, corpusChunks });
+  } catch (err) {
+    console.error('[newsletter/daily mark-sent]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 export default router;

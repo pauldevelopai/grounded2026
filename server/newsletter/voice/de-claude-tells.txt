@@ -1,0 +1,86 @@
+# de-claude-tells.txt
+#
+# The "AI tell" list. The synthesis job's second pass (call B, the de-Claude
+# edit) is handed this file and told to hunt every entry and rewrite it flat.
+#
+# Format: one tell per line. Lines starting with `#` are comments and ignored.
+# A line may be a plain phrase (matched case-insensitively as a substring) or,
+# if it starts with `re:`, a JavaScript regular expression (matched with the
+# `gi` flags). Keep it plain-phrase unless you need a pattern.
+#
+# Paul: append survivors here whenever a draft slips an AI tic past the editor.
+# This file is read fresh on every run — no rebuild needed.
+# ---------------------------------------------------------------------------
+
+# — Lexical tells (words/phrases that scream LLM) —
+delve
+it's worth noting
+it is worth noting
+in today's rapidly evolving landscape
+rapidly evolving
+landscape
+navigate
+navigating
+crucial
+furthermore
+moreover
+in conclusion
+it's important to note
+it is important to note
+that being said
+at the end of the day
+when it comes to
+in the realm of
+a testament to
+underscores
+highlights the importance
+plays a vital role
+plays a key role
+plays a crucial role
+seamless
+seamlessly
+robust
+leverage
+leveraging
+utilize
+utilizing
+foster
+fostering
+myriad
+pivotal
+paramount
+game-changer
+game changer
+double-edged sword
+tip of the iceberg
+ever-evolving
+ever-changing
+Here's the thing
+Here's the kicker
+Let's dive in
+Let's unpack
+buckle up
+The bottom line
+Rest assured
+
+# — Structural / rhythm tells —
+# (These are described in prose because they're patterns, not phrases. The
+#  editor pass is told to hunt them; the regexes below catch the mechanical ones.)
+#
+# * Rule-of-three lists ("faster, cheaper, and smarter") used as filler.
+# * Every paragraph opening with a hedge ("While...", "Although...", "Though...").
+# * Rhetorical questions used as section transitions.
+# * Sentence fragments as aphoristic one-liners stacked back to back.
+# * Symmetrical "It's not X, it's Y" constructions.
+
+# — Regex tells (JS, matched gi) —
+# Em-dash asides. Paul uses parentheses / ellipses, never the em-dash
+# (7 in 78k corpus words). This is the single loudest tell in his register.
+re:\s—\s
+re:—
+# " - not X but Y - " symmetrical antithesis
+re:\bnot only\b[^.?!]*\bbut also\b
+# Opening a sentence with "In an era" / "In a world" / "In the age of"
+re:\bIn (an era|a world|the age) of\b
+# "isn't just ... it's" hype construction
+re:\bisn't just\b[^.?!]*\bit's\b

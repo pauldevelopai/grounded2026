@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { apiFetch } from '../../hooks/useApi.js';
 import PageHeader from '../../components/PageHeader.jsx';
 import AiBadge from '../../components/AiBadge.jsx';
+import DailyNewsletterDesk from './DailyNewsletterDesk.jsx';
 
 const CATEGORY_LABELS = {
   ai_tool: 'AI Tool', regulation: 'Regulation', technique: 'Technique',
@@ -262,6 +263,9 @@ export default function NewsletterDigest() {
         <AiBadge />
         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Gmail label: {settings.label || 'Newsletters'}</span>
       </PageHeader>
+
+      {/* The Daily System review desk — primary position, above the legacy digest tabs. */}
+      <DailyNewsletterDesk />
 
       <div className="tabs">
         <button className={`tab ${activeTab === 'digest' ? 'active' : ''}`} onClick={() => setActiveTab('digest')}>
