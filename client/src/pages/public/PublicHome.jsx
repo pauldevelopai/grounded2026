@@ -12,11 +12,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicFetch } from '../../hooks/usePublicApi.js';
 import { SECTIONS, LAYERS } from '../../ui/sections.js';
-import { useAuth } from '../../context/AuthContext.jsx';
 import TodayInAI from '../../components/TodayInAI.jsx';
 
 export default function PublicHome() {
-  const { user } = useAuth();
   const [stats, setStats] = useState({ nodes: null, lawsuits: null, regulations: null, usecases: null });
 
   useEffect(() => {
@@ -44,22 +42,11 @@ export default function PublicHome() {
           <b> builds and owns</b>, the law and ethics around AI <b>tracked daily</b>, and the
           training to use it well. Built with newsrooms, run on your terms.
         </p>
-        <div className="hub-hero-cta">
-          {user ? (
-            <>
-              {/* Logged in → straight into the product workspace. */}
-              <Link to="/sections" className="hub-btn hub-btn-solid">Go to your workspace →</Link>
-              <a href="/nodes/" className="hub-btn hub-btn-ghost">See the Nodes</a>
-            </>
-          ) : (
-            <>
-              {/* Logged out → the things a visitor can actually do without an
-                  account (GROUNDED is invite-only). Sign-in is a quiet link. */}
-              <a href="/nodes/" className="hub-btn hub-btn-solid">See the Nodes</a>
-              <Link to="/legal/dashboard" className="hub-btn hub-btn-ghost">Browse the tracker</Link>
-              <a href="/login" className="hub-btn-text">Sign in →</a>
-            </>
-          )}
+        {/* Three solid CTAs, matching the BE AI READY home. */}
+        <div className="hub-hero-cta" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <Link to="/training" className="hub-btn hub-btn-solid">Your Trainings</Link>
+          <Link to="/feature/prompt-library" className="hub-btn hub-btn-solid">Your Prompts</Link>
+          <Link to="/nodes" className="hub-btn hub-btn-solid">Your Tools</Link>
         </div>
       </section>
 
