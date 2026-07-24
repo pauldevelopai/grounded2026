@@ -35,7 +35,7 @@ const STUDIO_NAV = [
   { to: '/marketing/social',     label: 'Social Content',    group: 'Outreach' },
   { to: '/fundraising',          label: 'Pipeline',          group: 'Fundraising' },
   { to: '/fundraising/funders',  label: 'Funders',           group: 'Fundraising' },
-  { to: '/newsletter',           label: 'Briefings',         group: 'AI tools' },
+  { to: '/newsletter',           label: 'Newsletter',        group: 'AI tools' },
   { to: '/intelligence',         label: 'Intelligence',      group: 'AI tools' },
   { to: '/knowledge',            label: 'Knowledge',         group: 'AI tools' },
   { to: '/database',             label: 'Database',          group: 'Data' },

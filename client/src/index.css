@@ -1,7 +1,7 @@
 :root {
   /* Design tokens retargeted to the BE AI READY palette — warm charcoal +
      terracotta on a soft off-white (was blue/cool-gray). Shells and every
-     .hub-*/var()-based surface inherit this automatically. */
+     .hub-* and var()-based surfaces inherit this automatically. */
   --sidebar-bg: #1c1b1a;
   --sidebar-width: 240px;
   --sidebar-text: #e7e0d8;

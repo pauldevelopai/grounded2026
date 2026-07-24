@@ -27,6 +27,7 @@ const ADMIN_NAV = [
   { to: '/ingestion',              label: 'Ingestion',        group: 'AI Legal tracker' },
   { to: '/legal-sources',          label: 'Sources',          group: 'AI Legal tracker' },
   { to: '/use-cases-admin',        label: 'Use cases',        group: 'AI Legal tracker' },
+  { to: '/newsletter',             label: 'Newsletter',       group: 'AI Legal tracker' },
   { to: '/node-admin',             label: 'Nodes',            group: 'Nodes' },
   // The BE AI READY business-edition operator portal (its own shell, /business-admin/*).
   { to: '/business-admin',         label: 'Be AI Ready admin', group: 'Be AI Ready' },
